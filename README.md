@@ -54,11 +54,18 @@ cd Apps/Mac
 
 ### Windows
 
+**用户下载安装（推荐）：**  
+https://github.com/yancyfeng999-star/smartquota/releases/tag/windows-v0.1.0  
+
+文件：[`SmartQuota-Setup-0.1.0-x64.exe`](https://github.com/yancyfeng999-star/smartquota/releases/download/windows-v0.1.0/SmartQuota-Setup-0.1.0-x64.exe)（约 2.2MB，双击安装）
+
+开发构建：
+
 ```bash
 cd Apps/Windows
 npm install
 npm run tauri:dev      # 开发
-npm run tauri:build    # 产出 Setup.exe（建议在 Windows 上执行）
+npm run tauri:build    # 产出 Setup.exe（需 Windows）
 ```
 
 方案：[`docs/WINDOWS.md`](./docs/WINDOWS.md)。
