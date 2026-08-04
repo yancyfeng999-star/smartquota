@@ -6,32 +6,28 @@ on:
   pull_request:
     branches: [main, develop]
 
+defaults:
+  run:
+    working-directory: Apps/Mac
 
 jobs:
   build:
-    name: Build and Verify
+    name: Build and Verify (Mac)
     runs-on: macos-26
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # No explicit Swift toolchain setup: use the runner's bundled Xcode, the
-      # same toolchain Tuist builds its macro prebuilts (SwiftSyntax) against.
-      # Installing a separate toolchain via SwiftyLab/setup-swift drifted out of
-      # sync with those prebuilts and broke the Release build ("SwiftSyntax was
-      # created for incompatible target"). Mirrors the passing tests.yml.
-
       - name: Install Tuist
         run: brew install --cask tuist
+        working-directory: .
 
       - name: Install Dependencies
         run: tuist install
 
       - name: Generate Project
-        run: |
-          tuist generate --no-open
-          ./scripts/fix-swiftterm-metal.sh
+        run: tuist generate --no-open
 
       - name: Build Debug
         run: xcodebuild build -scheme SmartQuota -workspace SmartQuota.xcworkspace -destination 'platform=macOS,arch=arm64'

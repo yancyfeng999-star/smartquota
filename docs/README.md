@@ -6,6 +6,7 @@
 | [DEVELOPER.md](./DEVELOPER.md) | 开发者 | 构建、架构、加会员、多语言、测试 |
 | [architecture/ARCHITECTURE.md](./architecture/ARCHITECTURE.md) | 开发者 | Domain / Infrastructure / App 分层 |
 | [../README.md](../README.md) | 全部 | 仓库总入口 |
+| [REPO_LAYOUT.md](./REPO_LAYOUT.md) | 全部 | **Mac / Windows 平级目录规划** |
 | [../LICENSE](../LICENSE) | 全部 | MIT 许可证 |
 | [../NOTICE](../NOTICE) | 全部 | 第三方依赖与商标 |
 | [../SECURITY.md](../SECURITY.md) | 全部 | 安全与隐私边界 |

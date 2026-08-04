@@ -7,8 +7,8 @@
 ## 一、在你这台电脑打包
 
 ```bash
-cd ~/Desktop/智额   # 或仓库路径
-./scripts/package-release.sh
+cd Apps/Mac   # 或仓库路径
+Apps/Mac/scripts/package-release.sh
 ```
 
 ### 产物位置（GitHub 风格）
@@ -29,8 +29,8 @@ releases/
 
 | 位置 | 内容 |
 |------|------|
-| `releases/v版本号/*.zip` | **推荐发给别人** |
-| `releases/v版本号/*.dmg` | 磁盘镜像 |
+| `releases/Mac/v版本号/*.zip` | **推荐发给别人** |
+| `releases/Mac/v版本号/*.dmg` | 磁盘镜像 |
 | `releases/LATEST.md` | 最新版本链接 |
 | `桌面/智额-发布/` | 可选副本（方便 AirDrop） |
 
@@ -83,7 +83,7 @@ security find-identity -v -p codesigning
 
 # 正式签名打包
 SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)" \
-  ./scripts/package-release.sh
+  Apps/Mac/scripts/package-release.sh
 ```
 
 公证需自备 Apple Developer 账号与 app 专用密码，按 Apple 官方流程对 dmg/pkg 公证。
@@ -105,7 +105,7 @@ SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)" \
 
 | | 调试 | 发布 |
 |--|------|------|
-| 脚本 | `./scripts/build-test-app.sh` | `./scripts/package-release.sh` |
+| 脚本 | `Apps/Mac/scripts/build-test-app.sh` | `Apps/Mac/scripts/package-release.sh` |
 | 配置 | Debug | Release |
 | 输出 | 桌面 `智额.app` | zip / dmg + 安装脚本 |
 | 用途 | 本机开发 | 给别人安装 |

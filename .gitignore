@@ -1,29 +1,34 @@
-.build
 .DS_Store
-Package.resolved
 
-# Tuist generated (regenerate with: tuist generate)
-*.xcodeproj
-*.xcworkspace
-Derived/
-
-# Xcode user data
-xcuserdata/
-*.xcuserstate
-*.xcscmblueprint
-
-# Build artifacts
-build/
-dist/
-.serena/
+# --- Mac (Apps/Mac) ---
+Apps/Mac/.build/
+Apps/Mac/**/Package.resolved
+Apps/Mac/**/*.xcodeproj
+Apps/Mac/**/*.xcworkspace
+Apps/Mac/Derived/
+Apps/Mac/.tuist-cache/
+**/xcuserdata/
+**/*.xcuserstate
+**/*.xcscmblueprint
 DerivedData/
 *.dSYM.zip
 *.dSYM
+build/
+dist/
+.serena/
 
-# Personal Claude Code settings (per-project, never commit)
-.claude/settings.local.json
+# Personal agent settings
+**/.claude/settings.local.json
 
-# --- Secrets & personal runtime data (NEVER commit) ---
+# --- Windows (Apps/Windows) ---
+Apps/Windows/node_modules/
+Apps/Windows/dist/
+Apps/Windows/src-tauri/target/
+Apps/Windows/.env
+Apps/Windows/.env.*
+!Apps/Windows/.env.example
+
+# --- Secrets (NEVER commit) ---
 .env
 .env.*
 !.env.example
@@ -36,24 +41,20 @@ DerivedData/
 /credentials/
 auth.json
 **/auth.json
-
-# If someone copies local app config into the tree
 .smartquota/
 .claudebar/
-# accidental dump of live settings at repo root only
 /settings.json
 
-# Releases: keep folder + notes in git; large binaries stay local
+# Releases: notes yes, large binaries no
 releases/**/*.zip
 releases/**/*.dmg
 releases/**/*.pkg
+releases/**/*.exe
+releases/**/*.msi
 releases/**/*.app/
 releases/**/智额.app/
 releases/**/*.xcarchive/
 
-# Local notarization / signing leftovers
 *.notarize.log
 notary-log*.json
-
-# Local history dump (not part of the public product tree)
 /archive-root/

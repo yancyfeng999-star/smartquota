@@ -1,0 +1,977 @@
+{
+  "cLanguageStandard" : null,
+  "cxxLanguageStandard" : "c++17",
+  "defaultLocalization" : null,
+  "dependencies" : [
+    {
+      "sourceControl" : [
+        {
+          "identity" : "swift-asn1",
+          "location" : {
+            "remote" : [
+              {
+                "urlString" : "https://github.com/apple/swift-asn1.git"
+              }
+            ]
+          },
+          "productFilter" : null,
+          "requirement" : {
+            "range" : [
+              {
+                "lowerBound" : "1.2.0",
+                "upperBound" : "2.0.0"
+              }
+            ]
+          },
+          "traits" : [
+            {
+              "name" : "default"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "name" : "swift-crypto",
+  "packageKind" : {
+    "root" : [
+      "/Users/yancyfeng/.cache/swifterpm/sources/swift-crypto/4.5.1-47d3869a7291"
+    ]
+  },
+  "pkgConfig" : null,
+  "platforms" : [
+
+  ],
+  "products" : [
+    {
+      "name" : "Crypto",
+      "settings" : [
+
+      ],
+      "targets" : [
+        "Crypto"
+      ],
+      "type" : {
+        "library" : [
+          "automatic"
+        ]
+      }
+    },
+    {
+      "name" : "_CryptoExtras",
+      "settings" : [
+
+      ],
+      "targets" : [
+        "_CryptoExtras"
+      ],
+      "type" : {
+        "library" : [
+          "automatic"
+        ]
+      }
+    },
+    {
+      "name" : "CryptoExtras",
+      "settings" : [
+
+      ],
+      "targets" : [
+        "CryptoExtras"
+      ],
+      "type" : {
+        "library" : [
+          "automatic"
+        ]
+      }
+    }
+  ],
+  "providers" : null,
+  "swiftLanguageVersions" : null,
+  "targets" : [
+    {
+      "dependencies" : [
+
+      ],
+      "exclude" : [
+        "hash.txt",
+        "CMakeLists.txt",
+        "crypto/bio/connect.cc",
+        "crypto/bio/socket_helper.cc",
+        "crypto/bio/socket.cc"
+      ],
+      "name" : "CCryptoBoringSSL",
+      "packageAccess" : true,
+      "resources" : [
+        {
+          "path" : "PrivacyInfo.xcprivacy",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        }
+      ],
+      "settings" : [
+        {
+          "condition" : {
+            "platformNames" : [
+              "windows"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "_HAS_EXCEPTIONS=0"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "windows"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "WIN32_LEAN_AND_MEAN"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "windows"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "NOMINMAX"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "windows"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "_CRT_SECURE_NO_WARNINGS"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "wasi"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "OPENSSL_NO_THREADS_CORRUPT_MEMORY_AND_LEAK_SECRETS_IF_THREADED"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "wasi"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "OPENSSL_NO_ASM"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "regular"
+    },
+    {
+      "dependencies" : [
+
+      ],
+      "exclude" : [
+        "CMakeLists.txt"
+      ],
+      "name" : "CXKCP",
+      "packageAccess" : true,
+      "resources" : [
+
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "define" : {
+              "_0" : "XKCP_has_KeccakP1600"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "kind" : {
+            "headerSearchPath" : {
+              "_0" : "include"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "kind" : {
+            "headerSearchPath" : {
+              "_0" : "high"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "kind" : {
+            "headerSearchPath" : {
+              "_0" : "low"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "kind" : {
+            "headerSearchPath" : {
+              "_0" : "low/KeccakP-1600"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "kind" : {
+            "headerSearchPath" : {
+              "_0" : "low/common"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "kind" : {
+            "headerSearchPath" : {
+              "_0" : "common"
+            }
+          },
+          "tool" : "c"
+        },
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "regular"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "CCryptoBoringSSL",
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+        "CMakeLists.txt"
+      ],
+      "name" : "CCryptoBoringSSLShims",
+      "packageAccess" : true,
+      "resources" : [
+        {
+          "path" : "PrivacyInfo.xcprivacy",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        }
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "regular"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "CXKCP",
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+        "CMakeLists.txt"
+      ],
+      "name" : "CXKCPShims",
+      "packageAccess" : true,
+      "resources" : [
+        {
+          "path" : "PrivacyInfo.xcprivacy",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        }
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "regular"
+    },
+    {
+      "dependencies" : [
+        {
+          "target" : [
+            "CCryptoBoringSSL",
+            {
+              "platformNames" : [
+                "linux",
+                "android",
+                "windows",
+                "wasi",
+                "openbsd"
+              ]
+            }
+          ]
+        },
+        {
+          "target" : [
+            "CCryptoBoringSSLShims",
+            {
+              "platformNames" : [
+                "linux",
+                "android",
+                "windows",
+                "wasi",
+                "openbsd"
+              ]
+            }
+          ]
+        },
+        {
+          "target" : [
+            "CryptoBoringWrapper",
+            {
+              "platformNames" : [
+                "linux",
+                "android",
+                "windows",
+                "wasi",
+                "openbsd"
+              ]
+            }
+          ]
+        },
+        {
+          "target" : [
+            "CXKCP",
+            {
+              "platformNames" : [
+                "linux",
+                "android",
+                "windows",
+                "wasi",
+                "openbsd"
+              ]
+            }
+          ]
+        },
+        {
+          "target" : [
+            "CXKCPShims",
+            {
+              "platformNames" : [
+                "linux",
+                "android",
+                "windows",
+                "wasi",
+                "openbsd"
+              ]
+            }
+          ]
+        }
+      ],
+      "exclude" : [
+        "CMakeLists.txt",
+        "AEADs/Nonces.swift.gyb",
+        "Digests/Digests.swift.gyb",
+        "Key Agreement/ECDH.swift.gyb",
+        "Signatures/ECDSA.swift.gyb",
+        "Signatures/MLDSA.swift.gyb",
+        "Signatures/BoringSSL/MLDSA_boring.swift.gyb",
+        "KEM/MLKEM.swift.gyb",
+        "KEM/BoringSSL/MLKEM_boring.swift.gyb"
+      ],
+      "name" : "Crypto",
+      "packageAccess" : true,
+      "resources" : [
+        {
+          "path" : "PrivacyInfo.xcprivacy",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        }
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "linux",
+              "android",
+              "windows",
+              "wasi",
+              "openbsd"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM_FORCE_BUILD_API"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "regular"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "CCryptoBoringSSL",
+            null
+          ]
+        },
+        {
+          "byName" : [
+            "CCryptoBoringSSLShims",
+            null
+          ]
+        },
+        {
+          "byName" : [
+            "CryptoBoringWrapper",
+            null
+          ]
+        },
+        {
+          "byName" : [
+            "Crypto",
+            null
+          ]
+        },
+        {
+          "product" : [
+            "SwiftASN1",
+            "swift-asn1",
+            null,
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+        "CMakeLists.txt"
+      ],
+      "name" : "CryptoExtras",
+      "packageAccess" : true,
+      "resources" : [
+        {
+          "path" : "PrivacyInfo.xcprivacy",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        }
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "linux",
+              "android",
+              "windows",
+              "wasi",
+              "openbsd"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM_FORCE_BUILD_API"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "regular"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "CryptoExtras",
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+
+      ],
+      "name" : "_CryptoExtras",
+      "packageAccess" : true,
+      "resources" : [
+
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "linux",
+              "android",
+              "windows",
+              "wasi",
+              "openbsd"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM_FORCE_BUILD_API"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "regular"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "CCryptoBoringSSL",
+            null
+          ]
+        },
+        {
+          "byName" : [
+            "CCryptoBoringSSLShims",
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+        "CMakeLists.txt"
+      ],
+      "name" : "CryptoBoringWrapper",
+      "packageAccess" : true,
+      "resources" : [
+        {
+          "path" : "PrivacyInfo.xcprivacy",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        }
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "regular"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "Crypto",
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+
+      ],
+      "name" : "crypto-shasum",
+      "packageAccess" : true,
+      "resources" : [
+
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "executable"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "Crypto",
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+
+      ],
+      "name" : "CryptoTests",
+      "packageAccess" : true,
+      "resources" : [
+        {
+          "path" : "HPKE/hpke-test-vectors.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "KEM/MLKEM768_BSSLKAT.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "KEM/MLKEM768KAT.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "KEM/MLKEM1024_BSSLKAT.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "KEM/MLKEM1024KAT.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "KEM/test-vectors.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "Signatures/MLDSA/MLDSA65_KeyGen_KAT.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "Signatures/MLDSA/MLDSA87_KeyGen_KAT.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        }
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "linux",
+              "android",
+              "windows",
+              "wasi",
+              "openbsd"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM_FORCE_BUILD_API"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "test"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "CryptoExtras",
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+
+      ],
+      "name" : "CryptoExtrasTests",
+      "packageAccess" : true,
+      "resources" : [
+        {
+          "path" : "ECToolbox/H2CVectors/P256_XMD-SHA-256_SSWU_RO_.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "ECToolbox/H2CVectors/P384_XMD-SHA-384_SSWU_RO_.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "OPRFs/OPRFVectors/OPRFVectors-VOPRFDraft8.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "OPRFs/OPRFVectors/OPRFVectors-VOPRFDraft19.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        },
+        {
+          "path" : "OPRFs/OPRFVectors/OPRFVectors-edgecases.json",
+          "rule" : {
+            "copy" : {
+
+            }
+          }
+        }
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "condition" : {
+            "platformNames" : [
+              "linux",
+              "android",
+              "windows",
+              "wasi",
+              "openbsd"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "CRYPTO_IN_SWIFTPM_FORCE_BUILD_API"
+            }
+          },
+          "tool" : "swift"
+        },
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "test"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "CryptoBoringWrapper",
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+
+      ],
+      "name" : "CryptoBoringWrapperTests",
+      "packageAccess" : true,
+      "resources" : [
+
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "test"
+    },
+    {
+      "dependencies" : [
+        {
+          "byName" : [
+            "CXKCP",
+            null
+          ]
+        }
+      ],
+      "exclude" : [
+
+      ],
+      "name" : "CXKCPTests",
+      "packageAccess" : true,
+      "resources" : [
+
+      ],
+      "settings" : [
+        {
+          "kind" : {
+            "enableUpcomingFeature" : {
+              "_0" : "MemberImportVisibility"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "test"
+    }
+  ],
+  "toolsVersion" : {
+    "_version" : "6.1.0"
+  },
+  "traits" : [
+
+  ]
+}

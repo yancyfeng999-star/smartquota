@@ -16,7 +16,7 @@
 
 ```bash
 tuist generate --no-open
-./scripts/build-test-app.sh
+Apps/Mac/scripts/build-test-app.sh
 ```
 
 `*.xcodeproj` / `*.xcworkspace` 由 Tuist 生成，勿手改；见 `.gitignore`。

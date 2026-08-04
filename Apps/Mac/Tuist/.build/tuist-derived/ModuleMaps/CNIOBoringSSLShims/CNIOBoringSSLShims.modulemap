@@ -1,0 +1,6 @@
+framework module CNIOBoringSSLShims {
+  umbrella header "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/checkouts/swift-nio-ssl/Sources/CNIOBoringSSLShims/include/CNIOBoringSSLShims.h"
+
+  export *
+  module * { export * }
+}

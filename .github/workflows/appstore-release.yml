@@ -51,6 +51,9 @@ jobs:
   appstore-release:
     name: Build, Upload & (optionally) Submit
     runs-on: macos-15
+    defaults:
+      run:
+        working-directory: Apps/Mac
 
     steps:
       - name: Checkout
@@ -70,7 +73,7 @@ jobs:
           path: |
             ~/Library/Caches/tuist
             .tuist-cache
-          key: ${{ runner.os }}-tuist-${{ hashFiles('Project.swift', 'Tuist.swift', 'Package.swift') }}
+          key: ${{ runner.os }}-tuist-${{ hashFiles('Apps/Mac/Project.swift', 'Apps/Mac/Tuist.swift', 'Apps/Mac/Tuist/Package.swift') }}
           restore-keys: |
             ${{ runner.os }}-tuist-
 

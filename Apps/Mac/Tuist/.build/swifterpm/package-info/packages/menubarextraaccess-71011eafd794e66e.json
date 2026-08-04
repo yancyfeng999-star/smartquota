@@ -1,0 +1,94 @@
+{
+  "cLanguageStandard" : null,
+  "cxxLanguageStandard" : null,
+  "defaultLocalization" : null,
+  "dependencies" : [
+
+  ],
+  "name" : "MenuBarExtraAccess",
+  "packageKind" : {
+    "root" : [
+      "/Users/yancyfeng/.cache/swifterpm/sources/menubarextraaccess/1.3.0-33bb0e4b1e40"
+    ]
+  },
+  "pkgConfig" : null,
+  "platforms" : [
+    {
+      "options" : [
+
+      ],
+      "platformName" : "macos",
+      "version" : "10.15"
+    }
+  ],
+  "products" : [
+    {
+      "name" : "MenuBarExtraAccess",
+      "settings" : [
+
+      ],
+      "targets" : [
+        "MenuBarExtraAccess"
+      ],
+      "type" : {
+        "library" : [
+          "automatic"
+        ]
+      }
+    }
+  ],
+  "providers" : null,
+  "swiftLanguageVersions" : null,
+  "targets" : [
+    {
+      "dependencies" : [
+
+      ],
+      "exclude" : [
+
+      ],
+      "name" : "MenuBarExtraAccess",
+      "packageAccess" : true,
+      "resources" : [
+
+      ],
+      "settings" : [
+        {
+          "condition" : {
+            "platformNames" : [
+
+            ],
+            "traits" : [
+              "DebugLogging"
+            ]
+          },
+          "kind" : {
+            "define" : {
+              "_0" : "MENUBAREXTRAACCESS_DEBUG_LOGGING"
+            }
+          },
+          "tool" : "swift"
+        }
+      ],
+      "type" : "regular"
+    }
+  ],
+  "toolsVersion" : {
+    "_version" : "6.2.0"
+  },
+  "traits" : [
+    {
+      "description" : "The default traits of this package.",
+      "enabledTraits" : [
+
+      ],
+      "name" : "default"
+    },
+    {
+      "enabledTraits" : [
+
+      ],
+      "name" : "DebugLogging"
+    }
+  ]
+}

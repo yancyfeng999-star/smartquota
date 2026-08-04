@@ -34,6 +34,9 @@ jobs:
   release:
     name: Build, Sign, Notarize & Release
     runs-on: macos-26
+    defaults:
+      run:
+        working-directory: Apps/Mac
 
     steps:
       - name: Checkout
@@ -56,7 +59,7 @@ jobs:
           path: |
             ~/Library/Caches/tuist
             .tuist-cache
-          key: ${{ runner.os }}-tuist-${{ hashFiles('Project.swift', 'Tuist.swift', 'Package.swift') }}
+          key: ${{ runner.os }}-tuist-${{ hashFiles('Apps/Mac/Project.swift', 'Apps/Mac/Tuist.swift', 'Apps/Mac/Tuist/Package.swift') }}
           restore-keys: |
             ${{ runner.os }}-tuist-
 
@@ -104,7 +107,6 @@ jobs:
       - name: Generate Xcode Project
         run: |
           tuist generate --no-open
-          ./scripts/fix-swiftterm-metal.sh
           echo "=== Available schemes ==="
           xcodebuild -workspace SmartQuota.xcworkspace -list
 

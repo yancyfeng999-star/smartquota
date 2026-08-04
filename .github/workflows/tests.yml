@@ -7,9 +7,13 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
+defaults:
+  run:
+    working-directory: Apps/Mac
+
 jobs:
   test:
-    name: Unit Tests with Coverage
+    name: Unit Tests with Coverage (Mac)
     runs-on: macos-26
 
     steps:
@@ -18,17 +22,17 @@ jobs:
 
       - name: Get Swift version
         run: swift --version
+        working-directory: .
 
       - name: Install Tuist
         run: brew install --cask tuist
+        working-directory: .
 
       - name: Install Dependencies
         run: tuist install
 
       - name: Generate Project
-        run: |
-          tuist generate --no-open
-          ./scripts/fix-swiftterm-metal.sh
+        run: tuist generate --no-open
 
       - name: Run Tests with Coverage
         run: |
@@ -42,67 +46,26 @@ jobs:
 
       - name: Generate Coverage Report
         run: |
-          # Convert xcresult to JSON
           xcrun xccov view --report --json TestResults.xcresult > coverage_report.json
-
-          # Convert to lcov format
           python3 << 'EOF'
           import json
+          import sys
 
-          with open('coverage_report.json', 'r') as f:
+          with open("coverage_report.json") as f:
               data = json.load(f)
 
-          with open('coverage.lcov', 'w') as lcov:
-              for target in data.get('targets', []):
-                  target_name = target.get('name', '')
-                  # Skip test targets and external dependencies
-                  if 'Tests' in target_name or 'Mockable' in target_name:
-                      continue
-
-                  for file_info in target.get('files', []):
-                      file_path = file_info.get('path', '')
-
-                      # Skip App layer, Infrastructure/Adapters, Preview files and generated files
-                      if '/App/' in file_path or '/Infrastructure/Adapters/' in file_path or 'Preview' in file_path or '/Derived/' in file_path:
-                          continue
-
-                      lcov.write(f"SF:{file_path}\n")
-
-                      fn_found = 0
-                      fn_hit = 0
-                      lines_found = 0
-                      lines_hit = 0
-
-                      for function in file_info.get('functions', []):
-                          name = function.get('name', 'unknown')
-                          line = function.get('lineNumber', 0)
-                          count = function.get('executionCount', 0)
-                          exec_lines = function.get('executableLines', 0)
-                          covered_lines = function.get('coveredLines', 0)
-
-                          lcov.write(f"FN:{line},{name}\n")
-                          lcov.write(f"FNDA:{count},{name}\n")
-                          fn_found += 1
-                          if count > 0:
-                              fn_hit += 1
-
-                          lines_found += exec_lines
-                          lines_hit += covered_lines
-
-                      lcov.write(f"FNF:{fn_found}\n")
-                      lcov.write(f"FNH:{fn_hit}\n")
-                      lcov.write(f"LF:{lines_found}\n")
-                      lcov.write(f"LH:{lines_hit}\n")
-                      lcov.write("end_of_record\n")
-
-          print("Generated coverage.lcov")
+          # Minimal summary for CI logs
+          targets = data.get("targets", [])
+          for t in targets:
+              name = t.get("name", "?")
+              cov = t.get("lineCoverage", 0)
+              print(f"{name}: {cov * 100:.1f}%")
           EOF
 
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v5
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          files: coverage.lcov
-          fail_ci_if_error: false
-          verbose: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          name: mac-test-results
+          path: Apps/Mac/TestResults.xcresult
+          if-no-files-found: ignore

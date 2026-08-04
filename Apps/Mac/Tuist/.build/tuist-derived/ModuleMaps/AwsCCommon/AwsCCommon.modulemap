@@ -1,0 +1,4 @@
+module AwsCCommon {
+    umbrella "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/checkouts/aws-crt-swift/aws-common-runtime/aws-c-common/include"
+    export *
+}

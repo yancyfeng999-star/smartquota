@@ -1,0 +1,3 @@
+a1efc77828d45bf4572c8feccf190aac59160e5e4d91478dbbb89fd8a3f271eb  SmartQuota-0.3.2.dmg
+cd6926c131f609bedbba0cae9c78046c7c68618e429ab58a9e5067f8f1d1a0ce  SmartQuota-0.3.2.pkg
+f6aa7c294e52142d9afc5957caaf1001c738e8f5a99945e25be8e7564b48c8e3  SmartQuota-0.3.2.zip

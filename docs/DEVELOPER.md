@@ -14,7 +14,7 @@
 | Swift 6 | 与工程一致 |
 
 ```bash
-cd ~/Desktop/智额   # 或你的克隆路径
+cd Apps/Mac   # 或你的克隆路径
 tuist generate
 open SmartQuota.xcworkspace
 ```
@@ -25,10 +25,10 @@ open SmartQuota.xcworkspace
 
 ```bash
 # 调试包 → 桌面 智额.app
-./scripts/build-test-app.sh
+Apps/Mac/scripts/build-test-app.sh
 
 # Release
-CONFIG=Release ./scripts/build-test-app.sh
+CONFIG=Release Apps/Mac/scripts/build-test-app.sh
 ```
 
 Scheme：`SmartQuota`（产物显示名「智额」）。

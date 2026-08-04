@@ -5,7 +5,7 @@
 | **中文名** | 智额 |
 | **英文名** | SmartQuota |
 | **一句话** | 本机 AI 会员额度，一眼看完 |
-| **平台** | macOS 15+ 菜单栏应用 |
+| **平台** | macOS 15+ 菜单栏 · Windows 托盘（Apps 平级） |
 | **当前版本** | 0.3.2（见 `Sources/App/Info.plist`） |
 
 ---
@@ -58,9 +58,9 @@
 | **C 正式分发** | ✅ 可用 | `package-release.sh` → zip/dmg；可选 Developer ID 公证 |
 
 ```bash
-cd ~/Desktop/智额
-./scripts/build-test-app.sh          # 本机调试
-./scripts/package-release.sh         # 打安装包给别人
+cd Apps/Mac
+Apps/Mac/scripts/build-test-app.sh          # 本机调试
+Apps/Mac/scripts/package-release.sh         # 打安装包给别人
 ```
 
 安装与分发说明：[`docs/DISTRIBUTION.md`](./docs/DISTRIBUTION.md)
