@@ -17,6 +17,7 @@ export type QuotaCard = {
   planLabel: string;
   detail: string;
   enabled: boolean;
+  sourceMode: string;
 };
 
 export type SnapshotPayload = {
@@ -33,6 +34,15 @@ export type AppSettings = {
   minimaxRegion: string;
   minimaxAuthEnvVar: string;
   refreshIntervalSecs: number;
+};
+
+export type DetectItem = {
+  providerId: string;
+  displayName: string;
+  mode: string;
+  ready: boolean;
+  summary: string;
+  howTo: string;
 };
 
 type PathsInfo = {
@@ -54,9 +64,11 @@ export default function App() {
   const [tab, setTab] = useState<"home" | "settings">("home");
   const [data, setData] = useState<SnapshotPayload | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [detect, setDetect] = useState<DetectItem[]>([]);
   const [paths, setPaths] = useState<PathsInfo | null>(null);
   const [hasMinimaxKey, setHasMinimaxKey] = useState(false);
   const [minimaxKeyInput, setMinimaxKeyInput] = useState("");
+  const [planDraft, setPlanDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [testMsg, setTestMsg] = useState<Record<string, string>>({});
@@ -65,8 +77,12 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const next = await invoke<SnapshotPayload>("get_usage_snapshot");
+      const [next, det] = await Promise.all([
+        invoke<SnapshotPayload>("get_usage_snapshot"),
+        invoke<DetectItem[]>("detect_credentials"),
+      ]);
       setData(next);
+      setDetect(det);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -78,10 +94,14 @@ export default function App() {
     try {
       const s = await invoke<AppSettings>("get_settings");
       setSettings(s);
-      const has = await invoke<boolean>("has_minimax_api_key");
-      setHasMinimaxKey(has);
-      const p = await invoke<PathsInfo>("get_paths");
-      setPaths(p);
+      const drafts: Record<string, string> = {};
+      for (const p of PROVIDERS) {
+        drafts[p.id] = s.providers[p.id]?.planLabel ?? "";
+      }
+      setPlanDraft(drafts);
+      setHasMinimaxKey(await invoke<boolean>("has_minimax_api_key"));
+      setPaths(await invoke<PathsInfo>("get_paths"));
+      setDetect(await invoke<DetectItem[]>("detect_credentials"));
     } catch (e) {
       setError(String(e));
     }
@@ -92,7 +112,6 @@ export default function App() {
     void loadSettings();
   }, [refresh, loadSettings]);
 
-  // Auto refresh
   useEffect(() => {
     const secs = settings?.refreshIntervalSecs ?? 300;
     if (!secs || secs < 30) return;
@@ -109,16 +128,29 @@ export default function App() {
     void refresh();
   };
 
+  const savePlan = async (id: string) => {
+    const s = await invoke<AppSettings>("set_plan_label", {
+      providerId: id,
+      planLabel: (planDraft[id] ?? "").trim(),
+    });
+    setSettings(s);
+    void refresh();
+  };
+
   const saveMinimaxKey = async () => {
-    await invoke("set_minimax_api_key", { apiKey: minimaxKeyInput });
+    const key = minimaxKeyInput.trim();
+    if (!key) return;
+    await invoke("set_minimax_api_key", { apiKey: key });
     setMinimaxKeyInput("");
     setHasMinimaxKey(true);
     void refresh();
+    void loadSettings();
   };
 
   const clearMinimaxKey = async () => {
     await invoke("clear_minimax_api_key");
     setHasMinimaxKey(false);
+    void refresh();
   };
 
   const setRegion = async (region: string) => {
@@ -137,6 +169,7 @@ export default function App() {
         ...m,
         [id]: r.ok ? `✓ ${r.message}` : `✗ ${r.message}`,
       }));
+      void refresh();
     } catch (e) {
       setTestMsg((m) => ({ ...m, [id]: `✗ ${String(e)}` }));
     }
@@ -154,7 +187,7 @@ export default function App() {
       <header className="header">
         <div>
           <h1>智额</h1>
-          <p className="tagline">SmartQuota · Windows</p>
+          <p className="tagline">本机额度监控 · 不预置账号</p>
         </div>
         <div className="header-actions">
           <button
@@ -177,6 +210,10 @@ export default function App() {
         </div>
       </header>
 
+      <p className="product-tip">
+        能识别本机 CLI 登录就自动查额度；识别不到请到「设置」自行填写。软件不保存开发者信息，只使用你本机的配置。
+      </p>
+
       {error && <div className="banner error">{error}</div>}
 
       {tab === "home" && (
@@ -187,29 +224,74 @@ export default function App() {
                 <div>
                   <strong>{card.displayName}</strong>
                   {card.planLabel ? <span className="plan">{card.planLabel}</span> : null}
+                  <span className={`src src-${card.sourceMode}`}>{sourceLabel(card.sourceMode)}</span>
                 </div>
                 <span className={`pill status-${card.status}`}>{statusLabel(card.status)}</span>
               </div>
-              {(card.meters?.length ? card.meters : fallbackMeters(card)).map((m) => (
-                <Meter key={m.label} label={m.label} value={m.remainingPercent} hint={m.resetText} />
-              ))}
-              <p className="detail">{card.detail}</p>
+              {card.status === "setup" || card.status === "error" || card.status === "disabled" ? (
+                <p className="detail setup">{card.detail}</p>
+              ) : (
+                <>
+                  {(card.meters?.length ? card.meters : fallbackMeters(card)).map((m) => (
+                    <Meter
+                      key={m.label}
+                      label={m.label}
+                      value={m.remainingPercent}
+                      hint={m.resetText}
+                    />
+                  ))}
+                  <p className="detail">{card.detail}</p>
+                </>
+              )}
+              {(card.status === "setup" || card.status === "error") && (
+                <button type="button" className="btn linkish" onClick={() => setTab("settings")}>
+                  去设置配置 →
+                </button>
+              )}
             </article>
           ))}
           {!data?.cards?.length && !loading && (
-            <p className="empty">暂无数据，点击刷新或检查设置。</p>
+            <p className="empty">暂无数据，点击刷新。</p>
           )}
         </main>
       )}
 
       {tab === "settings" && settings && (
         <main className="settings">
+          <section className="block intro">
+            <h2>使用方式</h2>
+            <ol className="howto">
+              <li>
+                <strong>自动识别</strong>：本机已有 Codex / Grok 登录文件时，打开开关即可查额度。
+              </li>
+              <li>
+                <strong>手动填写</strong>：MiniMax 等需要 Key 的，在下方粘贴你自己的 Key。
+              </li>
+              <li>
+                <strong>套餐名</strong>：仅展示用，可随便写；不写也可以。
+              </li>
+            </ol>
+          </section>
+
+          <section className="block">
+            <h2>本机识别状态</h2>
+            {detect.map((d) => (
+              <div key={d.providerId} className={`detect-row mode-${d.mode}`}>
+                <div className="detect-head">
+                  <strong>{d.displayName}</strong>
+                  <span className={`src src-${d.mode}`}>{sourceLabel(d.mode)}</span>
+                </div>
+                <p className="hint">{d.summary}</p>
+                <p className="detail">{d.howTo}</p>
+              </div>
+            ))}
+          </section>
+
           <section className="block">
             <h2>会员开关</h2>
             {PROVIDERS.map((p) => {
               const enabled =
-                settings.providers[p.id]?.enabled ??
-                (p.id === "codex" || p.id === "minimax" || p.id === "grok");
+                settings.providers[p.id]?.enabled ?? true;
               return (
                 <label key={p.id} className="row">
                   <span>{p.name}</span>
@@ -224,7 +306,27 @@ export default function App() {
           </section>
 
           <section className="block">
-            <h2>MiniMax</h2>
+            <h2>套餐显示名（可选，你自己填）</h2>
+            {PROVIDERS.map((p) => (
+              <div key={p.id} className="row-input plan-row">
+                <span className="plan-id">{p.name}</span>
+                <input
+                  type="text"
+                  placeholder="例如 Plus / Pro（仅展示）"
+                  value={planDraft[p.id] ?? ""}
+                  onChange={(e) =>
+                    setPlanDraft((d) => ({ ...d, [p.id]: e.target.value }))
+                  }
+                />
+                <button type="button" className="btn" onClick={() => void savePlan(p.id)}>
+                  保存
+                </button>
+              </div>
+            ))}
+          </section>
+
+          <section className="block">
+            <h2>MiniMax（需自行填写 Key）</h2>
             <label className="row">
               <span>区域</span>
               <select
@@ -236,12 +338,15 @@ export default function App() {
               </select>
             </label>
             <p className="hint">
-              Key 状态：{hasMinimaxKey ? "已保存（凭据管理器）" : "未设置"}
+              {hasMinimaxKey
+                ? "已保存你填写的 Key（仅本机凭据管理器，可清除）"
+                : "尚未填写 Key — 识别不到时请粘贴你的 sk-cp-…"}
             </p>
             <div className="row-input">
               <input
                 type="password"
-                placeholder="粘贴 sk-cp-… API Key"
+                autoComplete="off"
+                placeholder="粘贴你的 Coding Plan API Key"
                 value={minimaxKeyInput}
                 onChange={(e) => setMinimaxKeyInput(e.target.value)}
               />
@@ -251,13 +356,13 @@ export default function App() {
             </div>
             {hasMinimaxKey && (
               <button type="button" className="btn danger" onClick={() => void clearMinimaxKey()}>
-                清除 Key
+                清除我填写的 Key
               </button>
             )}
           </section>
 
           <section className="block">
-            <h2>额度检测</h2>
+            <h2>检测连接</h2>
             {PROVIDERS.map((p) => (
               <div key={p.id} className="test-row">
                 <button type="button" className="btn" onClick={() => void testProvider(p.id)}>
@@ -284,7 +389,7 @@ export default function App() {
           </section>
 
           <section className="block">
-            <h2>本机路径</h2>
+            <h2>本机路径（供你对照）</h2>
             {paths && (
               <ul className="paths">
                 <li>
@@ -310,10 +415,6 @@ export default function App() {
               </button>
             </div>
           </section>
-
-          <p className="hint footer-note">
-            关闭窗口后应用仍在托盘运行。密钥仅存本机，不上传。
-          </p>
         </main>
       )}
 
@@ -329,10 +430,17 @@ function statusLabel(s: string): string {
     critical: "紧急",
     depleted: "用尽",
     unknown: "未知",
-    error: "错误",
+    error: "失败",
     disabled: "关闭",
+    setup: "待配置",
   };
   return map[s] ?? s;
+}
+
+function sourceLabel(mode: string): string {
+  if (mode === "auto") return "自动识别";
+  if (mode === "manual") return "你填写的";
+  return "未识别";
 }
 
 function fallbackMeters(card: QuotaCard): QuotaMeter[] {

@@ -14,14 +14,17 @@ pub struct QuotaMeter {
 pub struct QuotaCard {
     pub provider_id: String,
     pub display_name: String,
-    /// healthy | warning | critical | depleted | unknown | error | disabled
+    /// healthy | warning | critical | depleted | unknown | error | disabled | setup
     pub status: String,
     pub session_remaining_percent: Option<f64>,
     pub weekly_remaining_percent: Option<f64>,
     pub meters: Vec<QuotaMeter>,
+    /// User-filled display only (never auto-filled from our data)
     pub plan_label: String,
     pub detail: String,
     pub enabled: bool,
+    /// auto | manual | none — how credentials were resolved
+    pub source_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

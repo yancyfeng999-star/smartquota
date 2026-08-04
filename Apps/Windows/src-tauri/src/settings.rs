@@ -56,8 +56,8 @@ impl Default for AppSettings {
     }
 }
 
-/// Core providers enabled by default (aligned with Mac product).
-pub const CORE_PROVIDERS: &[&str] = &["codex", "minimax", "grok"];
+/// Built-in providers shown in the app (catalog only — no personal accounts).
+pub const CATALOG_PROVIDERS: &[&str] = &["codex", "minimax", "grok"];
 
 impl AppSettings {
     pub fn load() -> Self {
@@ -75,13 +75,14 @@ impl AppSettings {
         fs::write(path, text).map_err(|e| e.to_string())
     }
 
+    /// Default: all catalog providers on. User can turn off. No personal data.
     pub fn is_enabled(&self, id: &str) -> bool {
         if let Some(p) = self.providers.get(id) {
             if let Some(v) = p.enabled {
                 return v;
             }
         }
-        CORE_PROVIDERS.contains(&id)
+        CATALOG_PROVIDERS.contains(&id)
     }
 
     pub fn set_enabled(&mut self, id: &str, enabled: bool) {

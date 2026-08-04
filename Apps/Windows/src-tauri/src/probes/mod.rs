@@ -6,7 +6,8 @@ pub use codex::probe_codex;
 pub use grok::probe_grok;
 pub use minimax::probe_minimax;
 
-use crate::models::{session_weekly_from_meters, status_from_remaining, QuotaCard, QuotaMeter};
+use crate::detect;
+use crate::models::{session_weekly_from_meters, status_from_remaining, QuotaCard};
 use crate::settings::AppSettings;
 
 pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
@@ -18,8 +19,12 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
     }
     .to_string();
 
+    // Only user-filled plan name — never invent tiers for them
     let plan_label = settings.plan_label(id);
     let enabled = settings.is_enabled(id);
+    let det = detect::detect_all(settings)
+        .into_iter()
+        .find(|d| d.provider_id == id);
 
     if !enabled {
         return QuotaCard {
@@ -30,10 +35,34 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
             weekly_remaining_percent: None,
             meters: vec![],
             plan_label,
-            detail: "已关闭（在设置中开启）".into(),
+            detail: "已关闭。在「设置」中打开后才会探测。".into(),
             enabled: false,
+            source_mode: "none".into(),
         };
     }
+
+    // Not ready to probe — guide user to fill/login (not an "app error")
+    if let Some(ref d) = det {
+        if !d.ready {
+            return QuotaCard {
+                provider_id: id.into(),
+                display_name,
+                status: "setup".into(),
+                session_remaining_percent: None,
+                weekly_remaining_percent: None,
+                meters: vec![],
+                plan_label,
+                detail: format!("{} — {}", d.summary, d.how_to),
+                enabled: true,
+                source_mode: d.mode.clone(),
+            };
+        }
+    }
+
+    let source_mode = det
+        .as_ref()
+        .map(|d| d.mode.clone())
+        .unwrap_or_else(|| "none".into());
 
     let result = match id {
         "codex" => probe_codex().await,
@@ -60,11 +89,12 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
                 meters,
                 plan_label,
                 detail: if detail.is_empty() {
-                    "探测成功".into()
+                    "已根据本机登录态查询成功".into()
                 } else {
                     detail
                 },
                 enabled: true,
+                source_mode,
             }
         }
         Err(msg) => QuotaCard {
@@ -75,8 +105,11 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
             weekly_remaining_percent: None,
             meters: vec![],
             plan_label,
-            detail: msg,
+            detail: format!(
+                "{msg}。若无法自动识别，请到「设置」按说明自行填写或重新登录对应 CLI。"
+            ),
             enabled: true,
+            source_mode,
         },
     }
 }

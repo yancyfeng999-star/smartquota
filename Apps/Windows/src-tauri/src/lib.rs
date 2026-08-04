@@ -1,3 +1,4 @@
+mod detect;
 mod models;
 mod paths;
 mod probes;
@@ -5,6 +6,7 @@ mod secrets;
 mod settings;
 
 use chrono::Local;
+use detect::DetectItem;
 use models::{ProbeTestResult, SnapshotPayload};
 use settings::AppSettings;
 use tauri::{
@@ -48,6 +50,13 @@ async fn test_provider(provider_id: String) -> ProbeTestResult {
 #[tauri::command]
 fn get_settings() -> AppSettings {
     AppSettings::load()
+}
+
+/// Scan local machine for credentials — never returns secrets, only readiness.
+#[tauri::command]
+fn detect_credentials() -> Vec<DetectItem> {
+    let settings = AppSettings::load();
+    detect::detect_all(&settings)
 }
 
 #[tauri::command]
@@ -166,6 +175,7 @@ pub fn run() {
             test_provider,
             get_settings,
             save_settings,
+            detect_credentials,
             set_provider_enabled,
             set_plan_label,
             set_minimax_region,
