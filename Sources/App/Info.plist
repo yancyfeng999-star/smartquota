@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh-Hans</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundleDisplayName</key>
+    <string>智额</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.3.2</string>
+    <key>CFBundleVersion</key>
+    <string>5</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>15.0</string>
+    <!-- false = show Dock icon so double-click is obviously "opened".
+         Can switch back to true later for pure menu-bar mode. -->
+    <key>LSUIElement</key>
+    <false/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2026 SmartQuota / 智额 contributors. MIT License.</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <!-- No remote updater: Sparkle not linked; keep flags off if keys reappear -->
+    <key>SUEnableAutomaticChecks</key>
+    <false/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>NSSupportsLiveActivities</key>
+    <true/>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
+</dict>
+</plist>

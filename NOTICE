@@ -1,0 +1,32 @@
+智额 · SmartQuota
+================
+
+Copyright (c) 2026 SmartQuota / 智额 contributors  
+Licensed under the MIT License — see LICENSE.
+
+Third-party Swift packages
+--------------------------
+
+Declared in `Tuist/Package.swift`. Each retains its own license.
+
+| Package | URL | Role |
+|---------|-----|------|
+| Mockable | https://github.com/Kolos65/Mockable | Tests |
+| SwiftTerm | https://github.com/migueldeicaza/SwiftTerm | Terminal UI |
+| aws-sdk-swift | https://github.com/awslabs/aws-sdk-swift | AWS Bedrock |
+| SweetCookieKit | https://github.com/steipete/SweetCookieKit | Optional cookie reads |
+| MenuBarExtraAccess | https://github.com/orchetect/MenuBarExtraAccess | Menu bar label control |
+
+Trademarks
+----------
+
+ChatGPT, Claude, Gemini, Copilot, Cursor, Grok, Kimi, MiniMax, and other product
+names are trademarks of their respective owners. 智额 / SmartQuota is an
+unofficial local utility and is not affiliated with or endorsed by those vendors.
+
+Privacy
+-------
+
+Do **not** ship personal credentials, API keys, cookies, Keychain dumps, or
+user-filled plan / renewal data from `~/.smartquota/`. Those paths are local
+runtime data and must never be committed to this repository.
