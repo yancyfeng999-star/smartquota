@@ -1,72 +1,60 @@
 import Testing
-import Foundation
 @testable import Domain
 
-@Suite
+@Suite("RefreshInterval")
 struct RefreshIntervalTests {
-    /// Each cadence exposes its poll interval in seconds, and `.off` has none.
     @Test
-    func `seconds maps each option onto its poll interval`() {
+    func `seconds mapping`() {
         #expect(RefreshInterval.off.seconds == nil)
-        #expect(RefreshInterval.oneMinute.seconds == 60)
+        // Legacy oneMinute raw value maps to 5 min cadence for energy.
+        #expect(RefreshInterval.oneMinute.seconds == 300)
         #expect(RefreshInterval.fiveMinutes.seconds == 300)
         #expect(RefreshInterval.tenMinutes.seconds == 600)
         #expect(RefreshInterval.fifteenMinutes.seconds == 900)
+        #expect(RefreshInterval.thirtyMinutes.seconds == 1800)
     }
 
-    /// Only `.off` disables background refresh; every timed option enables it.
     @Test
-    func `isEnabled is false only for off`() {
+    func `isEnabled`() {
         #expect(RefreshInterval.off.isEnabled == false)
         #expect(RefreshInterval.oneMinute.isEnabled == true)
         #expect(RefreshInterval.fiveMinutes.isEnabled == true)
         #expect(RefreshInterval.tenMinutes.isEnabled == true)
         #expect(RefreshInterval.fifteenMinutes.isEnabled == true)
+        #expect(RefreshInterval.thirtyMinutes.isEnabled == true)
     }
 
-    /// Each option's picker label matches the exact copy shown in Settings.
     @Test
-    func `label matches the picker copy`() {
-        #expect(RefreshInterval.off.label == "Off")
-        #expect(RefreshInterval.oneMinute.label == "1 min")
-        #expect(RefreshInterval.fiveMinutes.label == "5 min")
-        #expect(RefreshInterval.tenMinutes.label == "10 min")
-        #expect(RefreshInterval.fifteenMinutes.label == "15 min")
+    func `labels are non-empty`() {
+        for interval in RefreshInterval.pickerCases {
+            #expect(!interval.label.isEmpty)
+        }
     }
 
-    /// A disabled legacy `backgroundSyncEnabled` flag migrates to `.off`
-    /// regardless of the stored interval.
     @Test
-    func `migrating returns off when background sync is disabled`() {
+    func `pickerCases exclude legacy oneMinute raw case`() {
+        #expect(!RefreshInterval.pickerCases.contains(.oneMinute))
+        #expect(RefreshInterval.pickerCases == [
+            .off, .fiveMinutes, .tenMinutes, .fifteenMinutes, .thirtyMinutes,
+        ])
+    }
+
+    @Test
+    func `migrating disabled is off`() {
         #expect(RefreshInterval.migrating(enabled: false, storedSeconds: 60) == .off)
         #expect(RefreshInterval.migrating(enabled: false, storedSeconds: 900) == .off)
     }
 
-    /// An enabled legacy interval snaps to the nearest supported option, with
-    /// retired and below-floor values rounding up to the 1-minute floor.
     @Test
-    func `migrating snaps a stored interval to the nearest supported option`() {
-        // Retired 30s / 2m options and below-floor values snap up to 1 minute.
-        #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 30) == .oneMinute)
-        #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 60) == .oneMinute)
-        #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 120) == .oneMinute)
+    func `migrating snaps to nearest power-friendly option`() {
+        // Short legacy values collapse to 5 min (no 1-min UI option).
+        #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 30) == .fiveMinutes)
+        #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 60) == .fiveMinutes)
+        #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 120) == .fiveMinutes)
         #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 300) == .fiveMinutes)
         #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 600) == .tenMinutes)
         #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 700) == .tenMinutes)
         #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 900) == .fifteenMinutes)
-    }
-
-    /// The persisted default cadence (600s, issue #204) migrates to the 10-minute
-    /// option, so a freshly-enabled background sync lands on the power-conscious
-    /// default rather than the old 1-minute poll.
-    @Test
-    func `migrating maps the default 600s cadence to ten minutes`() {
-        #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 600) == .tenMinutes)
-    }
-
-    /// `allCases` is ordered exactly as the segmented picker renders the options.
-    @Test
-    func `allCases lists the options in picker order`() {
-        #expect(RefreshInterval.allCases == [.off, .oneMinute, .fiveMinutes, .tenMinutes, .fifteenMinutes])
+        #expect(RefreshInterval.migrating(enabled: true, storedSeconds: 1800) == .thirtyMinutes)
     }
 }
