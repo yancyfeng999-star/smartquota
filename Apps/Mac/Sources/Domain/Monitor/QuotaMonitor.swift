@@ -118,6 +118,9 @@ public final class QuotaMonitor {
                 currentStatus: newStatus
             )
         }
+
+        // Per-window thresholds + near-reset underuse nudges
+        await alerter?.evaluateSnapshotAlerts(providerId: provider.id, snapshot: snapshot)
     }
 
     /// Refreshes a single provider by its ID.

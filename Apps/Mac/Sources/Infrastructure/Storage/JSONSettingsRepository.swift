@@ -228,6 +228,48 @@ public final class JSONSettingsRepository:
         store.write(value: threshold, key: "app.burnRateThreshold")
     }
 
+    // MARK: - Quota threshold alerts
+
+    public func quotaThresholdAlertsEnabled() -> Bool {
+        store.read(key: "app.quotaThresholdAlertsEnabled") ?? true
+    }
+
+    public func setQuotaThresholdAlertsEnabled(_ enabled: Bool) {
+        store.write(value: enabled, key: "app.quotaThresholdAlertsEnabled")
+    }
+
+    public func sessionAlertThreshold() -> Double {
+        store.read(key: "app.sessionAlertThreshold") ?? 20
+    }
+
+    public func setSessionAlertThreshold(_ value: Double) {
+        store.write(value: value, key: "app.sessionAlertThreshold")
+    }
+
+    public func weeklyAlertThreshold() -> Double {
+        store.read(key: "app.weeklyAlertThreshold") ?? 20
+    }
+
+    public func setWeeklyAlertThreshold(_ value: Double) {
+        store.write(value: value, key: "app.weeklyAlertThreshold")
+    }
+
+    public func nearResetAlertHours() -> Double {
+        store.read(key: "app.nearResetAlertHours") ?? 24
+    }
+
+    public func setNearResetAlertHours(_ value: Double) {
+        store.write(value: value, key: "app.nearResetAlertHours")
+    }
+
+    public func underuseAlertRemaining() -> Double {
+        store.read(key: "app.underuseAlertRemaining") ?? 40
+    }
+
+    public func setUnderuseAlertRemaining(_ value: Double) {
+        store.write(value: value, key: "app.underuseAlertRemaining")
+    }
+
     public func receiveBetaUpdates() -> Bool {
         store.read(key: "app.receiveBetaUpdates") ?? false
     }

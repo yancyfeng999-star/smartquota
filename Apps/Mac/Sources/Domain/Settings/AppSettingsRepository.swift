@@ -74,6 +74,23 @@ public protocol AppSettingsRepository: Sendable {
     func burnRateThreshold() -> Double
     func setBurnRateThreshold(_ threshold: Double)
 
+    // MARK: - Quota threshold alerts (5h / 7d)
+
+    func quotaThresholdAlertsEnabled() -> Bool
+    func setQuotaThresholdAlertsEnabled(_ enabled: Bool)
+
+    func sessionAlertThreshold() -> Double
+    func setSessionAlertThreshold(_ value: Double)
+
+    func weeklyAlertThreshold() -> Double
+    func setWeeklyAlertThreshold(_ value: Double)
+
+    func nearResetAlertHours() -> Double
+    func setNearResetAlertHours(_ value: Double)
+
+    func underuseAlertRemaining() -> Double
+    func setUnderuseAlertRemaining(_ value: Double)
+
     // MARK: - Updates
 
     func receiveBetaUpdates() -> Bool

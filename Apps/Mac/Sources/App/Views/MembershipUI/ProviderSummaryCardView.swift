@@ -99,7 +99,7 @@ struct ProviderSummaryCardView: View {
                 if let renewalLabel {
                     Text(renewalLabel)
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(renewalTint)
                         .lineLimit(1)
                 }
             }
@@ -152,7 +152,14 @@ struct ProviderSummaryCardView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 2)
-                if let value = item.percentRemaining {
+                if let custom = item.valueText {
+                    Text(custom)
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(item.highlight ? MembershipPalette.accentPrimary : .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                } else if let value = item.percentRemaining {
                     Text("\(Int(value.rounded()))%")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
                         .monospacedDigit()
@@ -178,11 +185,34 @@ struct ProviderSummaryCardView: View {
             .frame(height: 4)
 
             Text(item.resetText)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(resetTint(for: item))
+                .lineLimit(2)
                 .minimumScaleFactor(0.75)
         }
+    }
+
+    private func resetTint(for item: SummaryQuotaItem) -> Color {
+        switch item.resetUrgency {
+        case .imminent: return MembershipPalette.statusDanger
+        case .soon: return MembershipPalette.statusWarning
+        case .normal: return .secondary
+        }
+    }
+
+    private var renewalTint: Color {
+        // Color membership renewal line when weekly window is also near reset
+        if let weekly = snapshot?.weeklyQuota {
+            switch QuotaAlertPolicy.resetUrgency(
+                resetsAt: weekly.resetsAt,
+                nearResetHours: settings.nearResetAlertHours
+            ) {
+            case .imminent: return MembershipPalette.statusDanger
+            case .soon: return MembershipPalette.statusWarning
+            case .normal: break
+            }
+        }
+        return .secondary
     }
 
     // MARK: - Columns
@@ -203,18 +233,58 @@ struct ProviderSummaryCardView: View {
         if let weekly = snapshot.weeklyQuota {
             cols.append(SummaryQuotaItem(from: weekly, title: l10n.t("quota.weekly")))
         }
-        if let monthly = realMonthly(in: snapshot) {
-            cols.append(SummaryQuotaItem(from: monthly, title: l10n.t("quota.monthly")))
-        } else if estimatesMonthlyFromWeekly, let weekly = snapshot.weeklyQuota {
-            let est = MonthlyFromWeekly.estimate(weeklyRemaining: weekly.percentRemaining)
-            cols.append(SummaryQuotaItem(
-                title: l10n.t("quota.monthly"),
-                percentRemaining: est.percentRemaining,
-                resetText: "\(est.note) · \(Self.shortDate(est.resetsAt))",
-                isEstimated: true
-            ))
+
+        // Extra meters users often forget: Codex credits, MiniMax video, etc.
+        let extras = extraHighlightQuotas(in: snapshot)
+        for extra in extras {
+            let title = extra.compactTitle ?? extra.quotaType.displayName
+            cols.append(SummaryQuotaItem(from: extra, title: title, highlight: true))
+        }
+
+        // Only show estimated month when we have room and no highlight extras
+        if extras.isEmpty {
+            if let monthly = realMonthly(in: snapshot) {
+                cols.append(SummaryQuotaItem(from: monthly, title: l10n.t("quota.monthly")))
+            } else if estimatesMonthlyFromWeekly, let weekly = snapshot.weeklyQuota {
+                let est = MonthlyFromWeekly.estimate(weeklyRemaining: weekly.percentRemaining)
+                cols.append(SummaryQuotaItem(
+                    title: l10n.t("quota.monthly"),
+                    percentRemaining: est.percentRemaining,
+                    resetText: "\(est.note) · \(Self.shortDate(est.resetsAt))",
+                    isEstimated: true
+                ))
+            }
+        }
+
+        // Keep card readable: max 4 columns
+        if cols.count > 4 {
+            cols = Array(cols.prefix(4))
         }
         return cols
+    }
+
+    /// Secondary “use it or lose it” pools (not 5h/7d/estimated month).
+    private func extraHighlightQuotas(in snapshot: UsageSnapshot) -> [UsageQuota] {
+        snapshot.quotas.filter { quota in
+            if case .session = quota.quotaType { return false }
+            if case .weekly = quota.quotaType { return false }
+            if case .timeLimit(let name) = quota.quotaType {
+                let n = name.lowercased()
+                if n.contains("month") || n.contains("月") { return false }
+                // Credits / 积分
+                if n.contains("credit") || n.contains("积分") { return true }
+            }
+            if case .modelSpecific(let name) = quota.quotaType {
+                let n = name.lowercased()
+                if n.contains("video") || n.contains("t2v") || n.contains("i2v")
+                    || n.contains("hailuo") || n.contains("视频") {
+                    return true
+                }
+                // Other non-primary model pools (still useful reminders)
+                return quota.compactTitle != nil
+            }
+            return quota.compactTitle != nil
+        }
     }
 
     private func realMonthly(in snapshot: UsageSnapshot) -> UsageQuota? {
@@ -276,23 +346,64 @@ private struct SummaryQuotaItem: Identifiable {
     let id: String
     let title: String
     let percentRemaining: Double?
+    /// Free-form value (e.g. credit balance "5.3", video "2/3")
+    let valueText: String?
     let resetText: String
     let isEstimated: Bool
+    let highlight: Bool
+    let resetUrgency: QuotaAlertPolicy.ResetUrgency
+    let resetsAt: Date?
 
-    init(from quota: UsageQuota, title: String) {
+    init(from quota: UsageQuota, title: String, highlight: Bool = false) {
         self.id = quota.quotaType.quotaKey + title
         self.title = title
-        self.percentRemaining = quota.isDollarBased ? nil : quota.percentRemaining
+        self.highlight = highlight
+        self.resetsAt = quota.resetsAt
+        self.resetUrgency = QuotaAlertPolicy.resetUrgency(resetsAt: quota.resetsAt)
+        if let dollars = quota.dollarRemaining {
+            // Codex credits etc. — number without $ (user reads as “5.3 积分”)
+            let v = NSDecimalNumber(decimal: dollars).doubleValue
+            if abs(v.rounded() - v) < 0.05 {
+                self.valueText = String(format: "%.0f", v)
+            } else {
+                self.valueText = String(format: "%.1f", v)
+            }
+            self.percentRemaining = nil
+        } else if highlight, let rem = Self.countRemaining(from: quota.resetText) {
+            self.valueText = rem
+            self.percentRemaining = quota.percentRemaining
+        } else {
+            self.valueText = nil
+            self.percentRemaining = quota.isDollarBased ? nil : quota.percentRemaining
+        }
         self.resetText = Self.formatReset(quota)
         self.isEstimated = false
+    }
+
+    /// Parse “剩余 2/3” style counts for video pools.
+    private static func countRemaining(from resetText: String?) -> String? {
+        guard let resetText else { return nil }
+        // Match 2/3 or 剩余 2/3
+        let pattern = #"(\d+)\s*/\s*(\d+)"#
+        guard let re = try? NSRegularExpression(pattern: pattern),
+              let match = re.firstMatch(in: resetText, range: NSRange(resetText.startIndex..., in: resetText)),
+              match.numberOfRanges >= 3,
+              let r1 = Range(match.range(at: 1), in: resetText),
+              let r2 = Range(match.range(at: 2), in: resetText)
+        else { return nil }
+        return "\(resetText[r1])/\(resetText[r2])"
     }
 
     init(title: String, percentRemaining: Double?, resetText: String, isEstimated: Bool) {
         self.id = title + (isEstimated ? "-est" : "")
         self.title = title
         self.percentRemaining = percentRemaining
+        self.valueText = nil
         self.resetText = resetText
         self.isEstimated = isEstimated
+        self.highlight = false
+        self.resetUrgency = .normal
+        self.resetsAt = nil
     }
 
     private static func formatReset(_ quota: UsageQuota) -> String {

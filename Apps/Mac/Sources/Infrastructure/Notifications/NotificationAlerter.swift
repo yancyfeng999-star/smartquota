@@ -13,20 +13,58 @@ protocol AlertSender: Sendable {
 
 // MARK: - NotificationAlerter
 
-/// Alerts users when their AI quota status degrades.
-/// Sends system notifications for warning, critical, and depleted states.
+/// Alerts users when their AI quota status degrades, or when user-configured
+/// 5h/7d remaining thresholds are crossed, or weekly reset is near with unused quota.
 public final class NotificationAlerter: QuotaAlerter, @unchecked Sendable {
 
     private let alertSender: AlertSender
+    private let thresholdState = ThresholdAlertState()
+    /// Reads live thresholds from App settings (MainActor).
+    private let thresholdReader: @Sendable () async -> ThresholdConfig
 
-    /// Public initializer - uses system alerts
-    public init() {
+    public struct ThresholdConfig: Sendable {
+        public var enabled: Bool
+        public var sessionThreshold: Double
+        public var weeklyThreshold: Double
+        public var nearResetHours: Double
+        public var underuseRemaining: Double
+
+        public init(
+            enabled: Bool,
+            sessionThreshold: Double,
+            weeklyThreshold: Double,
+            nearResetHours: Double,
+            underuseRemaining: Double
+        ) {
+            self.enabled = enabled
+            self.sessionThreshold = sessionThreshold
+            self.weeklyThreshold = weeklyThreshold
+            self.nearResetHours = nearResetHours
+            self.underuseRemaining = underuseRemaining
+        }
+
+        public static let `default` = ThresholdConfig(
+            enabled: true,
+            sessionThreshold: QuotaAlertPolicy.defaultSessionThreshold,
+            weeklyThreshold: QuotaAlertPolicy.defaultWeeklyThreshold,
+            nearResetHours: QuotaAlertPolicy.defaultNearResetHours,
+            underuseRemaining: QuotaAlertPolicy.defaultUnderuseRemaining
+        )
+    }
+
+    /// Public initializer — thresholds come from `thresholdReader` (wired in App to settings).
+    /// Defaults are used until the app injects live settings.
+    public init(
+        thresholdReader: (@Sendable () async -> ThresholdConfig)? = nil
+    ) {
         self.alertSender = SystemAlertSender()
+        self.thresholdReader = thresholdReader ?? { .default }
     }
 
     /// Internal initializer for testing
-    init(alertSender: AlertSender) {
+    init(alertSender: AlertSender, thresholdReader: @escaping @Sendable () async -> ThresholdConfig = { .default }) {
         self.alertSender = alertSender
+        self.thresholdReader = thresholdReader
     }
 
     // MARK: - Public API
@@ -56,7 +94,7 @@ public final class NotificationAlerter: QuotaAlerter, @unchecked Sendable {
         }
 
         let providerName = providerDisplayName(for: providerId)
-        let title = "\(providerName) Quota Alert"
+        let title = "\(providerName) 额度提醒"
         let body = alertBody(for: currentStatus, providerName: providerName)
 
         AppLog.notifications.notice("Sending quota alert for \(providerId): \(currentStatus)")
@@ -66,6 +104,73 @@ public final class NotificationAlerter: QuotaAlerter, @unchecked Sendable {
             AppLog.notifications.info("Alert sent successfully")
         } catch {
             AppLog.notifications.error("Failed to send alert: \(error.localizedDescription)")
+        }
+    }
+
+    public func evaluateSnapshotAlerts(providerId: String, snapshot: UsageSnapshot) async {
+        let config = await thresholdReader()
+        guard config.enabled else { return }
+
+        let session = snapshot.sessionQuota?.percentRemaining
+        let weekly = snapshot.weeklyQuota?.percentRemaining
+        let weeklyReset = snapshot.weeklyQuota?.resetsAt
+
+        let evaluations = QuotaAlertPolicy.evaluate(
+            sessionRemaining: session,
+            weeklyRemaining: weekly,
+            weeklyResetsAt: weeklyReset,
+            sessionThreshold: config.sessionThreshold,
+            weeklyThreshold: config.weeklyThreshold,
+            nearResetHours: config.nearResetHours,
+            underuseRemaining: config.underuseRemaining
+        )
+
+        let name = providerDisplayName(for: providerId)
+        for evaluation in evaluations {
+            let key = "\(providerId):\(evaluation.kind.rawValue)"
+            guard await thresholdState.shouldFire(key: key) else { continue }
+
+            let (title, body) = thresholdCopy(name: name, evaluation: evaluation)
+            do {
+                try await alertSender.send(
+                    title: title,
+                    body: body,
+                    categoryIdentifier: "QUOTA_THRESHOLD"
+                )
+            } catch {
+                AppLog.notifications.error("Threshold alert failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func thresholdCopy(
+        name: String,
+        evaluation: QuotaAlertPolicy.Evaluation
+    ) -> (String, String) {
+        let rem = Int(evaluation.remaining.rounded())
+        switch evaluation.kind {
+        case .sessionLow:
+            return (
+                "\(name) · 5 小时额度偏低",
+                "剩余约 \(rem)%（阈值 \(Int(evaluation.threshold))%）。建议放慢使用或等待重置。"
+            )
+        case .weeklyLow:
+            return (
+                "\(name) · 7 天额度偏低",
+                "剩余约 \(rem)%（阈值 \(Int(evaluation.threshold))%）。注意本周用量。"
+            )
+        case .weeklyUnderuseNearReset:
+            let when: String = {
+                guard let d = evaluation.resetsAt else { return "即将" }
+                let f = DateFormatter()
+                f.locale = Locale(identifier: "zh_CN")
+                f.dateFormat = "M月d日 HH:mm"
+                return f.string(from: d)
+            }()
+            return (
+                "\(name) · 7 天额度快重置",
+                "重置时间 \(when)，当前仍剩约 \(rem)%。有需要可以多用一些，避免浪费。"
+            )
         }
     }
 

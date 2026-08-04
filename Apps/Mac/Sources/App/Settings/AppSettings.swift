@@ -167,6 +167,33 @@ public final class AppSettings {
     /// Whether the floating always-on-top window is open (not the menu popover).
     public var windowPinned: Bool = false
 
+    // MARK: - Quota threshold alerts (5h / 7d remaining %)
+
+    /// Master switch for custom threshold + near-reset underuse notifications.
+    public var quotaThresholdAlertsEnabled: Bool {
+        didSet { repository.setQuotaThresholdAlertsEnabled(quotaThresholdAlertsEnabled) }
+    }
+
+    /// Alert when 5h remaining % is at or below this value (default 20).
+    public var sessionAlertThreshold: Double {
+        didSet { repository.setSessionAlertThreshold(sessionAlertThreshold) }
+    }
+
+    /// Alert when 7d remaining % is at or below this value (default 20).
+    public var weeklyAlertThreshold: Double {
+        didSet { repository.setWeeklyAlertThreshold(weeklyAlertThreshold) }
+    }
+
+    /// Hours before weekly reset to start underuse reminders (default 24).
+    public var nearResetAlertHours: Double {
+        didSet { repository.setNearResetAlertHours(nearResetAlertHours) }
+    }
+
+    /// If weekly remaining ≥ this % when near reset → “快重置还没用完” (default 40).
+    public var underuseAlertRemaining: Double {
+        didSet { repository.setUnderuseAlertRemaining(underuseAlertRemaining) }
+    }
+
     // MARK: - Background Sync Settings
 
     /// Whether background sync is enabled (default: false)
@@ -288,6 +315,11 @@ public final class AppSettings {
         self.overviewModeEnabled = repository.overviewModeEnabled()
         self.backgroundSyncEnabled = repository.backgroundSyncEnabled()
         self.backgroundSyncInterval = repository.backgroundSyncInterval()
+        self.quotaThresholdAlertsEnabled = repository.quotaThresholdAlertsEnabled()
+        self.sessionAlertThreshold = repository.sessionAlertThreshold()
+        self.weeklyAlertThreshold = repository.weeklyAlertThreshold()
+        self.nearResetAlertHours = repository.nearResetAlertHours()
+        self.underuseAlertRemaining = repository.underuseAlertRemaining()
         self.menuBarPercentageEnabled = repository.menuBarPercentageEnabled()
         self.menuBarDurationEnabled = repository.menuBarDurationEnabled()
         self.menuBarStackedEnabled = repository.menuBarStackedEnabled()

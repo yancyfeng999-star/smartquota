@@ -52,6 +52,7 @@ struct SettingsContentView: View {
                     SettingsMembershipSection(monitor: monitor, isExpanded: $providersExpanded)
                     QuotaDetectionConfigSection(monitor: monitor)
                     backgroundSyncCard
+                    thresholdAlertCard
                     launchAtLoginCard
                     logsCard
                     aboutCard
@@ -1059,6 +1060,93 @@ struct SettingsContentView: View {
                     .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
                     .foregroundStyle(theme.textTertiary)
             }
+        }
+    }
+
+    // MARK: - Threshold alerts (5h / 7d)
+
+    private var thresholdAlertCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(theme.accentGradient)
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "bell.badge")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(theme.id == "cli" ? theme.textPrimary : .white)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("额度阈值报警")
+                        .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                        .foregroundStyle(theme.textPrimary)
+                    Text("5 小时 / 7 天剩余低于线时通知；临近重置未用完也会提醒")
+                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                        .foregroundStyle(theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Toggle("", isOn: $settings.quotaThresholdAlertsEnabled)
+                    .toggleStyle(.switch)
+                    .tint(theme.accentPrimary)
+                    .scaleEffect(0.8)
+                    .labelsHidden()
+            }
+
+            if settings.quotaThresholdAlertsEnabled {
+                thresholdSliderRow(
+                    title: "5 小时剩余 ≤",
+                    value: $settings.sessionAlertThreshold,
+                    range: 5...50
+                )
+                thresholdSliderRow(
+                    title: "7 天剩余 ≤",
+                    value: $settings.weeklyAlertThreshold,
+                    range: 5...50
+                )
+                thresholdSliderRow(
+                    title: "重置前 N 小时提醒",
+                    value: $settings.nearResetAlertHours,
+                    range: 6...72,
+                    unit: "小时"
+                )
+                thresholdSliderRow(
+                    title: "未用完阈值（剩余 ≥）",
+                    value: $settings.underuseAlertRemaining,
+                    range: 20...80
+                )
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: theme.cardCornerRadius)
+                .fill(theme.cardGradient)
+                .overlay(
+                    RoundedRectangle(cornerRadius: theme.cardCornerRadius)
+                        .stroke(theme.glassBorder, lineWidth: 1)
+                )
+        )
+    }
+
+    private func thresholdSliderRow(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        unit: String = "%"
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+                    .foregroundStyle(theme.textSecondary)
+                Spacer()
+                Text("\(Int(value.wrappedValue.rounded()))\(unit)")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(theme.textPrimary)
+            }
+            Slider(value: value, in: range, step: 1)
+                .tint(theme.accentPrimary)
         }
     }
 

@@ -38,8 +38,19 @@ struct SmartQuotaApp: App {
     /// Task for the hook server event loop (allows cancellation on toggle off)
     @State private var hookServerTask: Task<Void, Never>?
 
-    /// Alerts users when quota status degrades
-    private let quotaAlerter = NotificationAlerter()
+    /// Alerts users when quota status degrades / thresholds hit
+    private let quotaAlerter = NotificationAlerter(thresholdReader: {
+        await MainActor.run {
+            let s = AppSettings.shared
+            return NotificationAlerter.ThresholdConfig(
+                enabled: s.quotaThresholdAlertsEnabled,
+                sessionThreshold: s.sessionAlertThreshold,
+                weeklyThreshold: s.weeklyAlertThreshold,
+                nearResetHours: s.nearResetAlertHours,
+                underuseRemaining: s.underuseAlertRemaining
+            )
+        }
+    })
 
     /// Sends session start/end notifications
     private let sessionAlertSender = SystemAlertSender()

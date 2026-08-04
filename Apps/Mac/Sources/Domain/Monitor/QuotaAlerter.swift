@@ -12,4 +12,12 @@ public protocol QuotaAlerter: Sendable {
     /// Called when a provider's quota status changes.
     /// Implementations should alert users if the status degraded.
     func alert(providerId: String, previousStatus: QuotaStatus, currentStatus: QuotaStatus) async
+
+    /// Called after each successful refresh so implementations can fire
+    /// threshold / near-reset alerts (with their own debouncing).
+    func evaluateSnapshotAlerts(providerId: String, snapshot: UsageSnapshot) async
+}
+
+public extension QuotaAlerter {
+    func evaluateSnapshotAlerts(providerId: String, snapshot: UsageSnapshot) async {}
 }

@@ -257,7 +257,8 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             }
         }
 
-        // Credits balance kept only as CostUsage (not shown as 月额度 — monthly is estimated from 7d in UI).
+        // Extra Codex credits (top-up pool beyond plan 5h/7d) — show on card as “积分”
+        // so users remember to use banked / purchased credits (e.g. display “5.3”).
         var costUsage: CostUsage?
         let creditsHeader = readHeaderDouble(httpResponse, key: "x-codex-credits-balance")
         let creditsBody: Double? = {
@@ -266,18 +267,27 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             if let s = credits["balance"] as? String { return Double(s) }
             return nil
         }()
-        if let creditsRemaining = creditsHeader ?? creditsBody {
-            let limit: Double = 1000
-            let used = max(0, min(Decimal(limit), Decimal(limit) - Decimal(creditsRemaining)))
+        if let creditsRemaining = creditsHeader ?? creditsBody, creditsRemaining.isFinite {
+            let balance = Decimal(creditsRemaining)
             costUsage = CostUsage(
-                totalCost: used,
-                budget: Decimal(limit),
+                totalCost: 0,
+                budget: balance,
                 apiDuration: 0,
                 providerId: "codex",
                 capturedAt: Date(),
                 resetsAt: nil,
-                resetText: "积分余额 \(Int(creditsRemaining.rounded()))"
+                resetText: "积分 \(Self.formatCredits(creditsRemaining))"
             )
+            // Surface as its own meter (not a fake % of 1000).
+            quotas.append(UsageQuota(
+                percentRemaining: creditsRemaining > 0 ? 100 : 0,
+                quotaType: .timeLimit("Credits"),
+                providerId: "codex",
+                resetsAt: nil,
+                resetText: "加油包 / 额外积分，用完再买",
+                dollarRemaining: balance,
+                compactTitle: "积分"
+            ))
         }
 
         // Parse plan type
@@ -306,6 +316,17 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
         guard let value = response.value(forHTTPHeaderField: key) else { return nil }
         let n = Double(value)
         return n?.isFinite == true ? n : nil
+    }
+
+    /// Formats credit balances like 5.3 / 139.9 without a $ sign.
+    private static func formatCredits(_ value: Double) -> String {
+        if value >= 100 {
+            return String(format: "%.0f", value)
+        }
+        if abs(value.rounded() - value) < 0.05 {
+            return String(format: "%.0f", value)
+        }
+        return String(format: "%.1f", value)
     }
 
     private func windowSeconds(_ window: [String: Any]?) -> TimeInterval? {

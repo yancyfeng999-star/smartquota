@@ -373,14 +373,24 @@ public struct MiniMaxUsageProbe: UsageProbe, @unchecked Sendable {
             return nil // unlimited secondary pool — skip noise
         }
 
+        let nameLower = model.modelName.lowercased()
+        let isVideo = nameLower.contains("video")
+            || nameLower.contains("t2v")
+            || nameLower.contains("i2v")
+            || nameLower.contains("hailuo")
+            || nameLower.contains("视频")
+        let compact = isVideo ? "视频" : nil
+        let titleHint = isVideo ? "视频（每日额度，用掉才不浪费）" : "\(model.modelName) interval"
+
         if let pct = model.currentIntervalRemainingPercent {
             return UsageQuota(
                 percentRemaining: Double(pct),
                 quotaType: .modelSpecific(model.modelName),
                 providerId: providerId,
                 resetsAt: model.endTime.map { Date(timeIntervalSince1970: Double($0) / 1000.0) },
-                resetText: "\(model.modelName) interval",
-                windowDuration: windowDurationSeconds(start: model.startTime, end: model.endTime)
+                resetText: titleHint,
+                windowDuration: windowDurationSeconds(start: model.startTime, end: model.endTime),
+                compactTitle: compact
             )
         }
 
@@ -390,13 +400,18 @@ public struct MiniMaxUsageProbe: UsageProbe, @unchecked Sendable {
         let clampedRemaining = min(max(remainingCount, 0), total)
         let remaining = Double(clampedRemaining) / Double(total) * 100.0
         let usedCount = total - clampedRemaining
+        // Count-based pools (e.g. daily video 3): show “剩余 2/3” in reset text.
+        let countText = isVideo
+            ? "今日视频 剩余 \(clampedRemaining)/\(total) 条"
+            : "\(usedCount)/\(total) requests"
         return UsageQuota(
             percentRemaining: remaining,
             quotaType: .modelSpecific(model.modelName),
             providerId: providerId,
             resetsAt: model.endTime.map { Date(timeIntervalSince1970: Double($0) / 1000.0) },
-            resetText: "\(usedCount)/\(total) requests",
-            windowDuration: windowDurationSeconds(start: model.startTime, end: model.endTime)
+            resetText: countText,
+            windowDuration: windowDurationSeconds(start: model.startTime, end: model.endTime),
+            compactTitle: compact
         )
     }
 
