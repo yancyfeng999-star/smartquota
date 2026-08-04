@@ -1,6 +1,0 @@
-framework module CNIOAtomics {
-  umbrella header "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/checkouts/swift-nio/Sources/CNIOAtomics/include/CNIOAtomics.h"
-
-  export *
-  module * { export * }
-}

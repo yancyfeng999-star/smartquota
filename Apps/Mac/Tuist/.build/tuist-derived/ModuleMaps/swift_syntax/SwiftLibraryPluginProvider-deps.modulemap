@@ -1,2 +1,0 @@
-extern module _SwiftLibraryPluginProviderCShims "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/checkouts/swift-syntax/Sources/_SwiftLibraryPluginProviderCShims/include/module.modulemap"
-extern module _SwiftSyntaxCShims "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/checkouts/swift-syntax/Sources/_SwiftSyntaxCShims/include/module.modulemap"

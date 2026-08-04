@@ -1,6 +1,0 @@
-framework module CAsyncHTTPClient {
-  umbrella header "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/checkouts/async-http-client/Sources/CAsyncHTTPClient/include/CAsyncHTTPClient.h"
-
-  export *
-  module * { export * }
-}

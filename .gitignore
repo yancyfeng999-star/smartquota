@@ -2,9 +2,10 @@
 
 # --- Mac (Apps/Mac) ---
 Apps/Mac/.build/
+Apps/Mac/Tuist/.build/
 Apps/Mac/**/Package.resolved
-Apps/Mac/**/*.xcodeproj
-Apps/Mac/**/*.xcworkspace
+Apps/Mac/**/*.xcodeproj/
+Apps/Mac/**/*.xcworkspace/
 Apps/Mac/Derived/
 Apps/Mac/.tuist-cache/
 **/xcuserdata/

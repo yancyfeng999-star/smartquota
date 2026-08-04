@@ -1,7 +1,0 @@
-extern module AwsCCal "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/tuist-derived/ModuleMaps/AwsCCal/AwsCCal.modulemap"
-extern module AwsCCommon "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/tuist-derived/ModuleMaps/AwsCCommon/AwsCCommon.modulemap"
-extern module AwsCCompression "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/tuist-derived/ModuleMaps/AwsCCompression/AwsCCompression.modulemap"
-extern module AwsCHttp "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/tuist-derived/ModuleMaps/AwsCHttp/AwsCHttp.modulemap"
-extern module AwsCIo "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/tuist-derived/ModuleMaps/AwsCIo/AwsCIo.modulemap"
-extern module AwsCPlatformConfig "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/checkouts/aws-crt-swift/aws-common-runtime/config/module.modulemap"
-extern module AwsCSdkUtils "/Users/yancyfeng/Desktop/Mac Dpxx项目/自研软件/智额/Apps/Mac/Tuist/.build/tuist-derived/ModuleMaps/AwsCSdkUtils/AwsCSdkUtils.modulemap"
