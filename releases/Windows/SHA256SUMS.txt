@@ -1,0 +1,1 @@
+e82a24b22e6d83c1e10742e481b9ce8fbe135e4142245304acf631ec76e61353  releases/Windows/SmartQuota-Setup-0.1.0-x64.exe
