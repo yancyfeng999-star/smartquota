@@ -225,13 +225,21 @@ GitHub Release 同一 tag 或分 `v0.1.0-windows`，资产名全程 ASCII。
 
 ---
 
-## 11. 下一步（开工清单）
+## 11. 实现状态（已落地）
 
-1. **目录对齐**：新建 `Apps/Mac`、`Apps/Windows`；将现有 Mac 工程迁入 `Apps/Mac/`（或先建 `Apps/Windows`，Mac 迁移动作为单独 PR）  
-2. 在 `Apps/Windows` 初始化 Tauri（`npm create tauri-app`）  
-3. 配置产品名、托盘图标、NSIS 中文  
-4. 实现 `get_usage_snapshot` IPC + 假数据 UI  
-5. 接 Codex auth 真探针  
-6. `tauri build` 出 Setup.exe → 内测 / GitHub Release  
+| 项 | 状态 |
+|----|------|
+| 目录 `Apps/Windows` 与 Mac 平级 | ✅ |
+| Tauri 托盘 + 关窗驻留 | ✅ |
+| Codex / MiniMax / Grok 真探针 | ✅ |
+| 设置 / Key 凭据管理器 / settings.json | ✅ |
+| NSIS Setup.exe 配置 | ✅ |
+| GitHub Actions `windows.yml` | ✅ |
+| 打出安装包 | 在 Windows CI 或本机 `npm run tauri:build` |
 
-本文即选型结论；**Windows 源码落在 `Apps/Windows/`，与 `Apps/Mac/` 平级。**
+```bash
+cd Apps/Windows
+npm install
+npm run tauri:build
+# → src-tauri/target/release/bundle/nsis/SmartQuota_*_x64-setup.exe
+```
