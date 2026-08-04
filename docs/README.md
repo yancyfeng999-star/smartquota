@@ -16,3 +16,5 @@
 | [DISTRIBUTION.md](./DISTRIBUTION.md) | 维护者 / 用户 | 打包 zip/dmg、其他 Mac 安装 |
 
 日常以 `USER_GUIDE` / `DEVELOPER` / `DISTRIBUTION` / 根目录 `README` 为准。
+
+| [PERFORMANCE.md](./PERFORMANCE.md) | 全部 | 内存/CPU/磁盘占用策略 |

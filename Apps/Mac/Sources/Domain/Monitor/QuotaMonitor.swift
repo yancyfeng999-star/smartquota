@@ -67,14 +67,21 @@ public final class QuotaMonitor {
 
     // MARK: - Monitoring Operations
 
-    /// Refreshes all enabled providers concurrently.
-    /// Each provider updates its own snapshot.
-    /// Disabled providers are skipped.
+    /// Refreshes all enabled providers with limited concurrency (energy / CPU).
+    /// Each provider updates its own snapshot. Disabled providers are skipped.
     public func refreshAll() async {
-        await withTaskGroup(of: Void.self) { group in
-            for provider in providers.enabled {
-                group.addTask {
-                    await self.refreshProvider(provider)
+        let list = providers.enabled
+        var index = 0
+        let waveSize = 2
+        while index < list.count {
+            let end = min(index + waveSize, list.count)
+            let wave = Array(list[index..<end])
+            index = end
+            await withTaskGroup(of: Void.self) { group in
+                for provider in wave {
+                    group.addTask {
+                        await self.refreshProvider(provider)
+                    }
                 }
             }
         }

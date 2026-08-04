@@ -1014,7 +1014,7 @@ struct SettingsContentView: View {
                         .tracking(0.5)
 
                     Picker("", selection: $settings.refreshInterval) {
-                        ForEach(RefreshInterval.allCases, id: \.self) { interval in
+                        ForEach(RefreshInterval.pickerCases, id: \.self) { interval in
                             Text(interval.label).tag(interval)
                         }
                     }

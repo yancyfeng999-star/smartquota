@@ -26,7 +26,7 @@ import OSLog
 /// | Level | File Output | OSLog Persistence |
 /// |-------|-------------|-------------------|
 /// | debug | No | Memory only |
-/// | info | Yes | With `log collect` |
+/// | info | No (OSLog only — saves disk/CPU idle cost) | With `log collect` |
 /// | warning | Yes | Always persisted |
 /// | error | Yes | Always persisted |
 ///
@@ -101,18 +101,16 @@ public struct CategoryLogger: Sendable {
         osLogger.debug("\(message, privacy: .public)")
     }
     
-    /// Log an info message (written to both OSLog and file).
+    /// Log an info message (OSLog only — not written to file to keep idle disk/CPU low).
     /// - Note: Message is logged publicly. Caller must redact sensitive data.
     public func info(_ message: String) {
         osLogger.info("\(message, privacy: .public)")
-        FileLogger.shared.log(.info, category: category, message: message)
     }
     
-    /// Log a notice message (written to both OSLog and file as INFO level).
+    /// Log a notice message (OSLog only).
     /// - Note: Message is logged publicly. Caller must redact sensitive data.
     public func notice(_ message: String) {
         osLogger.notice("\(message, privacy: .public)")
-        FileLogger.shared.log(.info, category: category, message: message)
     }
     
     /// Log a warning message (written to both OSLog and file).

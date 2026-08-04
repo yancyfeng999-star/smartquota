@@ -1003,19 +1003,40 @@ struct MenuContentView: View {
 
     // MARK: - Actions
 
-    /// Refresh all enabled providers concurrently
+    /// Skip re-probe when a snapshot is still fresh (cuts CPU/network when
+    /// opening the menu repeatedly).
+    private static let freshSnapshotTTL: TimeInterval = 45
+
+    /// Max concurrent probes when opening the menu — avoids CPU spikes with many memberships.
+    private static let maxConcurrentProbes = 2
+
+    /// Refresh enabled providers with concurrency cap + freshness skip.
     private func refreshAllEnabled() async {
-        await withTaskGroup(of: Void.self) { group in
-            // The `isSyncing` guard reads main-actor provider state, so evaluate
-            // it here on the main actor (this closure inherits the caller's
-            // isolation). Each child task then awaits `refresh()`, whose heavy
-            // probe work still suspends off-main, keeping the refreshes concurrent.
-            for provider in monitor.enabledProviders where !provider.isSyncing {
-                group.addTask {
-                    do {
-                        try await provider.refresh()
-                    } catch {
-                        // Provider stores error in lastError
+        let now = Date()
+        let candidates = monitor.enabledProviders.filter { provider in
+            guard !provider.isSyncing else { return false }
+            if let captured = provider.snapshot?.capturedAt,
+               now.timeIntervalSince(captured) < Self.freshSnapshotTTL {
+                return false
+            }
+            return true
+        }
+        guard !candidates.isEmpty else { return }
+
+        // Process in small waves (2 at a time) instead of N simultaneous CLI/API calls.
+        var index = 0
+        while index < candidates.count {
+            let end = min(index + Self.maxConcurrentProbes, candidates.count)
+            let wave = Array(candidates[index..<end])
+            index = end
+            await withTaskGroup(of: Void.self) { group in
+                for provider in wave {
+                    group.addTask {
+                        do {
+                            try await provider.refresh()
+                        } catch {
+                            // Provider stores error in lastError
+                        }
                     }
                 }
             }

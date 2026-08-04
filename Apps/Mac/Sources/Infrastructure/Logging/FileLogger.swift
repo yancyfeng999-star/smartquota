@@ -16,7 +16,8 @@ public final class FileLogger: @unchecked Sendable {
     
     private let fileURL: URL
     private let queue = DispatchQueue(label: "com.smartquota.app.FileLogger")
-    private let maxFileSize: UInt64 = 5 * 1024 * 1024  // 5MB
+    /// Cap log growth: warning/error only end up here; 1MB + one rotated copy is enough.
+    private let maxFileSize: UInt64 = 1 * 1024 * 1024  // 1MB
     
     /// The directory containing log files
     public var logsDirectory: URL {
