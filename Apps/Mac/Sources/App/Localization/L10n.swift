@@ -67,7 +67,7 @@ final class L10n {
         "common.open_site": [.zhHans: "打开官网", .en: "Open website", .ja: "サイトを開く", .ko: "웹사이트 열기", .ru: "Сайт", .ar: "الموقع", .fr: "Site web", .de: "Website", .es: "Sitio web", .pt: "Site"],
         "common.plan": [.zhHans: "套餐", .en: "Plan", .ja: "プラン", .ko: "요금제", .ru: "План", .ar: "الخطة", .fr: "Offre", .de: "Tarif", .es: "Plan", .pt: "Plano"],
         "common.probe_status": [.zhHans: "检测状态", .en: "Status", .ja: "状態", .ko: "상태", .ru: "Статус", .ar: "الحالة", .fr: "État", .de: "Status", .es: "Estado", .pt: "Status"],
-        "common.quit": [.zhHans: "退出", .en: "Quit", .ja: "終了", .ko: "종료", .ru: "Выход", .ar: "خروج", .fr: "Quitter", .de: "Beenden", .es: "Salir", .pt: "Sair"],
+        "common.quit": [.zhHans: "退出应用", .en: "Quit App", .ja: "アプリ終了", .ko: "앱 종료", .ru: "Выход", .ar: "خروج", .fr: "Quitter l’app", .de: "App beenden", .es: "Salir de la app", .pt: "Sair do app"],
         "common.refreshing": [.zhHans: "正在刷新…", .en: "Refreshing…", .ja: "更新中…", .ko: "새로고침 중…", .ru: "Обновление…", .ar: "جارٍ التحديث…", .fr: "Actualisation…", .de: "Aktualisieren…", .es: "Actualizando…", .pt: "Atualizando…"],
         "common.save": [.zhHans: "保存", .en: "Save", .ja: "保存", .ko: "저장", .ru: "Сохранить", .ar: "حفظ", .fr: "Enregistrer", .de: "Speichern", .es: "Guardar", .pt: "Salvar"],
         "common.settings": [.zhHans: "设置", .en: "Settings", .ja: "設定", .ko: "설정", .ru: "Настройки", .ar: "الإعدادات", .fr: "Réglages", .de: "Einstellungen", .es: "Ajustes", .pt: "Ajustes"],

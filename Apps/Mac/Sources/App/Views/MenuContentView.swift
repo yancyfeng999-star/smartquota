@@ -237,6 +237,25 @@ struct MenuContentView: View {
         )
     }
 
+    /// Hides the popover or pinned window without quitting the process.
+    private func dismissMenuPanel() {
+        if runsInPinnedWindow {
+            PinnedQuotaWindowController.shared.close()
+            return
+        }
+        // MenuBarExtra `.window` style hosts content in a transient NSWindow.
+        if let window = NSApp.keyWindow {
+            window.orderOut(nil)
+        } else {
+            for window in NSApp.windows where window.isVisible && window.canBecomeKey {
+                // Prefer non-main status-item panels
+                if window.level != .normal || window.styleMask.contains(.nonactivatingPanel) {
+                    window.orderOut(nil)
+                }
+            }
+        }
+    }
+
     private var refreshSubtitle: String {
         if isAnySyncing { return "刷新中…" }
         if let date = lastRefreshedAt {
@@ -313,7 +332,8 @@ struct MenuContentView: View {
                 systemName: "power",
                 action: { NSApplication.shared.terminate(nil) }
             )
-            .keyboardShortcut("q")
+            .help("完全退出智额（菜单栏图标会消失）")
+            // No ⌘Q here — ⌘Q still works system-wide; avoid accidental toolbar quit.
         }
     }
 
@@ -960,9 +980,9 @@ struct MenuContentView: View {
             .help(updateAvailableHelpText)
             .keyboardShortcut(",")
 
-            // Quit Button
+            // Close panel only — do NOT terminate. App stays in the menu bar.
             Button {
-                NSApplication.shared.terminate(nil)
+                dismissMenuPanel()
             } label: {
                 ZStack {
                     Circle()
@@ -975,8 +995,7 @@ struct MenuContentView: View {
                 }
             }
             .buttonStyle(.plain)
-            .help("退出 \(Brand.nameCN)")
-            .keyboardShortcut("q")
+            .help("关闭面板（智额继续在菜单栏后台运行）")
         }
         .opacity(animateIn ? 1 : 0)
         .animation(.easeOut(duration: 0.5).delay(0.3), value: animateIn)

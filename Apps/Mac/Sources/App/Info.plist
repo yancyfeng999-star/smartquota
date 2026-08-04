@@ -26,10 +26,10 @@
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>
     <string>15.0</string>
-    <!-- false = show Dock icon so double-click is obviously "opened".
-         Can switch back to true later for pure menu-bar mode. -->
+    <!-- true = agent app: no Dock icon; lives in menu bar (background).
+         Closing the panel or pinned window does not quit the process. -->
     <key>LSUIElement</key>
-    <false/>
+    <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 SmartQuota / 智额 contributors. MIT License.</string>
     <key>NSPrincipalClass</key>

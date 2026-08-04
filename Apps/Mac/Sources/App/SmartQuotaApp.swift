@@ -13,6 +13,9 @@ extension Notification.Name {
 
 @main
 struct SmartQuotaApp: App {
+    /// AppKit delegate: do not quit when the last window (pin panel) closes.
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     /// The main domain service - monitors all AI providers
     /// This is the single source of truth for providers and their state
     @State private var monitor: QuotaMonitor
@@ -191,8 +194,7 @@ struct SmartQuotaApp: App {
     }
 
     var body: some Scene {
-        // Visible Dock presence (LSUIElement=false) so double-click clearly
-        // "opens" the app during local testing. Primary UI remains menu bar.
+        // Pure menu-bar agent (LSUIElement=true): stays in status bar until user quits.
         MenuBarExtra {
             Group {
                 #if ENABLE_SPARKLE
