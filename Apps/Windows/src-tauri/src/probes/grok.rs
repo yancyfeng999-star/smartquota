@@ -167,39 +167,33 @@ fn parse_meters(root: &Value) -> Vec<QuotaMeter> {
 
     if let Some(pct) = as_f64(config.get("creditUsagePercent")) {
         let period = config.get("currentPeriod");
-        let label = period
+        let ptype = period
             .and_then(|p| p.get("type"))
             .and_then(|t| t.as_str())
-            .map(|t| {
-                if t.contains("WEEK") {
-                    "本周额度"
-                } else if t.contains("MONTH") {
-                    "本月额度"
-                } else {
-                    "额度"
-                }
-            })
-            .unwrap_or("额度");
-        let end = period
-            .and_then(|p| p.get("end"))
-            .and_then(|e| e.as_str())
-            .map(|s| format!("重置: {s}"));
-        meters.push(QuotaMeter {
-            label: label.into(),
-            remaining_percent: Some((100.0 - pct).clamp(-100.0, 100.0)),
-            reset_text: end,
-        });
+            .unwrap_or("");
+        let end_str = period.and_then(|p| p.get("end")).and_then(|e| e.as_str());
+        let reset_text = end_str.map(|s| format!("重置: {s}"));
+        let resets_at = crate::models::parse_iso_unix(end_str);
+        let rem = Some((100.0 - pct).clamp(-100.0, 100.0));
+        if ptype.contains("WEEK") {
+            meters.push(QuotaMeter::weekly(rem, reset_text, resets_at));
+        } else if ptype.contains("MONTH") {
+            meters.push(QuotaMeter::time_limit("本月额度", rem, reset_text, resets_at));
+        } else {
+            meters.push(QuotaMeter::time_limit("额度", rem, reset_text, resets_at));
+        }
     }
 
     if let Some(products) = config.get("productUsage").and_then(|v| v.as_array()) {
         for p in products {
             let name = p.get("product").and_then(|v| v.as_str()).unwrap_or("Product");
             if let Some(pct) = as_f64(p.get("usagePercent")) {
-                meters.push(QuotaMeter {
-                    label: name.into(),
-                    remaining_percent: Some((100.0 - pct).clamp(-100.0, 100.0)),
-                    reset_text: None,
-                });
+                meters.push(QuotaMeter::model(
+                    name,
+                    Some((100.0 - pct).clamp(-100.0, 100.0)),
+                    None,
+                    None,
+                ));
             }
         }
     }

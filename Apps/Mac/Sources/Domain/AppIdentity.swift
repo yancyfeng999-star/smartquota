@@ -7,6 +7,18 @@ public enum AppIdentity: Sendable {
     public static let appBundleId = "com.smartquota.app"
     public static let subsystem = "com.smartquota.app"
 
+    /// Public GitHub repo used for free manual update checks (Releases API).
+    public static let githubOwner = "yancyfeng999-star"
+    public static let githubRepo = "smartquota"
+
+    public static var githubReleasesPageURL: URL {
+        URL(string: "https://github.com/\(githubOwner)/\(githubRepo)/releases")!
+    }
+
+    public static var githubReleasesAPIURL: URL {
+        URL(string: "https://api.github.com/repos/\(githubOwner)/\(githubRepo)/releases?per_page=30")!
+    }
+
     /// Config dir: `~/.smartquota`
     public static let configDirName = ".smartquota"
 

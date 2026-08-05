@@ -38,6 +38,32 @@ pub fn minimax_config_path() -> PathBuf {
     home().join(".minimax").join("config.yaml")
 }
 
+pub fn kimi_config_path() -> PathBuf {
+    home().join(".kimi").join("config.json")
+}
+
+pub fn claude_json_path() -> PathBuf {
+    home().join(".claude.json")
+}
+
+pub fn claude_dir() -> PathBuf {
+    home().join(".claude")
+}
+
+pub fn gemini_oauth_path() -> PathBuf {
+    home().join(".gemini").join("oauth_creds.json")
+}
+
+/// Cursor state DB — Windows path.
+pub fn cursor_state_db_path() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| home().join("AppData").join("Roaming"))
+        .join("Cursor")
+        .join("User")
+        .join("globalStorage")
+        .join("state.vscdb")
+}
+
 pub fn ensure_config_dir() -> std::io::Result<PathBuf> {
     let dir = config_dir();
     std::fs::create_dir_all(&dir)?;

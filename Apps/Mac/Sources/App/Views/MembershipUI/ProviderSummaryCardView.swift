@@ -15,13 +15,13 @@ struct ProviderSummaryCardView: View {
     var body: some View {
         let _ = l10n.revision
         // Not a Button — so long-press + drag reorder gestures can win.
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             headerRow
-            metricsRow
+            metricsBlock
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .leading)
         .background(cardBackground)
         .scaleEffect(isHovering ? 1.015 : 1.0)
         .shadow(
@@ -122,11 +122,12 @@ struct ProviderSummaryCardView: View {
             .foregroundStyle(statusTint)
     }
 
-    // MARK: - Metrics (compact)
+    // MARK: - Metrics (primary row + optional second row)
 
-    private var metricsRow: some View {
-        let items = displayColumns
-        if items.isEmpty {
+    private var metricsBlock: some View {
+        let primary = primaryColumns
+        let secondary = secondaryColumns
+        if primary.isEmpty && secondary.isEmpty {
             return AnyView(
                 Text(provider.isSyncing ? l10n.t("common.refreshing") : l10n.t("common.no_quota"))
                     .font(.system(size: 12, weight: .medium))
@@ -135,40 +136,43 @@ struct ProviderSummaryCardView: View {
             )
         }
         return AnyView(
-            HStack(spacing: 10) {
-                ForEach(items) { item in
-                    quotaColumn(item)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 10) {
+                if !primary.isEmpty {
+                    HStack(spacing: 10) {
+                        ForEach(primary) { item in
+                            quotaColumn(item)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+                // Second row: Spark weekly / MiniMax video only
+                if !secondary.isEmpty {
+                    HStack(spacing: 10) {
+                        ForEach(secondary) { item in
+                            quotaColumn(item)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
             }
         )
     }
 
-    /// Progress bar with label left + percent right above the bar.
+    /// Progress bar with label left + value (remaining/total) right above the bar.
     private func quotaColumn(_ item: SummaryQuotaItem) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(item.title)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 2)
-                if let custom = item.valueText {
-                    Text(custom)
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(item.highlight ? MembershipPalette.accentPrimary : .primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                } else if let value = item.percentRemaining {
-                    Text("\(Int(value.rounded()))%")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                } else {
-                    Text("—")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .foregroundStyle(.tertiary)
-                }
+                Text(item.displayValue)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    // Same style as 5h / 7d / 总额 — no accent/highlight color
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
 
             GeometryReader { proxy in
@@ -182,7 +186,7 @@ struct ProviderSummaryCardView: View {
                     }
                 }
             }
-            .frame(height: 4)
+            .frame(height: 5)
 
             Text(item.resetText)
                 .font(.system(size: 9, weight: .semibold))
@@ -201,90 +205,151 @@ struct ProviderSummaryCardView: View {
     }
 
     private var renewalTint: Color {
-        // Color membership renewal line when weekly window is also near reset
-        if let weekly = snapshot?.weeklyQuota {
-            switch QuotaAlertPolicy.resetUrgency(
-                resetsAt: weekly.resetsAt,
-                nearResetHours: settings.nearResetAlertHours
-            ) {
-            case .imminent: return MembershipPalette.statusDanger
-            case .soon: return MembershipPalette.statusWarning
-            case .normal: break
-            }
+        // Only color by **membership** next renewal date — not by 5H/7D quota reset.
+        // (Previously wrongly used weekly window, so Grok 续费 turned yellow when 7D was “明天”.)
+        _ = settings.planLabelsRevision
+        let raw = settings.renewalDate(for: provider.id)
+        guard let activation = MembershipRenewal.parse(raw) else {
+            return .secondary
         }
-        return .secondary
+        let next = MembershipRenewal.nextRenewal(fromActivation: activation)
+        // Membership is calendar-month; warn only when renewal is within ~3 days
+        switch QuotaAlertPolicy.resetUrgency(
+            resetsAt: next,
+            nearResetHours: 72
+        ) {
+        case .imminent: return MembershipPalette.statusDanger
+        case .soon: return MembershipPalette.statusWarning
+        case .normal: return .secondary
+        }
     }
 
     // MARK: - Columns
 
     private var snapshot: UsageSnapshot? { provider.snapshot }
 
-    private var estimatesMonthlyFromWeekly: Bool {
-        ["codex", "minimax", "grok"].contains(provider.id)
+    private var isCodex: Bool { provider.id == "codex" }
+
+    /// First row always: 5h · 7d · 总额（缺数据时占位，不由 7d 估算总额）
+    private var primaryColumns: [SummaryQuotaItem] {
+        // Even without snapshot, keep three slots so layout is stable
+        guard let snapshot else {
+            return [
+                SummaryQuotaItem.placeholder(title: l10n.t("quota.5h")),
+                SummaryQuotaItem.placeholder(title: l10n.t("quota.weekly")),
+                SummaryQuotaItem.placeholder(title: l10n.t("quota.monthly")),
+            ]
+        }
+
+        let session: SummaryQuotaItem = {
+            if let q = snapshot.sessionQuota {
+                return SummaryQuotaItem(from: q, title: l10n.t("quota.5h"))
+            }
+            return SummaryQuotaItem.placeholder(title: l10n.t("quota.5h"))
+        }()
+
+        let weekly: SummaryQuotaItem = {
+            if let q = snapshot.weeklyQuota {
+                return SummaryQuotaItem(from: q, title: l10n.t("quota.weekly"))
+            }
+            return SummaryQuotaItem.placeholder(title: l10n.t("quota.weekly"))
+        }()
+
+        // 总额：优先真实月额度；否则用 7d + 会员续费日反推
+        let monthly: SummaryQuotaItem = {
+            if let q = realMonthly(in: snapshot) {
+                return SummaryQuotaItem(from: q, title: l10n.t("quota.monthly"))
+            }
+            if let w = snapshot.weeklyQuota {
+                return estimatedMonthlyItem(from: w, providerId: provider.id)
+            }
+            return SummaryQuotaItem.placeholder(title: l10n.t("quota.monthly"))
+        }()
+
+        return [session, weekly, monthly]
     }
 
-    private var displayColumns: [SummaryQuotaItem] {
+    /// 总额估算：7d 剩余 + 会员开通日推算的续费日（无续费日则 7/30 回退）
+    private func estimatedMonthlyItem(from weekly: UsageQuota, providerId: String) -> SummaryQuotaItem {
+        _ = settings.planLabelsRevision // refresh when 开通/续费日 changes
+        let raw = AppSettings.shared.renewalDate(for: providerId)
+        if let activation = MembershipRenewal.parse(raw) {
+            let renew = MembershipRenewal.nextRenewal(fromActivation: activation)
+            let est = MonthlyFromWeekly.estimate(
+                weeklyRemaining: weekly.percentRemaining,
+                renewalAt: renew
+            )
+            return SummaryQuotaItem(
+                title: l10n.t("quota.monthly"),
+                percentRemaining: est.percentRemaining,
+                resetText: SummaryQuotaItem.formatTimeOnly(est.resetsAt),
+                isEstimated: true
+            )
+        }
+        let est = MonthlyFromWeekly.estimateWithoutRenewal(
+            weeklyRemaining: weekly.percentRemaining
+        )
+        return SummaryQuotaItem(
+            title: l10n.t("quota.monthly"),
+            percentRemaining: est.percentRemaining,
+            resetText: SummaryQuotaItem.formatTimeOnly(est.resetsAt),
+            isEstimated: true
+        )
+    }
+
+    /// Second row:
+    /// - Codex: GPT-5.3-Codex-Spark 周限额 + 积分
+    /// - MiniMax: 视频 only
+    private var secondaryColumns: [SummaryQuotaItem] {
         guard let snapshot else { return [] }
         var cols: [SummaryQuotaItem] = []
 
-        if let session = snapshot.sessionQuota {
-            cols.append(SummaryQuotaItem(from: session, title: l10n.t("quota.5h")))
-        }
-        if let weekly = snapshot.weeklyQuota {
-            cols.append(SummaryQuotaItem(from: weekly, title: l10n.t("quota.weekly")))
-        }
-
-        // Extra meters users often forget: Codex credits, MiniMax video, etc.
-        let extras = extraHighlightQuotas(in: snapshot)
-        for extra in extras {
-            let title = extra.compactTitle ?? extra.quotaType.displayName
-            cols.append(SummaryQuotaItem(from: extra, title: title, highlight: true))
-        }
-
-        // Only show estimated month when we have room and no highlight extras
-        if extras.isEmpty {
-            if let monthly = realMonthly(in: snapshot) {
-                cols.append(SummaryQuotaItem(from: monthly, title: l10n.t("quota.monthly")))
-            } else if estimatesMonthlyFromWeekly, let weekly = snapshot.weeklyQuota {
-                let est = MonthlyFromWeekly.estimate(weeklyRemaining: weekly.percentRemaining)
+        if isCodex {
+            if let spark = snapshot.quotas.first(where: { q in
+                if case .modelSpecific(let name) = q.quotaType {
+                    return name.lowercased().contains("spark")
+                        || (q.compactTitle?.contains("Spark") == true)
+                }
+                return q.compactTitle?.contains("Spark") == true
+            }) {
                 cols.append(SummaryQuotaItem(
-                    title: l10n.t("quota.monthly"),
-                    percentRemaining: est.percentRemaining,
-                    resetText: "\(est.note) · \(Self.shortDate(est.resetsAt))",
-                    isEstimated: true
+                    from: spark,
+                    title: "GPT-5.3 周额度",
+                    highlight: false
                 ))
             }
-        }
-
-        // Keep card readable: max 4 columns
-        if cols.count > 4 {
-            cols = Array(cols.prefix(4))
-        }
-        return cols
-    }
-
-    /// Secondary “use it or lose it” pools (not 5h/7d/estimated month).
-    private func extraHighlightQuotas(in snapshot: UsageSnapshot) -> [UsageQuota] {
-        snapshot.quotas.filter { quota in
-            if case .session = quota.quotaType { return false }
-            if case .weekly = quota.quotaType { return false }
-            if case .timeLimit(let name) = quota.quotaType {
-                let n = name.lowercased()
-                if n.contains("month") || n.contains("月") { return false }
-                // Credits / 积分
-                if n.contains("credit") || n.contains("积分") { return true }
+            if let credits = snapshot.quotas.first(where: { q in
+                if case .timeLimit(let name) = q.quotaType {
+                    return name.lowercased().contains("credit")
+                }
+                return q.compactTitle == "积分"
+            }) {
+                cols.append(SummaryQuotaItem(
+                    from: credits,
+                    title: credits.compactTitle ?? "积分",
+                    highlight: false
+                ))
             }
+            return cols
+        }
+
+        // MiniMax: one video row
+        for quota in snapshot.quotas {
             if case .modelSpecific(let name) = quota.quotaType {
                 let n = name.lowercased()
+                let title = quota.compactTitle
                 if n.contains("video") || n.contains("t2v") || n.contains("i2v")
-                    || n.contains("hailuo") || n.contains("视频") {
-                    return true
+                    || n.contains("hailuo") || n.contains("视频") || title == "视频" {
+                    cols.append(SummaryQuotaItem(
+                        from: quota,
+                        title: title ?? "视频",
+                        highlight: false
+                    ))
+                    break
                 }
-                // Other non-primary model pools (still useful reminders)
-                return quota.compactTitle != nil
             }
-            return quota.compactTitle != nil
         }
+        return cols
     }
 
     private func realMonthly(in snapshot: UsageSnapshot) -> UsageQuota? {
@@ -346,7 +411,7 @@ private struct SummaryQuotaItem: Identifiable {
     let id: String
     let title: String
     let percentRemaining: Double?
-    /// Free-form value (e.g. credit balance "5.3", video "2/3")
+    /// Free-form value (e.g. video "2/3", percent "55/100")
     let valueText: String?
     let resetText: String
     let isEstimated: Bool
@@ -354,27 +419,41 @@ private struct SummaryQuotaItem: Identifiable {
     let resetUrgency: QuotaAlertPolicy.ResetUrgency
     let resetsAt: Date?
 
+    /// Right-side value: always prefer remaining/total when known.
+    var displayValue: String {
+        if let valueText, !valueText.isEmpty { return valueText }
+        if let value = percentRemaining {
+            let rem = Int(value.rounded())
+            return "\(rem)/100"
+        }
+        return "—"
+    }
+
     init(from quota: UsageQuota, title: String, highlight: Bool = false) {
         self.id = quota.quotaType.quotaKey + title
         self.title = title
         self.highlight = highlight
         self.resetsAt = quota.resetsAt
         self.resetUrgency = QuotaAlertPolicy.resetUrgency(resetsAt: quota.resetsAt)
-        if let dollars = quota.dollarRemaining {
-            // Codex credits etc. — number without $ (user reads as “5.3 积分”)
+        // Count-based (video): show remaining/total as main value
+        if let rem = Self.countRemaining(from: quota.resetText) {
+            self.valueText = rem
+            self.percentRemaining = quota.percentRemaining
+        } else if let dollars = quota.dollarRemaining {
+            // 积分：余额数字，进度条不按 100% 满条（避免看起来比别的“更满/更蓝”）
             let v = NSDecimalNumber(decimal: dollars).doubleValue
             if abs(v.rounded() - v) < 0.05 {
                 self.valueText = String(format: "%.0f", v)
             } else {
                 self.valueText = String(format: "%.1f", v)
             }
+            // No percentage bar fill for balance-only meters
             self.percentRemaining = nil
-        } else if highlight, let rem = Self.countRemaining(from: quota.resetText) {
-            self.valueText = rem
-            self.percentRemaining = quota.percentRemaining
         } else {
-            self.valueText = nil
-            self.percentRemaining = quota.isDollarBased ? nil : quota.percentRemaining
+            // 百分比额度：剩余/总额（100）
+            let rem = Int(quota.percentRemaining.rounded())
+            self.valueText = "\(rem)/100"
+            self.percentRemaining = quota.percentRemaining
         }
         self.resetText = Self.formatReset(quota)
         self.isEstimated = false
@@ -383,7 +462,6 @@ private struct SummaryQuotaItem: Identifiable {
     /// Parse “剩余 2/3” style counts for video pools.
     private static func countRemaining(from resetText: String?) -> String? {
         guard let resetText else { return nil }
-        // Match 2/3 or 剩余 2/3
         let pattern = #"(\d+)\s*/\s*(\d+)"#
         guard let re = try? NSRegularExpression(pattern: pattern),
               let match = re.firstMatch(in: resetText, range: NSRange(resetText.startIndex..., in: resetText)),
@@ -391,6 +469,7 @@ private struct SummaryQuotaItem: Identifiable {
               let r1 = Range(match.range(at: 1), in: resetText),
               let r2 = Range(match.range(at: 2), in: resetText)
         else { return nil }
+        // Prefer remaining/total when text says 剩余 a/b
         return "\(resetText[r1])/\(resetText[r2])"
     }
 
@@ -398,7 +477,11 @@ private struct SummaryQuotaItem: Identifiable {
         self.id = title + (isEstimated ? "-est" : "")
         self.title = title
         self.percentRemaining = percentRemaining
-        self.valueText = nil
+        if let p = percentRemaining {
+            self.valueText = "\(Int(p.rounded()))/100"
+        } else {
+            self.valueText = nil
+        }
         self.resetText = resetText
         self.isEstimated = isEstimated
         self.highlight = false
@@ -406,27 +489,65 @@ private struct SummaryQuotaItem: Identifiable {
         self.resetsAt = nil
     }
 
+    /// Empty slot when 5h / 7d / 总额 data is missing (still show the column).
+    static func placeholder(title: String) -> SummaryQuotaItem {
+        SummaryQuotaItem(
+            title: title,
+            percentRemaining: nil,
+            resetText: "—",
+            isEstimated: false
+        )
+    }
+
+    /// Public helper for estimated monthly reset line (date only).
+    static func formatTimeOnly(_ resetsAt: Date) -> String {
+        let cal = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        if cal.isDateInToday(resetsAt) {
+            formatter.dateFormat = "HH:mm"
+            return formatter.string(from: resetsAt)
+        }
+        if cal.isDateInTomorrow(resetsAt) {
+            formatter.dateFormat = "HH:mm"
+            return "明天 \(formatter.string(from: resetsAt))"
+        }
+        // Renewal is usually a calendar day — show MM-dd
+        formatter.dateFormat = "MM-dd"
+        return formatter.string(from: resetsAt)
+    }
+
+    /// Time only under the bar — no leading「重置」word.
     private static func formatReset(_ quota: UsageQuota) -> String {
         if let resetsAt = quota.resetsAt {
-            let cal = Calendar.current
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "zh_CN")
-            if cal.isDateInToday(resetsAt) {
-                formatter.dateFormat = "HH:mm"
-                return "重置 \(formatter.string(from: resetsAt))"
-            }
-            if cal.isDateInTomorrow(resetsAt) {
-                formatter.dateFormat = "HH:mm"
-                return "明天 \(formatter.string(from: resetsAt))"
-            }
-            formatter.dateFormat = "MM-dd HH:mm"
-            return "重置 \(formatter.string(from: resetsAt))"
+            return formatTimeOnly(resetsAt)
         }
         if let text = quota.resetText, !text.isEmpty {
-            return text
+            var cleaned = text
                 .replacingOccurrences(of: "Resets in ", with: "")
-                .replacingOccurrences(of: "Resets ", with: "重置 ")
+                .replacingOccurrences(of: "Resets ", with: "")
+                .replacingOccurrences(of: "重置 ", with: "")
+                .replacingOccurrences(of: "重置", with: "")
+                .replacingOccurrences(of: " · 共 100%", with: "")
+                .replacingOccurrences(of: "共 100%", with: "")
+                .replacingOccurrences(of: "由7d估算", with: "")
+                .replacingOccurrences(of: "时间未知", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .trimmingCharacters(in: CharacterSet(charactersIn: " ·"))
+            // Pure counts already shown as value
+            if Self.countRemaining(from: cleaned) != nil {
+                return "—"
+            }
+            // Relative phrases like "2d 3h" / "明天 10:57"
+            let looksLikeTime = cleaned.contains("明天")
+                || cleaned.contains(":")
+                || cleaned.range(of: #"\d+[dhmD]"#, options: .regularExpression) != nil
+                || cleaned.range(of: #"\d{1,2}-\d{1,2}"#, options: .regularExpression) != nil
+            if cleaned.isEmpty || !looksLikeTime {
+                return "—"
+            }
+            return cleaned
         }
-        return "重置时间未知"
+        return "—"
     }
 }

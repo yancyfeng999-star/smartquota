@@ -21,6 +21,14 @@ dist/
 # Personal agent settings
 **/.claude/settings.local.json
 
+# Local planning scratch (optional Manus-style files)
+/task_plan.md
+/findings.md
+/progress.md
+
+# TS build info
+**/*.tsbuildinfo
+
 # --- Windows (Apps/Windows) ---
 Apps/Windows/node_modules/
 Apps/Windows/dist/

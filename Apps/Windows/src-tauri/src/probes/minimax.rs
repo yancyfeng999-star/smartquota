@@ -111,15 +111,12 @@ fn parse_meters(json: &Value) -> Result<Vec<QuotaMeter>, String> {
             .get("current_interval_remaining_percent")
             .or_else(|| primary.get("currentIntervalRemainingPercent")),
     ) {
-        meters.push(QuotaMeter {
-            label: "5 小时".into(),
-            remaining_percent: Some(pct.clamp(0.0, 100.0)),
-            reset_text: epoch_ms_reset(
-                primary
-                    .get("end_time")
-                    .or_else(|| primary.get("endTime")),
-            ),
-        });
+        let end = primary.get("end_time").or_else(|| primary.get("endTime"));
+        meters.push(QuotaMeter::session(
+            Some(pct.clamp(0.0, 100.0)),
+            epoch_ms_reset(end),
+            epoch_ms_unix(end),
+        ));
     }
 
     // weekly remaining
@@ -128,15 +125,14 @@ fn parse_meters(json: &Value) -> Result<Vec<QuotaMeter>, String> {
             .get("current_weekly_remaining_percent")
             .or_else(|| primary.get("currentWeeklyRemainingPercent")),
     ) {
-        meters.push(QuotaMeter {
-            label: "7 天".into(),
-            remaining_percent: Some(pct.clamp(0.0, 100.0)),
-            reset_text: epoch_ms_reset(
-                primary
-                    .get("weekly_end_time")
-                    .or_else(|| primary.get("weeklyEndTime")),
-            ),
-        });
+        let end = primary
+            .get("weekly_end_time")
+            .or_else(|| primary.get("weeklyEndTime"));
+        meters.push(QuotaMeter::weekly(
+            Some(pct.clamp(0.0, 100.0)),
+            epoch_ms_reset(end),
+            epoch_ms_unix(end),
+        ));
     }
 
     // Fallback older count-style
@@ -147,11 +143,7 @@ fn parse_meters(json: &Value) -> Result<Vec<QuotaMeter>, String> {
         ) {
             if total > 0.0 {
                 let rem = ((total - usage) / total * 100.0).clamp(0.0, 100.0);
-                meters.push(QuotaMeter {
-                    label: "额度".into(),
-                    remaining_percent: Some(rem),
-                    reset_text: None,
-                });
+                meters.push(QuotaMeter::time_limit("额度", Some(rem), None, None));
             }
         }
     }
@@ -162,12 +154,16 @@ fn parse_meters(json: &Value) -> Result<Vec<QuotaMeter>, String> {
     Ok(meters)
 }
 
-fn epoch_ms_reset(v: Option<&Value>) -> Option<String> {
+fn epoch_ms_unix(v: Option<&Value>) -> Option<i64> {
     let ms = as_f64(v)?;
     if ms <= 0.0 {
         return None;
     }
-    let secs = (ms / 1000.0) as i64;
+    Some((ms / 1000.0) as i64)
+}
+
+fn epoch_ms_reset(v: Option<&Value>) -> Option<String> {
+    let secs = epoch_ms_unix(v)?;
     let dt = chrono::DateTime::from_timestamp(secs, 0)?;
     Some(format!("重置 {}", dt.format("%m-%d %H:%M")))
 }

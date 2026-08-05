@@ -269,11 +269,11 @@ public struct MiniMaxUsageProbe: UsageProbe, @unchecked Sendable {
             quotas.append(weeklyQuota)
         }
 
-        // Optional: expose non-primary pools (e.g. video / extra models)
-        for model in modelRemains where model.modelName.lowercased() != primary.modelName.lowercased() {
-            if let extra = makeModelSpecificQuota(from: model, providerId: providerId) {
-                quotas.append(extra)
-            }
+        // Only add one video row (skip other secondary model pools)
+        if let video = modelRemains.first(where: { isVideoModelName($0.modelName) }),
+           video.modelName.lowercased() != primary.modelName.lowercased(),
+           let extra = makeVideoQuota(from: video, providerId: providerId) {
+            quotas.append(extra)
         }
 
         guard !quotas.isEmpty else {
@@ -368,51 +368,68 @@ public struct MiniMaxUsageProbe: UsageProbe, @unchecked Sendable {
         )
     }
 
-    private static func makeModelSpecificQuota(from model: ModelRemain, providerId: String) -> UsageQuota? {
+    private static func isVideoModelName(_ name: String) -> Bool {
+        let n = name.lowercased()
+        return n.contains("video")
+            || n.contains("t2v")
+            || n.contains("i2v")
+            || n.contains("hailuo")
+            || n.contains("视频")
+    }
+
+    /// Video pool row — live API uses **count** for video (e.g. total 3/day).
+    /// Prefer remaining/total like `3/3`, not percent `100/100`.
+    ///
+    /// Observed shape (Token Plan CN):
+    /// - `current_interval_total_count` = 3 (daily video cap)
+    /// - `current_interval_usage_count` = **used** (not remaining)
+    /// - `current_interval_remaining_percent` aligns with (total-used)/total
+    private static func makeVideoQuota(from model: ModelRemain, providerId: String) -> UsageQuota? {
         if model.currentIntervalStatus == 3 {
-            return nil // unlimited secondary pool — skip noise
+            return nil
         }
 
-        let nameLower = model.modelName.lowercased()
-        let isVideo = nameLower.contains("video")
-            || nameLower.contains("t2v")
-            || nameLower.contains("i2v")
-            || nameLower.contains("hailuo")
-            || nameLower.contains("视频")
-        let compact = isVideo ? "视频" : nil
-        let titleHint = isVideo ? "视频（每日额度，用掉才不浪费）" : "\(model.modelName) interval"
+        let total = model.currentIntervalTotalCount ?? 0
+        let usedRaw = model.currentIntervalUsageCount ?? 0
+        let pct = model.currentIntervalRemainingPercent
 
-        if let pct = model.currentIntervalRemainingPercent {
+        if total > 0 {
+            // usage_count is used for video; remaining = total - used
+            let used = min(max(usedRaw, 0), total)
+            var remainingCount = max(0, total - used)
+            // Prefer percent when present (source of truth for UI %)
+            if let pct {
+                remainingCount = min(total, max(0, Int((Double(total) * Double(pct) / 100.0).rounded())))
+            }
+            let percent = Double(remainingCount) / Double(total) * 100.0
+            AppLog.probes.info(
+                "MiniMax video: remaining \(remainingCount)/\(total) (\(Int(percent.rounded()))%)"
+            )
+            return UsageQuota(
+                percentRemaining: percent,
+                quotaType: .modelSpecific(model.modelName),
+                providerId: providerId,
+                resetsAt: model.endTime.map { Date(timeIntervalSince1970: Double($0) / 1000.0) },
+                resetText: "剩余 \(remainingCount)/\(total) 条",
+                windowDuration: windowDurationSeconds(start: model.startTime, end: model.endTime),
+                compactTitle: "视频"
+            )
+        }
+
+        // Fallback: percent only (no count from API)
+        if let pct {
             return UsageQuota(
                 percentRemaining: Double(pct),
                 quotaType: .modelSpecific(model.modelName),
                 providerId: providerId,
                 resetsAt: model.endTime.map { Date(timeIntervalSince1970: Double($0) / 1000.0) },
-                resetText: titleHint,
+                resetText: nil,
                 windowDuration: windowDurationSeconds(start: model.startTime, end: model.endTime),
-                compactTitle: compact
+                compactTitle: "视频"
             )
         }
 
-        let total = model.currentIntervalTotalCount ?? 0
-        let remainingCount = model.currentIntervalUsageCount ?? 0
-        guard total > 0 else { return nil }
-        let clampedRemaining = min(max(remainingCount, 0), total)
-        let remaining = Double(clampedRemaining) / Double(total) * 100.0
-        let usedCount = total - clampedRemaining
-        // Count-based pools (e.g. daily video 3): show “剩余 2/3” in reset text.
-        let countText = isVideo
-            ? "今日视频 剩余 \(clampedRemaining)/\(total) 条"
-            : "\(usedCount)/\(total) requests"
-        return UsageQuota(
-            percentRemaining: remaining,
-            quotaType: .modelSpecific(model.modelName),
-            providerId: providerId,
-            resetsAt: model.endTime.map { Date(timeIntervalSince1970: Double($0) / 1000.0) },
-            resetText: countText,
-            windowDuration: windowDurationSeconds(start: model.startTime, end: model.endTime),
-            compactTitle: compact
-        )
+        return nil
     }
 
     private static func windowDurationSeconds(start: Int64?, end: Int64?) -> TimeInterval? {

@@ -19,6 +19,12 @@ public enum PopoverContentHeight {
     /// region is preferred over strict on-screen fit.
     public static let usableFloor: CGFloat = 200
 
+    /// Fixed popover panel width (home + settings share this).
+    public static let panelWidth: CGFloat = 380
+
+    /// Preferred popover panel height so switching home ↔ settings does not resize.
+    public static let preferredPanelHeight: CGFloat = 580
+
     /// The max height for the scrollable content region.
     /// - Parameters:
     ///   - visibleScreenHeight: `NSScreen.visibleFrame.height` of the
@@ -27,5 +33,11 @@ public enum PopoverContentHeight {
     public static func maxHeight(visibleScreenHeight: CGFloat, overviewMode: Bool) -> CGFloat {
         let available = max(visibleScreenHeight - chrome, usableFloor)
         return overviewMode ? min(overviewCeiling, available) : available
+    }
+
+    /// Full popover chrome height (home and settings must match to avoid flash).
+    public static func panelHeight(visibleScreenHeight: CGFloat) -> CGFloat {
+        let maxAllowed = max(visibleScreenHeight - 80, 420)
+        return min(preferredPanelHeight, maxAllowed)
     }
 }

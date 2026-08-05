@@ -71,8 +71,10 @@ struct MenuContentView: View {
 
             if showSettings {
                 SettingsContentView(showSettings: $showSettings, monitor: monitor)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
                 membershipRuntimeMenu
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
 
             // Share Pass Overlay (Claude guest pass, when Claude provider is enabled)
@@ -154,12 +156,27 @@ struct MenuContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
-                VStack(alignment: .leading, spacing: 12) {
+                // Same fixed panel height as settings — scroll cards if needed
+                VStack(alignment: .leading, spacing: 0) {
                     membershipHeader
-                    membershipCards
+                        .padding(.horizontal, 14)
+                        .padding(.top, 14)
+                        .padding(.bottom, 10)
+
+                    ScrollView(.vertical, showsIndicators: true) {
+                        membershipCards
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 8)
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
                     membershipFooter
+                        .padding(.horizontal, 14)
+                        .padding(.top, 8)
+                        .padding(.bottom, 14)
                 }
-                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
         .opacity(animateIn ? 1 : 0)

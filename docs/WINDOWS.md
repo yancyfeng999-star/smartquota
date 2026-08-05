@@ -237,6 +237,12 @@ GitHub Release 同一 tag 或分 `v0.1.0-windows`，资产名全程 ASCII。
 | GitHub Actions `windows.yml` | ✅ |
 | 打出安装包 | 在 Windows CI 或本机 `npm run tauri:build` |
 
+### 与 macOS 功能对齐（进行中）
+
+- 状态索引：[`WINDOWS_PARITY.md`](./WINDOWS_PARITY.md)
+- 设计规格：[`superpowers/specs/2026-08-05-windows-mac-parity-design.md`](./superpowers/specs/2026-08-05-windows-mac-parity-design.md)
+- 对照：Mac 源码约 0.3.10 / 发布 0.3.9；Windows MVP **0.1.0**（缺 Kimi 等）
+
 ```bash
 cd Apps/Windows
 npm install

@@ -97,6 +97,10 @@ struct MiniMaxUsageProbeParsingTests {
           "end_time": 1785859200000,
           "current_interval_remaining_percent": 100,
           "current_weekly_remaining_percent": 85,
+          "current_interval_total_count": 3,
+          "current_interval_usage_count": 0,
+          "current_weekly_total_count": 21,
+          "current_weekly_usage_count": 3,
           "weekly_start_time": 1785686400000,
           "weekly_end_time": 1786291200000,
           "current_interval_status": 1,
@@ -142,13 +146,9 @@ struct MiniMaxUsageProbeParsingTests {
         let data = Data(Self.sampleMultiModelResponse.utf8)
         let snapshot = try MiniMaxUsageProbe.parseResponse(data, providerId: "minimax")
 
-        // primary (first) → session; secondary → modelSpecific
-        #expect(snapshot.quotas.count == 2)
+        // primary → session; non-video secondary (minimax-m1) is intentionally skipped
+        #expect(snapshot.quotas.count == 1)
         #expect(snapshot.quotas[0].quotaType == .session)
-        #expect(snapshot.quotas[1].quotaType == .modelSpecific("minimax-m1"))
-
-        let expectedPercent = Double(400) / Double(500) * 100.0
-        #expect(snapshot.quotas[1].percentRemaining == expectedPercent)
     }
 
     @Test
@@ -205,10 +205,13 @@ struct MiniMaxUsageProbeParsingTests {
         #expect(session?.percentRemaining == 99)
         #expect(weekly?.percentRemaining == 99)
         #expect(video?.percentRemaining == 100)
+        // Live CN plan: video is count-based (3/day), not 100/100 percent only
+        #expect(video?.resetText == "剩余 3/3 条")
+        #expect(video?.compactTitle == "视频")
 
         #expect(session?.resetsAt == Date(timeIntervalSince1970: 1785790800.0))
         #expect(weekly?.resetsAt == Date(timeIntervalSince1970: 1786291200.0))
-        #expect(session?.windowDuration == 5 * 3600)
-        #expect(weekly?.windowDuration == 7 * 24 * 3600)
+        #expect(session?.windowDuration == Double(5 * 3600))
+        #expect(weekly?.windowDuration == Double(7 * 24 * 3600))
     }
 }
