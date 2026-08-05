@@ -85,6 +85,40 @@ body {
   background: rgba(255, 255, 255, 0.06);
 }
 
+.banner.warn {
+  background: rgba(255, 159, 10, 0.12);
+  border: 1px solid rgba(255, 159, 10, 0.35);
+  color: #ffcc80;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.subh {
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ext-key-block {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.meter.urgency-soon .meter-hint,
+.meter-hint.urgency-soon {
+  color: var(--warn);
+}
+
+.meter.urgency-imminent .meter-hint,
+.meter-hint.urgency-imminent {
+  color: var(--danger);
+  font-weight: 600;
+}
+
 .detect-row {
   padding: 8px 0;
   border-bottom: 1px solid var(--stroke);

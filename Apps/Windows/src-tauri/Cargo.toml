@@ -1,6 +1,6 @@
 [package]
 name = "smartquota"
-version = "0.1.0"
+version = "0.5.0"
 description = "智额 · SmartQuota for Windows"
 authors = ["SmartQuota contributors"]
 edition = "2021"

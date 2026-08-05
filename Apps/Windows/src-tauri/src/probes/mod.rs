@@ -1,27 +1,31 @@
-mod codex;
-mod grok;
-mod minimax;
+pub mod alibaba;
+pub mod ampcode;
+pub mod antigravity;
+pub mod bedrock;
+pub mod claude;
+pub mod codex;
+pub mod copilot;
+pub mod cursor;
+pub mod gemini;
+pub mod grok;
+pub mod kimi;
+pub mod kiro;
+pub mod minimax;
+pub mod mistral;
+pub mod omp;
+pub mod opencode;
+pub mod zai;
 
-pub use codex::probe_codex;
-pub use grok::probe_grok;
-pub use minimax::probe_minimax;
-
+use crate::catalog;
 use crate::detect;
-use crate::models::{session_weekly_from_meters, status_from_remaining, QuotaCard};
+use crate::models::{session_weekly_from_meters, status_from_meters, QuotaCard};
 use crate::settings::AppSettings;
 
 pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
-    let display_name = match id {
-        "codex" => "ChatGPT (Codex)",
-        "minimax" => "MiniMax",
-        "grok" => "Grok",
-        other => other,
-    }
-    .to_string();
-
-    // Only user-filled plan name — never invent tiers for them
+    let display_name = catalog::display_name(id).to_string();
     let plan_label = settings.plan_label(id);
     let enabled = settings.is_enabled(id);
+    let is_core = catalog::is_core(id);
     let det = detect::detect_all(settings)
         .into_iter()
         .find(|d| d.provider_id == id);
@@ -38,10 +42,10 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
             detail: "已关闭。在「设置」中打开后才会探测。".into(),
             enabled: false,
             source_mode: "none".into(),
+            is_core,
         };
     }
 
-    // Not ready to probe — guide user to fill/login (not an "app error")
     if let Some(ref d) = det {
         if !d.ready {
             return QuotaCard {
@@ -55,6 +59,7 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
                 detail: format!("{} — {}", d.summary, d.how_to),
                 enabled: true,
                 source_mode: d.mode.clone(),
+                is_core,
             };
         }
     }
@@ -65,16 +70,30 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
         .unwrap_or_else(|| "none".into());
 
     let result = match id {
-        "codex" => probe_codex().await,
-        "minimax" => probe_minimax(settings).await,
-        "grok" => probe_grok().await,
-        _ => Err("未知会员".into()),
+        "codex" => codex::probe_codex().await,
+        "kimi" => kimi::probe_kimi().await,
+        "minimax" => minimax::probe_minimax(settings).await,
+        "grok" => grok::probe_grok().await,
+        "claude" => claude::probe_claude().await,
+        "gemini" => gemini::probe_gemini().await,
+        "copilot" => copilot::probe_copilot().await,
+        "cursor" => cursor::probe_cursor().await,
+        "zai" => zai::probe_zai().await,
+        "alibaba" => alibaba::probe_alibaba(settings).await,
+        "ampcode" => ampcode::probe_ampcode().await,
+        "kiro" => kiro::probe_kiro().await,
+        "opencode-go" => opencode::probe_opencode().await,
+        "omp" => omp::probe_omp().await,
+        "mistral" => mistral::probe_mistral().await,
+        "antigravity" => antigravity::probe_antigravity().await,
+        "bedrock" => bedrock::probe_bedrock().await,
+        other => Err(format!("未知会员: {other}")),
     };
 
     match result {
         Ok(meters) => {
             let (session, weekly) = session_weekly_from_meters(&meters);
-            let status = status_from_remaining(session, weekly);
+            let status = status_from_meters(&meters);
             let detail = meters
                 .iter()
                 .filter_map(|m| m.reset_text.as_ref().map(|t| format!("{}: {}", m.label, t)))
@@ -95,6 +114,7 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
                 },
                 enabled: true,
                 source_mode,
+                is_core,
             }
         }
         Err(msg) => QuotaCard {
@@ -110,7 +130,7 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
             ),
             enabled: true,
             source_mode,
+            is_core,
         },
     }
 }
-

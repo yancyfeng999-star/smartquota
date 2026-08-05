@@ -8,18 +8,33 @@ import Sparkle
 
 // MARK: - Popover vs pinned window chrome
 
-/// Popover stays compact; pinned window fills host and allows vertical scroll.
+/// Popover: **fixed** size so home ↔ settings does not shrink/flash.
+/// Pinned window: fills host and allows vertical scroll.
 struct PinnedOrPopoverChrome: ViewModifier {
     let runsInPinnedWindow: Bool
+
+    private var panelHeight: CGFloat {
+        let screenH = NSScreen.main?.visibleFrame.height ?? 900
+        return PopoverContentHeight.panelHeight(visibleScreenHeight: screenH)
+    }
 
     func body(content: Content) -> some View {
         if runsInPinnedWindow {
             content
-                .frame(minWidth: 380, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
+                .frame(
+                    minWidth: PopoverContentHeight.panelWidth,
+                    maxWidth: .infinity,
+                    minHeight: 0,
+                    maxHeight: .infinity,
+                    alignment: .top
+                )
         } else {
             content
-                .frame(width: 380)
-                .fixedSize(horizontal: true, vertical: true)
+                .frame(
+                    width: PopoverContentHeight.panelWidth,
+                    height: panelHeight,
+                    alignment: .top
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .clipped()
         }

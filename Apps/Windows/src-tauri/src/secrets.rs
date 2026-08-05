@@ -26,3 +26,11 @@ pub fn delete_secret(account: &str) -> Result<(), String> {
 }
 
 pub const MINIMAX_API_KEY: &str = "minimax-api-key";
+pub const KIMI_API_KEY: &str = "kimi-api-key";
+pub const GITHUB_TOKEN: &str = "github-token";
+pub const CLAUDE_API_KEY: &str = "claude-api-key";
+pub const GENERIC_API_KEY_PREFIX: &str = "provider-key:";
+
+pub fn provider_key_account(provider_id: &str) -> String {
+    format!("{GENERIC_API_KEY_PREFIX}{provider_id}")
+}

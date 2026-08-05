@@ -230,7 +230,7 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
         let headerSecondary = readHeaderDouble(httpResponse, key: "x-codex-secondary-used-percent")
 
         if let used = headerPrimary ?? (primaryWindow?["used_percent"] as? Double) {
-            let type = quotaType(forWindowSeconds: windowSeconds(primaryWindow))
+            let type = quotaType(forWindowSeconds: windowSeconds(primaryWindow), fallback: .session)
             let resets = resetsAtDate(nowSeconds: nowSeconds, window: primaryWindow)
             quotas.append(UsageQuota(
                 percentRemaining: max(0, 100 - used),
@@ -242,7 +242,8 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             ))
         }
         if let used = headerSecondary ?? (secondaryWindow?["used_percent"] as? Double) {
-            let type = quotaType(forWindowSeconds: windowSeconds(secondaryWindow))
+            // Headers-only secondary has no duration → default weekly (not session)
+            let type = quotaType(forWindowSeconds: windowSeconds(secondaryWindow), fallback: .weekly)
             // Avoid duplicate keys if both windows collapse to the same type
             if !quotas.contains(where: { $0.quotaType == type }) {
                 let resets = resetsAtDate(nowSeconds: nowSeconds, window: secondaryWindow)
@@ -257,8 +258,19 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             }
         }
 
-        // Extra Codex credits (top-up pool beyond plan 5h/7d) — show on card as “积分”
-        // so users remember to use banked / purchased credits (e.g. display “5.3”).
+        // GPT-5.3-Codex-Spark has its own bucket under additional_rate_limits
+        // (not the plan credits balance). Prefer the weekly window as a card row.
+        for extra in parseAdditionalRateLimits(
+            responseDict["additional_rate_limits"],
+            nowSeconds: nowSeconds
+        ) {
+            // Avoid duplicate quota keys
+            if !quotas.contains(where: { $0.quotaType == extra.quotaType }) {
+                quotas.append(extra)
+            }
+        }
+
+        // Credits (加油包 / 额外积分) — second-row card meter next to Spark weekly.
         var costUsage: CostUsage?
         let creditsHeader = readHeaderDouble(httpResponse, key: "x-codex-credits-balance")
         let creditsBody: Double? = {
@@ -278,13 +290,12 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
                 resetsAt: nil,
                 resetText: "积分 \(Self.formatCredits(creditsRemaining))"
             )
-            // Surface as its own meter (not a fake % of 1000).
             quotas.append(UsageQuota(
                 percentRemaining: creditsRemaining > 0 ? 100 : 0,
                 quotaType: .timeLimit("Credits"),
                 providerId: "codex",
                 resetsAt: nil,
-                resetText: "加油包 / 额外积分，用完再买",
+                resetText: nil,
                 dollarRemaining: balance,
                 compactTitle: "积分"
             ))
@@ -308,6 +319,66 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             accountTier: accountTier,
             costUsage: costUsage
         )
+    }
+
+    /// Parse `additional_rate_limits[]` — e.g. GPT-5.3-Codex-Spark weekly bucket.
+    private func parseAdditionalRateLimits(_ raw: Any?, nowSeconds: TimeInterval) -> [UsageQuota] {
+        guard let items = raw as? [[String: Any]] else { return [] }
+        var out: [UsageQuota] = []
+
+        for item in items {
+            let name = (item["limit_name"] as? String) ?? ""
+            let feature = (item["metered_feature"] as? String) ?? ""
+            let blob = "\(name) \(feature)".lowercased()
+            let isSpark = blob.contains("spark") || blob.contains("bengalfox")
+            guard isSpark else { continue }
+
+            let rateLimit = (item["rate_limit"] as? [String: Any]) ?? item
+            let primary = rateLimit["primary_window"] as? [String: Any]
+            let secondary = rateLimit["secondary_window"] as? [String: Any]
+
+            // Prefer weekly window for the Spark row (user: “使用限额每周”)
+            let weeklyWindow: [String: Any]? = {
+                if let secondary, isWeeklyWindow(secondary) { return secondary }
+                if let primary, isWeeklyWindow(primary) { return primary }
+                // Fallback: secondary if present, else nil (don't invent 5h as weekly)
+                if let secondary { return secondary }
+                return nil
+            }()
+
+            guard let win = weeklyWindow else { continue }
+            guard let used = usedPercent(win) else { continue }
+
+            let remaining = max(0, min(100, 100 - used))
+            let resets = resetsAtDate(nowSeconds: nowSeconds, window: win)
+            let duration = windowSeconds(win)
+            out.append(UsageQuota(
+                percentRemaining: remaining,
+                quotaType: .modelSpecific("GPT-5.3-Codex-Spark"),
+                providerId: "codex",
+                resetsAt: resets,
+                resetText: formatResetText(resets),
+                windowDuration: duration,
+                compactTitle: "GPT-5.3 周额度"
+            ))
+        }
+        return out
+    }
+
+    private func isWeeklyWindow(_ window: [String: Any]) -> Bool {
+        guard let seconds = windowSeconds(window) else {
+            // Unknown length but named secondary → treat as weekly candidate
+            return true
+        }
+        // 1 day … 10 days
+        return seconds > 6 * 3600 && seconds <= 10 * 24 * 3600
+    }
+
+    private func usedPercent(_ window: [String: Any]) -> Double? {
+        if let u = window["used_percent"] as? Double, u.isFinite { return u }
+        if let u = window["used_percent"] as? Int { return Double(u) }
+        if let u = window["used_percent"] as? String, let d = Double(u), d.isFinite { return d }
+        return nil
     }
 
     // MARK: - Helpers
@@ -337,10 +408,9 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
     }
 
     /// Map Codex rate-limit window length → 5H / 7d / 月.
-    private func quotaType(forWindowSeconds seconds: TimeInterval?) -> QuotaType {
+    private func quotaType(forWindowSeconds seconds: TimeInterval?, fallback: QuotaType = .session) -> QuotaType {
         guard let seconds, seconds > 0 else {
-            // Unknown length: keep historical primary=session bias for headers-only paths
-            return .session
+            return fallback
         }
         // ≤ 6h → 5H session
         if seconds <= 6 * 3600 { return .session }

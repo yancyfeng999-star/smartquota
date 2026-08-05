@@ -18,8 +18,18 @@ struct SettingsContentView: View {
     #endif
 
     @State private var providersExpanded: Bool = false
-    @State private var updatesExpanded: Bool = false
     @State private var backgroundSyncExpanded: Bool = false
+    @State private var thresholdAlertsExpanded: Bool = false
+
+    // Manual free update check + download/open installer (not silent install)
+    @State private var isCheckingUpdate = false
+    @State private var updateStatusText: String?
+    @State private var updateOpenURL: URL?
+    @State private var updateDownloadURL: URL?
+    @State private var updateIsAvailable = false
+    @State private var updateLocalInstallerURL: URL?
+    /// 0…1 while downloading; nil when not downloading.
+    @State private var updateDownloadProgress: Double?
 
     // Hook settings state
     @State private var hooksExpanded: Bool = false
@@ -27,20 +37,15 @@ struct SettingsContentView: View {
     @State private var hooksInstalled: Bool = false
     @State private var hookError: String?
 
-    /// Maximum height for the settings view to ensure it fits on small screens
-    private var maxSettingsHeight: CGFloat {
-        let screenHeight = NSScreen.main?.visibleFrame.height ?? 800
-        return min(screenHeight * 0.8, 550)
-    }
-
     var body: some View {
         let _ = l10n.revision
+        // Fill the shared popover panel (same size as home) — no height jump
         VStack(spacing: 0) {
             // Header
             header
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
-                .padding(.bottom, 16)
+                .padding(.bottom, 12)
 
             // Scrollable Content
             ScrollView(.vertical, showsIndicators: true) {
@@ -55,52 +60,55 @@ struct SettingsContentView: View {
                     thresholdAlertCard
                     launchAtLoginCard
                     logsCard
+                    updatesCard
                     aboutCard
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Footer
             footer
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
         }
-        .frame(width: 380)
-        .frame(maxHeight: maxSettingsHeight)
-        .clipped()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: - Simple display (remaining / used only)
 
-    /// Compact display mode — no menu-bar stack / daily-usage / overview.
+    /// Single compact row: title left, 剩余/已用 chips right.
     private var simpleDisplayModeCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(theme.accentGradient)
-                        .frame(width: 32, height: 32)
-                    Image(systemName: "percent")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(theme.id == "cli" ? theme.textPrimary : .white)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(l10n.t("settings.quota_display"))
-                        .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
-                        .foregroundStyle(theme.textPrimary)
-                    Text(l10n.t("settings.quota_display_sub"))
-                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
-                        .foregroundStyle(theme.textTertiary)
-                }
-                Spacer()
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(theme.accentGradient)
+                    .frame(width: 28, height: 28)
+                Image(systemName: "percent")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(theme.id == "cli" ? theme.textPrimary : .white)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(l10n.t("settings.quota_display"))
+                    .font(.system(size: 13, weight: .bold, design: theme.fontDesign))
+                    .foregroundStyle(theme.textPrimary)
+                    .lineLimit(1)
+                Text(l10n.t("settings.quota_display_sub"))
+                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .foregroundStyle(theme.textTertiary)
+                    .lineLimit(1)
             }
 
-            HStack(spacing: 8) {
+            Spacer(minLength: 8)
+
+            HStack(spacing: 6) {
                 ForEach([UsageDisplayMode.remaining, .used], id: \.rawValue) { mode in
                     DisplayModeButton(
                         mode: mode,
-                        isSelected: settings.usageDisplayMode == mode
+                        isSelected: settings.usageDisplayMode == mode,
+                        compact: true
                     ) {
                         AppMotion.withSelection {
                             settings.usageDisplayMode = mode
@@ -109,12 +117,13 @@ struct SettingsContentView: View {
                 }
             }
         }
-        .padding(14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: theme.cardCornerRadius)
+            RoundedRectangle(cornerRadius: 12)
                 .fill(theme.cardGradient)
                 .overlay(
-                    RoundedRectangle(cornerRadius: theme.cardCornerRadius)
+                    RoundedRectangle(cornerRadius: 12)
                         .stroke(theme.glassBorder, lineWidth: 1)
                 )
         )
@@ -652,123 +661,98 @@ struct SettingsContentView: View {
         }
     }
 
-    // MARK: - Updates Card
+    // MARK: - Updates Card (manual / free GitHub check only)
 
-#if ENABLE_SPARKLE
+    /// Compact: title left, single「检查更新」right; progress bar while downloading.
     private var updatesCard: some View {
-        DisclosureGroup(isExpanded: $updatesExpanded) {
-            VStack(alignment: .leading, spacing: 12) {
-                if sparkleUpdater?.isAvailable == true {
-                    Button {
-                        sparkleUpdater?.checkForUpdates()
-                    } label: {
-                        HStack(spacing: 6) {
-                            if sparkleUpdater?.isCheckingForUpdates == true {
-                                ProgressView()
-                                    .scaleEffect(0.6)
-                                    .frame(width: 14, height: 14)
-                            } else {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-
-                            Text(sparkleUpdater?.isCheckingForUpdates == true ? "检查中…" : "检查更新")
-                                .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [
-                                            Color(red: 0.3, green: 0.7, blue: 0.4),
-                                            Color(red: 0.2, green: 0.55, blue: 0.35)
-                                        ],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.3, green: 0.7, blue: 0.4),
+                                    Color(red: 0.2, green: 0.55, blue: 0.35)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(sparkleUpdater?.canCheckForUpdates != true || sparkleUpdater?.isCheckingForUpdates == true)
-                    .opacity(sparkleUpdater?.canCheckForUpdates == true ? 1 : 0.6)
+                        .frame(width: 28, height: 28)
 
-                    if let lastCheck = sparkleUpdater?.lastUpdateCheckDate {
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock.fill")
-                                .font(.system(size: 8))
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                }
 
-                            Text("上次检查：\(lastCheck.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(l10n.t("settings.updates"))
+                        .font(.system(size: 13, weight: .bold, design: theme.fontDesign))
+                        .foregroundStyle(theme.textPrimary)
+                        .lineLimit(1)
+
+                    Text(updateSubtitle)
+                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                        .foregroundStyle(updateIsAvailable ? theme.accentPrimary : theme.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Button {
+                    Task { await runManualUpdateCheck() }
+                } label: {
+                    HStack(spacing: 4) {
+                        if isCheckingUpdate && updateDownloadProgress == nil {
+                            ProgressView()
+                                .controlSize(.mini)
+                                .frame(width: 12, height: 12)
                         }
+                        Text(checkUpdateButtonTitle)
+                            .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.3, green: 0.7, blue: 0.4),
+                                        Color(red: 0.2, green: 0.55, blue: 0.35)
+                                    ],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isCheckingUpdate)
+                .opacity(isCheckingUpdate ? 0.7 : 1)
+            }
+
+            if let progress = updateDownloadProgress {
+                VStack(alignment: .leading, spacing: 4) {
+                    ProgressView(value: progress, total: 1)
+                        .progressViewStyle(.linear)
+                        .tint(Color(red: 0.3, green: 0.7, blue: 0.4))
+                    Text(l10n.tf("settings.updates_progress_fmt", Int((progress * 100).rounded())))
+                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
                         .foregroundStyle(theme.textTertiary)
-                    }
-
-                    HStack {
-                        Text("自动检查更新")
-                            .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
-                            .foregroundStyle(theme.textPrimary)
-
-                        Spacer()
-
-                        Toggle("", isOn: Binding(
-                            get: { sparkleUpdater?.automaticallyChecksForUpdates ?? true },
-                            set: { sparkleUpdater?.automaticallyChecksForUpdates = $0 }
-                        ))
-                        .toggleStyle(.switch)
-                        .tint(theme.accentPrimary)
-                        .scaleEffect(0.8)
-                        .labelsHidden()
-                    }
-
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("包含测试版")
-                                .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
-                                .foregroundStyle(theme.textPrimary)
-
-                            Text("抢先体验新功能")
-                                .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
-                                .foregroundStyle(theme.textTertiary)
-                        }
-
-                        Spacer()
-
-                        Toggle("", isOn: $settings.receiveBetaUpdates)
-                            .toggleStyle(.switch)
-                            .tint(theme.accentPrimary)
-                            .scaleEffect(0.8)
-                            .labelsHidden()
-                    }
-                } else {
-                    HStack(spacing: 6) {
-                        Image(systemName: "hammer.fill")
-                            .font(.system(size: 10))
-                        Text("调试构建不支持更新检查")
-                            .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
-                    }
-                    .foregroundStyle(theme.textTertiary)
+                        .monospacedDigit()
                 }
             }
-        } label: {
-            updatesHeader
-                .contentShape(.rect)
-                .onTapGesture {
-                    AppMotion.withExpand {
-                        updatesExpanded.toggle()
-                    }
-                }
         }
-        .padding(14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: 14)
+            RoundedRectangle(cornerRadius: 12)
                 .fill(theme.cardGradient)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 14)
+                    RoundedRectangle(cornerRadius: 12)
                         .stroke(
                             LinearGradient(
                                 colors: [theme.glassBorder, theme.glassBorder.opacity(0.5)],
@@ -781,42 +765,144 @@ struct SettingsContentView: View {
         )
     }
 
-    private var updatesHeader: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.3, green: 0.7, blue: 0.4),
-                                Color(red: 0.2, green: 0.55, blue: 0.35)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 32, height: 32)
+    private var checkUpdateButtonTitle: String {
+        if updateDownloadProgress != nil {
+            return l10n.t("settings.updates_downloading_btn")
+        }
+        if isCheckingUpdate {
+            return l10n.t("settings.updates_checking")
+        }
+        return l10n.t("settings.updates_check")
+    }
 
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.white)
+    /// Compact subtitle under the title (no extra body text below the row).
+    private var updateSubtitle: String {
+        if let updateStatusText {
+            return updateStatusText
+        }
+        return l10n.tf("settings.updates_version_fmt", appVersion)
+    }
+
+    @MainActor
+    private func runManualUpdateCheck() async {
+        isCheckingUpdate = true
+        updateStatusText = nil
+        updateOpenURL = nil
+        updateDownloadURL = nil
+        updateLocalInstallerURL = nil
+        updateIsAvailable = false
+        updateDownloadProgress = nil
+        defer {
+            isCheckingUpdate = false
+            // Keep progress visible only while downloading; clear if we didn't quit
+            if updateDownloadProgress != nil && updateDownloadProgress! < 1 {
+                updateDownloadProgress = nil
             }
+        }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("更新")
-                    .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
-                    .foregroundStyle(theme.textPrimary)
-
-                Text("版本 \(appVersion)")
-                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
-                    .foregroundStyle(theme.textTertiary)
+        do {
+            let result = try await GitHubReleaseChecker().check(currentVersionString: appVersion)
+            switch result {
+            case .upToDate(let current):
+                updateIsAvailable = false
+                updateDownloadProgress = nil
+                updateStatusText = l10n.tf("settings.updates_up_to_date", current.description)
+            case .updateAvailable(let current, let latest):
+                updateIsAvailable = true
+                updateOpenURL = latest.openURL
+                updateDownloadURL = ReleaseDownloader.installerDownloadURL(from: latest)
+                updateStatusText = l10n.tf(
+                    "settings.updates_available_fmt",
+                    latest.version.description,
+                    current.description
+                )
+                // Auto download + open (no second button)
+                await downloadAndOpenInstaller()
             }
-
-            Spacer()
+        } catch let error as ManualUpdateError {
+            updateIsAvailable = false
+            updateDownloadProgress = nil
+            updateStatusText = manualUpdateErrorMessage(error)
+        } catch {
+            updateIsAvailable = false
+            updateDownloadProgress = nil
+            updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
         }
     }
 
-    #endif
+    /// Download installer with progress bar, open it, then quit for replace-install.
+    @MainActor
+    private func downloadAndOpenInstaller() async {
+        if let local = updateLocalInstallerURL, FileManager.default.fileExists(atPath: local.path) {
+            updateDownloadProgress = nil
+            updateStatusText = l10n.t("settings.updates_opening")
+            NSWorkspace.shared.open(local)
+            updateStatusText = l10n.t("settings.updates_quitting")
+            await quitAfterOpeningInstaller()
+            return
+        }
+
+        guard let remote = updateDownloadURL else {
+            updateDownloadProgress = nil
+            if let page = updateOpenURL {
+                NSWorkspace.shared.open(page)
+                updateStatusText = l10n.t("settings.updates_open_page")
+            } else {
+                updateStatusText = l10n.t("settings.updates_failed_none")
+            }
+            return
+        }
+
+        updateStatusText = l10n.t("settings.updates_downloading")
+        updateDownloadProgress = 0
+        do {
+            let file = try await ReleaseDownloader().download(from: remote) { fraction in
+                Task { @MainActor in
+                    updateDownloadProgress = fraction
+                    updateStatusText = l10n.tf(
+                        "settings.updates_progress_fmt",
+                        Int((fraction * 100).rounded())
+                    )
+                }
+            }
+            updateLocalInstallerURL = file
+            updateDownloadProgress = 1
+            updateStatusText = l10n.t("settings.updates_opening")
+            NSWorkspace.shared.open(file)
+            updateStatusText = l10n.t("settings.updates_quitting")
+            await quitAfterOpeningInstaller()
+        } catch let error as ManualUpdateError {
+            updateDownloadProgress = nil
+            updateStatusText = manualUpdateErrorMessage(error)
+            if let page = updateOpenURL {
+                NSWorkspace.shared.open(page)
+            }
+        } catch {
+            updateDownloadProgress = nil
+            updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
+            if let page = updateOpenURL {
+                NSWorkspace.shared.open(page)
+            }
+        }
+    }
+
+    /// Brief delay so Finder/Installer can take focus, then terminate.
+    @MainActor
+    private func quitAfterOpeningInstaller() async {
+        try? await Task.sleep(nanoseconds: 800_000_000) // 0.8s
+        NSApp.terminate(nil)
+    }
+
+    private func manualUpdateErrorMessage(_ error: ManualUpdateError) -> String {
+        switch error {
+        case .invalidCurrentVersion:
+            return l10n.t("settings.updates_failed_version")
+        case .noMacReleaseFound:
+            return l10n.t("settings.updates_failed_none")
+        case .network(let detail), .decode(let detail):
+            return l10n.tf("settings.updates_failed_fmt", detail)
+        }
+    }
 
     // MARK: - App Info
 
@@ -1063,10 +1149,10 @@ struct SettingsContentView: View {
         }
     }
 
-    // MARK: - Threshold alerts (5h / 7d)
+    // MARK: - Threshold alerts (5h / 7d) — collapsed by default
 
     private var thresholdAlertCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        SettingsExpandableCard(isExpanded: $thresholdAlertsExpanded) {
             HStack(spacing: 10) {
                 ZStack {
                     Circle()
@@ -1080,52 +1166,62 @@ struct SettingsContentView: View {
                     Text("额度阈值报警")
                         .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
                         .foregroundStyle(theme.textPrimary)
-                    Text("5 小时 / 7 天剩余低于线时通知；临近重置未用完也会提醒")
-                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
-                        .foregroundStyle(theme.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(
+                        settings.quotaThresholdAlertsEnabled
+                            ? "已开启 · 5h≤\(Int(settings.sessionAlertThreshold))% · 7d≤\(Int(settings.weeklyAlertThreshold))%"
+                            : "已关闭 · 点开配置"
+                    )
+                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .foregroundStyle(theme.textTertiary)
+                    .lineLimit(1)
                 }
-                Spacer()
-                Toggle("", isOn: $settings.quotaThresholdAlertsEnabled)
-                    .toggleStyle(.switch)
-                    .tint(theme.accentPrimary)
-                    .scaleEffect(0.8)
-                    .labelsHidden()
             }
+        } content: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("启用通知")
+                            .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
+                            .foregroundStyle(theme.textPrimary)
+                        Text("5 小时 / 7 天剩余低于线时通知；临近重置未用完也会提醒")
+                            .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                            .foregroundStyle(theme.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 8)
+                    Toggle("", isOn: $settings.quotaThresholdAlertsEnabled)
+                        .toggleStyle(.switch)
+                        .tint(theme.accentPrimary)
+                        .scaleEffect(0.85)
+                        .labelsHidden()
+                }
 
-            if settings.quotaThresholdAlertsEnabled {
-                thresholdSliderRow(
-                    title: "5 小时剩余 ≤",
-                    value: $settings.sessionAlertThreshold,
-                    range: 5...50
-                )
-                thresholdSliderRow(
-                    title: "7 天剩余 ≤",
-                    value: $settings.weeklyAlertThreshold,
-                    range: 5...50
-                )
-                thresholdSliderRow(
-                    title: "重置前 N 小时提醒",
-                    value: $settings.nearResetAlertHours,
-                    range: 6...72,
-                    unit: "小时"
-                )
-                thresholdSliderRow(
-                    title: "未用完阈值（剩余 ≥）",
-                    value: $settings.underuseAlertRemaining,
-                    range: 20...80
-                )
+                if settings.quotaThresholdAlertsEnabled {
+                    thresholdSliderRow(
+                        title: "5 小时剩余 ≤",
+                        value: $settings.sessionAlertThreshold,
+                        range: 5...50
+                    )
+                    thresholdSliderRow(
+                        title: "7 天剩余 ≤",
+                        value: $settings.weeklyAlertThreshold,
+                        range: 5...50
+                    )
+                    thresholdSliderRow(
+                        title: "重置前 N 小时提醒",
+                        value: $settings.nearResetAlertHours,
+                        range: 6...72,
+                        unit: "小时"
+                    )
+                    thresholdSliderRow(
+                        title: "未用完阈值（剩余 ≥）",
+                        value: $settings.underuseAlertRemaining,
+                        range: 20...80
+                    )
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: theme.cardCornerRadius)
-                .fill(theme.cardGradient)
-                .overlay(
-                    RoundedRectangle(cornerRadius: theme.cardCornerRadius)
-                        .stroke(theme.glassBorder, lineWidth: 1)
-                )
-        )
     }
 
     private func thresholdSliderRow(
@@ -1432,6 +1528,7 @@ struct ThemeOptionButton: View {
 struct DisplayModeButton: View {
     let mode: UsageDisplayMode
     let isSelected: Bool
+    var compact: Bool = false
     let action: () -> Void
 
     @Environment(\.appTheme) private var theme
@@ -1447,15 +1544,16 @@ struct DisplayModeButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: compact ? 4 : 6) {
                 Image(systemName: iconName)
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: compact ? 9 : 10, weight: .bold))
 
                 Text(mode.displayLabel)
-                    .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                    .font(.system(size: compact ? 11 : 11, weight: .semibold, design: theme.fontDesign))
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .frame(maxWidth: compact ? nil : .infinity)
+            .padding(.horizontal, compact ? 10 : 0)
+            .padding(.vertical, compact ? 5 : 8)
             .background(buttonBackground)
             .foregroundStyle(isSelected ? theme.accentPrimary : theme.textSecondary)
         }
@@ -1464,10 +1562,10 @@ struct DisplayModeButton: View {
     }
 
     private var buttonBackground: some View {
-        RoundedRectangle(cornerRadius: 8)
+        RoundedRectangle(cornerRadius: compact ? 7 : 8)
             .fill(isSelected ? theme.accentPrimary.opacity(0.2) : (isHovering ? theme.hoverOverlay : Color.clear))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: compact ? 7 : 8)
                     .stroke(isSelected ? theme.accentPrimary.opacity(0.5) : theme.glassBorder, lineWidth: 1)
             )
     }

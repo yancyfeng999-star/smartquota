@@ -209,6 +209,27 @@ fn format_duration(secs: f64) -> String {
     }
 }
 
+fn resets_at_unix(w: Option<&Value>) -> Option<i64> {
+    let w = w?;
+    if let Some(reset_at) = w
+        .get("reset_at")
+        .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+    {
+        return Some(reset_at as i64);
+    }
+    if let Some(after) = w
+        .get("reset_after_seconds")
+        .and_then(|v| v.as_f64().or_else(|| v.as_i64().map(|i| i as f64)))
+    {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()?
+            .as_secs() as i64;
+        return Some(now + after as i64);
+    }
+    None
+}
+
 fn parse_meters(json: &Value, headers: &reqwest::header::HeaderMap) -> Vec<QuotaMeter> {
     let rate = json.get("rate_limit");
     let primary = rate.and_then(|r| r.get("primary_window"));
@@ -222,11 +243,25 @@ fn parse_meters(json: &Value, headers: &reqwest::header::HeaderMap) -> Vec<Quota
             .and_then(|v| v.as_f64())
     });
     if let Some(used) = primary_used {
-        meters.push(QuotaMeter {
-            label: label_for_window(window_seconds(primary)).into(),
-            remaining_percent: Some((100.0 - used).clamp(0.0, 100.0)),
-            reset_text: reset_text(primary),
-        });
+        let secs = window_seconds(primary);
+        let rem = Some((100.0 - used).clamp(0.0, 100.0));
+        let rt = reset_text(primary);
+        let ru = resets_at_unix(primary);
+        // Primary is typically 5h session; secondary weekly
+        if secs.map(|s| s <= 6.0 * 3600.0).unwrap_or(true) {
+            meters.push(QuotaMeter::session(rem, rt, ru));
+        } else if secs.map(|s| s >= 6.0 * 24.0 * 3600.0).unwrap_or(false) {
+            meters.push(QuotaMeter::weekly(rem, rt, ru));
+        } else {
+            meters.push(QuotaMeter::new(
+                "session",
+                "session",
+                label_for_window(secs),
+                rem,
+                rt,
+                ru,
+            ));
+        }
     }
 
     let secondary_used = header_f64(headers, "x-codex-secondary-used-percent").or_else(|| {
@@ -235,13 +270,18 @@ fn parse_meters(json: &Value, headers: &reqwest::header::HeaderMap) -> Vec<Quota
             .and_then(|v| v.as_f64())
     });
     if let Some(used) = secondary_used {
-        let label = label_for_window(window_seconds(secondary));
-        if !meters.iter().any(|m| m.label == label) {
-            meters.push(QuotaMeter {
-                label: label.into(),
-                remaining_percent: Some((100.0 - used).clamp(0.0, 100.0)),
-                reset_text: reset_text(secondary),
-            });
+        let rem = Some((100.0 - used).clamp(0.0, 100.0));
+        let rt = reset_text(secondary);
+        let ru = resets_at_unix(secondary);
+        if !meters.iter().any(|m| m.kind == "weekly") {
+            meters.push(QuotaMeter::weekly(rem, rt, ru));
+        } else {
+            meters.push(QuotaMeter::time_limit(
+                label_for_window(window_seconds(secondary)),
+                rem,
+                rt,
+                ru,
+            ));
         }
     }
 

@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { t, type Lang } from "./i18n";
 
 export type QuotaMeter = {
+  key?: string;
+  kind?: string;
   label: string;
   remainingPercent: number | null;
   resetText: string | null;
+  resetsAtUnix?: number | null;
 };
 
 export type QuotaCard = {
@@ -18,11 +22,19 @@ export type QuotaCard = {
   detail: string;
   enabled: boolean;
   sourceMode: string;
+  isCore?: boolean;
+};
+
+export type AlertEvent = {
+  providerId: string;
+  kind: string;
+  message: string;
 };
 
 export type SnapshotPayload = {
   updatedAt: string;
   cards: QuotaCard[];
+  alerts?: AlertEvent[];
 };
 
 export type AppSettings = {
@@ -34,6 +46,14 @@ export type AppSettings = {
   minimaxRegion: string;
   minimaxAuthEnvVar: string;
   refreshIntervalSecs: number;
+  quotaThresholdAlertsEnabled?: boolean;
+  sessionAlertThreshold?: number;
+  weeklyAlertThreshold?: number;
+  nearResetAlertHours?: number;
+  underuseAlertRemaining?: number;
+  providerOrder?: string[];
+  windowPinned?: boolean;
+  extensionsEnabled?: boolean;
 };
 
 export type DetectItem = {
@@ -45,6 +65,13 @@ export type DetectItem = {
   howTo: string;
 };
 
+type CatalogItem = {
+  id: string;
+  name: string;
+  isCore: boolean;
+  defaultEnabled: boolean;
+};
+
 type PathsInfo = {
   settings: string;
   configDir: string;
@@ -52,26 +79,71 @@ type PathsInfo = {
   codexAuth: string;
   grokAuth: string;
   minimaxConfig: string;
+  kimiConfig?: string;
+  geminiOauth?: string;
+  cursorDb?: string;
+  claudeJson?: string;
 };
 
-const PROVIDERS = [
-  { id: "codex", name: "ChatGPT (Codex)" },
-  { id: "minimax", name: "MiniMax" },
-  { id: "grok", name: "Grok" },
-] as const;
+const REFRESH_OPTIONS = [
+  { secs: 0, key: "refreshOff" as const },
+  { secs: 300, key: "refresh5" as const },
+  { secs: 600, key: "refresh10" as const },
+  { secs: 900, key: "refresh15" as const },
+  { secs: 1800, key: "refresh30" as const },
+];
+
+const EXT_KEY_PROVIDERS = [
+  "antigravity",
+  "zai",
+  "bedrock",
+  "alibaba",
+  "ampcode",
+  "kiro",
+  "mistral",
+  "opencode-go",
+  "omp",
+];
 
 export default function App() {
   const [tab, setTab] = useState<"home" | "settings">("home");
   const [data, setData] = useState<SnapshotPayload | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [detect, setDetect] = useState<DetectItem[]>([]);
   const [paths, setPaths] = useState<PathsInfo | null>(null);
   const [hasMinimaxKey, setHasMinimaxKey] = useState(false);
+  const [hasKimiKey, setHasKimiKey] = useState(false);
+  const [hasGithub, setHasGithub] = useState(false);
+  const [extKeyFlags, setExtKeyFlags] = useState<Record<string, boolean>>({});
   const [minimaxKeyInput, setMinimaxKeyInput] = useState("");
+  const [kimiKeyInput, setKimiKeyInput] = useState("");
+  const [githubInput, setGithubInput] = useState("");
+  const [extKeyInput, setExtKeyInput] = useState<Record<string, string>>({});
   const [planDraft, setPlanDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [testMsg, setTestMsg] = useState<Record<string, string>>({});
+  const [bannerAlerts, setBannerAlerts] = useState<string[]>([]);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  const [updateUrl, setUpdateUrl] = useState<string | null>(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [extList, setExtList] = useState<
+    { id: string; name: string; version: string; description?: string; path: string; sections: number }[]
+  >([]);
+
+  const lang = (settings?.language === "en" ? "en" : "zh-Hans") as Lang;
+  const i18n = useMemo(() => t(lang), [lang]);
+
+  const providers = catalog.length
+    ? catalog
+    : [
+        { id: "codex", name: "ChatGPT (Codex)", isCore: true, defaultEnabled: true },
+        { id: "kimi", name: "Kimi", isCore: true, defaultEnabled: true },
+        { id: "minimax", name: "MiniMax", isCore: true, defaultEnabled: true },
+        { id: "grok", name: "Grok", isCore: true, defaultEnabled: true },
+      ];
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -83,6 +155,9 @@ export default function App() {
       ]);
       setData(next);
       setDetect(det);
+      if (next.alerts?.length) {
+        setBannerAlerts(next.alerts.map((a) => a.message));
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -90,18 +165,57 @@ export default function App() {
     }
   }, []);
 
+  const checkUpdate = useCallback(async () => {
+    setUpdateChecking(true);
+    setUpdateMsg(null);
+    setUpdateUrl(null);
+    setUpdateAvailable(false);
+    try {
+      const r = await invoke<{
+        currentVersion: string;
+        status: string;
+        latestVersion: string | null;
+        message: string;
+        openUrl: string | null;
+      }>("check_for_update");
+      setUpdateMsg(r.message);
+      setUpdateAvailable(r.status === "available");
+      setUpdateUrl(r.openUrl);
+    } catch (e) {
+      setUpdateMsg(String(e));
+    } finally {
+      setUpdateChecking(false);
+    }
+  }, []);
+
   const loadSettings = useCallback(async () => {
     try {
-      const s = await invoke<AppSettings>("get_settings");
+      const [s, cat] = await Promise.all([
+        invoke<AppSettings>("get_settings"),
+        invoke<CatalogItem[]>("get_catalog"),
+      ]);
       setSettings(s);
+      setCatalog(cat);
       const drafts: Record<string, string> = {};
-      for (const p of PROVIDERS) {
+      for (const p of cat) {
         drafts[p.id] = s.providers[p.id]?.planLabel ?? "";
       }
       setPlanDraft(drafts);
       setHasMinimaxKey(await invoke<boolean>("has_minimax_api_key"));
+      setHasKimiKey(await invoke<boolean>("has_kimi_api_key"));
+      setHasGithub(await invoke<boolean>("has_github_token"));
+      const flags: Record<string, boolean> = {};
+      for (const id of EXT_KEY_PROVIDERS) {
+        flags[id] = await invoke<boolean>("has_provider_api_key", { providerId: id });
+      }
+      setExtKeyFlags(flags);
       setPaths(await invoke<PathsInfo>("get_paths"));
       setDetect(await invoke<DetectItem[]>("detect_credentials"));
+      try {
+        setExtList(await invoke("list_extensions"));
+      } catch {
+        setExtList([]);
+      }
     } catch (e) {
       setError(String(e));
     }
@@ -113,11 +227,17 @@ export default function App() {
   }, [refresh, loadSettings]);
 
   useEffect(() => {
-    const secs = settings?.refreshIntervalSecs ?? 300;
-    if (!secs || secs < 30) return;
-    const t = window.setInterval(() => void refresh(), secs * 1000);
-    return () => window.clearInterval(t);
+    const secs = settings?.refreshIntervalSecs ?? 900;
+    if (!secs || secs < 60) return;
+    const tmr = window.setInterval(() => void refresh(), secs * 1000);
+    return () => window.clearInterval(tmr);
   }, [settings?.refreshIntervalSecs, refresh]);
+
+  const isEnabled = (id: string) => {
+    const p = settings?.providers[id]?.enabled;
+    if (p != null) return !!p;
+    return catalog.find((c) => c.id === id)?.defaultEnabled ?? true;
+  };
 
   const toggleProvider = async (id: string, enabled: boolean) => {
     const s = await invoke<AppSettings>("set_provider_enabled", {
@@ -147,9 +267,30 @@ export default function App() {
     void loadSettings();
   };
 
-  const clearMinimaxKey = async () => {
-    await invoke("clear_minimax_api_key");
-    setHasMinimaxKey(false);
+  const saveKimiKey = async () => {
+    const key = kimiKeyInput.trim();
+    if (!key) return;
+    await invoke("set_kimi_api_key", { apiKey: key });
+    setKimiKeyInput("");
+    setHasKimiKey(true);
+    void refresh();
+  };
+
+  const saveGithub = async () => {
+    const key = githubInput.trim();
+    if (!key) return;
+    await invoke("set_github_token", { token: key });
+    setGithubInput("");
+    setHasGithub(true);
+    void refresh();
+  };
+
+  const saveExtKey = async (id: string) => {
+    const key = (extKeyInput[id] ?? "").trim();
+    if (!key) return;
+    await invoke("set_provider_api_key", { providerId: id, apiKey: key });
+    setExtKeyInput((m) => ({ ...m, [id]: "" }));
+    setExtKeyFlags((f) => ({ ...f, [id]: true }));
     void refresh();
   };
 
@@ -160,7 +301,7 @@ export default function App() {
   };
 
   const testProvider = async (id: string) => {
-    setTestMsg((m) => ({ ...m, [id]: "检测中…" }));
+    setTestMsg((m) => ({ ...m, [id]: "…" }));
     try {
       const r = await invoke<{ ok: boolean; message: string }>("test_provider", {
         providerId: id,
@@ -175,19 +316,31 @@ export default function App() {
     }
   };
 
-  const saveRefresh = async (secs: number) => {
+  const patchSettings = async (patch: Partial<AppSettings>) => {
     if (!settings) return;
-    const next = { ...settings, refreshIntervalSecs: secs };
+    const next = { ...settings, ...patch };
     await invoke("save_settings", { settings: next });
     setSettings(next);
   };
+
+  // Home: only enabled memberships, ordered by settings.providerOrder.
+  const visibleCards = (() => {
+    const enabled = (data?.cards ?? []).filter((c) => c.enabled);
+    const order = settings?.providerOrder ?? [];
+    if (!order.length) return enabled;
+    const rank = (id: string) => {
+      const i = order.indexOf(id);
+      return i < 0 ? 999 : i;
+    };
+    return [...enabled].sort((a, b) => rank(a.providerId) - rank(b.providerId));
+  })();
 
   return (
     <div className="shell">
       <header className="header">
         <div>
-          <h1>智额</h1>
-          <p className="tagline">本机额度监控 · 不预置账号</p>
+          <h1>{i18n.title}</h1>
+          <p className="tagline">{i18n.tagline}</p>
         </div>
         <div className="header-actions">
           <button
@@ -195,49 +348,64 @@ export default function App() {
             className={`tab ${tab === "home" ? "active" : ""}`}
             onClick={() => setTab("home")}
           >
-            额度
+            {i18n.tabHome}
           </button>
           <button
             type="button"
             className={`tab ${tab === "settings" ? "active" : ""}`}
             onClick={() => setTab("settings")}
           >
-            设置
+            {i18n.tabSettings}
           </button>
           <button type="button" className="btn" onClick={() => void refresh()} disabled={loading}>
-            {loading ? "…" : "刷新"}
+            {loading ? i18n.loading : i18n.refresh}
           </button>
         </div>
       </header>
 
-      <p className="product-tip">
-        能识别本机 CLI 登录就自动查额度；识别不到请到「设置」自行填写。软件不保存开发者信息，只使用你本机的配置。
-      </p>
+      <p className="product-tip">{i18n.tip}</p>
 
       {error && <div className="banner error">{error}</div>}
+      {bannerAlerts.map((msg) => (
+        <div key={msg} className="banner warn">
+          {msg}
+        </div>
+      ))}
 
       {tab === "home" && (
         <main className="cards">
-          {(data?.cards ?? []).map((card) => (
+          {visibleCards.map((card) => (
             <article key={card.providerId} className={`card status-border-${card.status}`}>
               <div className="card-top">
                 <div>
                   <strong>{card.displayName}</strong>
+                  {card.isCore ? (
+                    <span className="src src-auto">{i18n.core}</span>
+                  ) : (
+                    <span className="src src-none">{i18n.ext}</span>
+                  )}
                   {card.planLabel ? <span className="plan">{card.planLabel}</span> : null}
-                  <span className={`src src-${card.sourceMode}`}>{sourceLabel(card.sourceMode)}</span>
+                  <span className={`src src-${card.sourceMode}`}>
+                    {i18n.source[card.sourceMode] ?? card.sourceMode}
+                  </span>
                 </div>
-                <span className={`pill status-${card.status}`}>{statusLabel(card.status)}</span>
+                <span className={`pill status-${card.status}`}>
+                  {i18n.status[card.status] ?? card.status}
+                </span>
               </div>
-              {card.status === "setup" || card.status === "error" || card.status === "disabled" ? (
+              {card.status === "setup" ||
+              card.status === "error" ||
+              card.status === "disabled" ? (
                 <p className="detail setup">{card.detail}</p>
               ) : (
                 <>
                   {(card.meters?.length ? card.meters : fallbackMeters(card)).map((m) => (
                     <Meter
-                      key={m.label}
+                      key={m.key || m.label}
                       label={m.label}
                       value={m.remainingPercent}
                       hint={m.resetText}
+                      urgency={resetUrgency(m.resetsAtUnix, settings?.nearResetAlertHours ?? 24)}
                     />
                   ))}
                   <p className="detail">{card.detail}</p>
@@ -245,41 +413,47 @@ export default function App() {
               )}
               {(card.status === "setup" || card.status === "error") && (
                 <button type="button" className="btn linkish" onClick={() => setTab("settings")}>
-                  去设置配置 →
+                  {i18n.goSettings}
                 </button>
               )}
             </article>
           ))}
-          {!data?.cards?.length && !loading && (
-            <p className="empty">暂无数据，点击刷新。</p>
-          )}
+          {!visibleCards.length && !loading && <p className="empty">{i18n.empty}</p>}
         </main>
       )}
 
       {tab === "settings" && settings && (
         <main className="settings">
+          <section className="block">
+            <h2>{i18n.language}</h2>
+            <label className="row">
+              <span>UI</span>
+              <select
+                value={settings.language || "zh-Hans"}
+                onChange={(e) => void patchSettings({ language: e.target.value })}
+              >
+                <option value="zh-Hans">简体中文</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+          </section>
+
           <section className="block intro">
-            <h2>使用方式</h2>
+            <h2>{i18n.howtoTitle}</h2>
             <ol className="howto">
-              <li>
-                <strong>自动识别</strong>：本机已有 Codex / Grok 登录文件时，打开开关即可查额度。
-              </li>
-              <li>
-                <strong>手动填写</strong>：MiniMax 等需要 Key 的，在下方粘贴你自己的 Key。
-              </li>
-              <li>
-                <strong>套餐名</strong>：仅展示用，可随便写；不写也可以。
-              </li>
+              <li>{i18n.howto1}</li>
+              <li>{i18n.howto2}</li>
+              <li>{i18n.howto3}</li>
             </ol>
           </section>
 
           <section className="block">
-            <h2>本机识别状态</h2>
+            <h2>{i18n.detectTitle}</h2>
             {detect.map((d) => (
               <div key={d.providerId} className={`detect-row mode-${d.mode}`}>
                 <div className="detect-head">
                   <strong>{d.displayName}</strong>
-                  <span className={`src src-${d.mode}`}>{sourceLabel(d.mode)}</span>
+                  <span className={`src src-${d.mode}`}>{i18n.source[d.mode] ?? d.mode}</span>
                 </div>
                 <p className="hint">{d.summary}</p>
                 <p className="detail">{d.howTo}</p>
@@ -288,85 +462,172 @@ export default function App() {
           </section>
 
           <section className="block">
-            <h2>会员开关</h2>
-            {PROVIDERS.map((p) => {
-              const enabled =
-                settings.providers[p.id]?.enabled ?? true;
-              return (
-                <label key={p.id} className="row">
-                  <span>{p.name}</span>
-                  <input
-                    type="checkbox"
-                    checked={!!enabled}
-                    onChange={(e) => void toggleProvider(p.id, e.target.checked)}
-                  />
-                </label>
-              );
-            })}
+            <h2>{i18n.membersTitle}</h2>
+            <p className="hint">{i18n.membersHint}</p>
+            {providers.map((p) => (
+              <label key={p.id} className="row">
+                <span>
+                  {p.name}{" "}
+                  <span className={`src ${p.isCore ? "src-auto" : "src-none"}`}>
+                    {p.isCore ? i18n.core : i18n.ext}
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={isEnabled(p.id)}
+                  onChange={(e) => void toggleProvider(p.id, e.target.checked)}
+                />
+              </label>
+            ))}
           </section>
 
           <section className="block">
-            <h2>套餐显示名（可选，你自己填）</h2>
-            {PROVIDERS.map((p) => (
+            <h2>{i18n.planTitle}</h2>
+            {providers.map((p) => (
               <div key={p.id} className="row-input plan-row">
                 <span className="plan-id">{p.name}</span>
                 <input
                   type="text"
-                  placeholder="例如 Plus / Pro（仅展示）"
+                  placeholder={i18n.planPlaceholder}
                   value={planDraft[p.id] ?? ""}
-                  onChange={(e) =>
-                    setPlanDraft((d) => ({ ...d, [p.id]: e.target.value }))
-                  }
+                  onChange={(e) => setPlanDraft((d) => ({ ...d, [p.id]: e.target.value }))}
                 />
                 <button type="button" className="btn" onClick={() => void savePlan(p.id)}>
-                  保存
+                  {i18n.save}
                 </button>
               </div>
             ))}
           </section>
 
           <section className="block">
-            <h2>MiniMax（需自行填写 Key）</h2>
-            <label className="row">
-              <span>区域</span>
-              <select
-                value={settings.minimaxRegion || "china"}
-                onChange={(e) => void setRegion(e.target.value)}
-              >
-                <option value="china">中国</option>
-                <option value="international">国际</option>
-              </select>
-            </label>
-            <p className="hint">
-              {hasMinimaxKey
-                ? "已保存你填写的 Key（仅本机凭据管理器，可清除）"
-                : "尚未填写 Key — 识别不到时请粘贴你的 sk-cp-…"}
-            </p>
+            <h2>{i18n.keysTitle}</h2>
+
+            <h3 className="subh">{i18n.kimiTitle}</h3>
+            <p className="hint">{hasKimiKey ? i18n.hasKey : i18n.kimiHint}</p>
             <div className="row-input">
               <input
                 type="password"
                 autoComplete="off"
-                placeholder="粘贴你的 Coding Plan API Key"
+                placeholder="sk-kimi-…"
+                value={kimiKeyInput}
+                onChange={(e) => setKimiKeyInput(e.target.value)}
+              />
+              <button type="button" className="btn" onClick={() => void saveKimiKey()}>
+                {i18n.save}
+              </button>
+            </div>
+            {hasKimiKey && (
+              <button
+                type="button"
+                className="btn danger"
+                onClick={() =>
+                  void invoke("clear_kimi_api_key").then(() => {
+                    setHasKimiKey(false);
+                    void refresh();
+                  })
+                }
+              >
+                {i18n.clearKey}
+              </button>
+            )}
+
+            <h3 className="subh">{i18n.minimaxTitle}</h3>
+            <label className="row">
+              <span>{i18n.region}</span>
+              <select
+                value={settings.minimaxRegion || "china"}
+                onChange={(e) => void setRegion(e.target.value)}
+              >
+                <option value="china">{i18n.china}</option>
+                <option value="international">{i18n.international}</option>
+              </select>
+            </label>
+            <p className="hint">{hasMinimaxKey ? i18n.hasKey : i18n.noKey}</p>
+            <div className="row-input">
+              <input
+                type="password"
+                autoComplete="off"
+                placeholder={i18n.minimaxKeyPh}
                 value={minimaxKeyInput}
                 onChange={(e) => setMinimaxKeyInput(e.target.value)}
               />
               <button type="button" className="btn" onClick={() => void saveMinimaxKey()}>
-                保存
+                {i18n.save}
               </button>
             </div>
             {hasMinimaxKey && (
-              <button type="button" className="btn danger" onClick={() => void clearMinimaxKey()}>
-                清除我填写的 Key
+              <button
+                type="button"
+                className="btn danger"
+                onClick={() =>
+                  void invoke("clear_minimax_api_key").then(() => {
+                    setHasMinimaxKey(false);
+                    void refresh();
+                  })
+                }
+              >
+                {i18n.clearKey}
               </button>
             )}
+
+            <h3 className="subh">{i18n.githubTitle}</h3>
+            <p className="hint">{hasGithub ? i18n.hasKey : i18n.noKey}</p>
+            <div className="row-input">
+              <input
+                type="password"
+                autoComplete="off"
+                placeholder={i18n.githubPh}
+                value={githubInput}
+                onChange={(e) => setGithubInput(e.target.value)}
+              />
+              <button type="button" className="btn" onClick={() => void saveGithub()}>
+                {i18n.save}
+              </button>
+            </div>
+            {hasGithub && (
+              <button
+                type="button"
+                className="btn danger"
+                onClick={() =>
+                  void invoke("clear_github_token").then(() => {
+                    setHasGithub(false);
+                    void refresh();
+                  })
+                }
+              >
+                {i18n.clearKey}
+              </button>
+            )}
+
+            <h3 className="subh">{i18n.extKeyTitle}</h3>
+            {EXT_KEY_PROVIDERS.map((id) => (
+              <div key={id} className="ext-key-block">
+                <div className="row">
+                  <span>{id}</span>
+                  <span className="hint">{extKeyFlags[id] ? i18n.hasKey : i18n.noKey}</span>
+                </div>
+                <div className="row-input">
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    placeholder="API Key"
+                    value={extKeyInput[id] ?? ""}
+                    onChange={(e) => setExtKeyInput((m) => ({ ...m, [id]: e.target.value }))}
+                  />
+                  <button type="button" className="btn" onClick={() => void saveExtKey(id)}>
+                    {i18n.save}
+                  </button>
+                </div>
+              </div>
+            ))}
           </section>
 
           <section className="block">
-            <h2>检测连接</h2>
-            {PROVIDERS.map((p) => (
+            <h2>{i18n.testTitle}</h2>
+            {providers.map((p) => (
               <div key={p.id} className="test-row">
                 <button type="button" className="btn" onClick={() => void testProvider(p.id)}>
-                  检测 {p.name}
+                  {i18n.test} {p.name}
                 </button>
                 <span className="hint">{testMsg[p.id] ?? ""}</span>
               </div>
@@ -374,94 +635,317 @@ export default function App() {
           </section>
 
           <section className="block">
-            <h2>自动刷新</h2>
+            <h2>{i18n.refreshTitle}</h2>
             <label className="row">
-              <span>间隔（秒，0=仅手动）</span>
+              <span> </span>
+              <select
+                value={nearestRefresh(settings.refreshIntervalSecs)}
+                onChange={(e) =>
+                  void patchSettings({ refreshIntervalSecs: Number(e.target.value) })
+                }
+              >
+                {REFRESH_OPTIONS.map((o) => (
+                  <option key={o.secs} value={o.secs}>
+                    {i18n[o.key]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </section>
+
+          <section className="block">
+            <h2>{i18n.alertsTitle}</h2>
+            <label className="row">
+              <span>{i18n.alertsEnable}</span>
+              <input
+                type="checkbox"
+                checked={settings.quotaThresholdAlertsEnabled ?? true}
+                onChange={(e) =>
+                  void patchSettings({ quotaThresholdAlertsEnabled: e.target.checked })
+                }
+              />
+            </label>
+            <label className="row">
+              <span>{i18n.sessionTh}</span>
               <input
                 type="number"
-                min={0}
-                step={30}
-                value={settings.refreshIntervalSecs}
-                onChange={(e) => void saveRefresh(Number(e.target.value) || 0)}
-                style={{ width: 88 }}
+                min={1}
+                max={100}
+                style={{ width: 72 }}
+                value={settings.sessionAlertThreshold ?? 20}
+                onChange={(e) =>
+                  void patchSettings({ sessionAlertThreshold: Number(e.target.value) || 20 })
+                }
+              />
+            </label>
+            <label className="row">
+              <span>{i18n.weeklyTh}</span>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                style={{ width: 72 }}
+                value={settings.weeklyAlertThreshold ?? 20}
+                onChange={(e) =>
+                  void patchSettings({ weeklyAlertThreshold: Number(e.target.value) || 20 })
+                }
+              />
+            </label>
+            <label className="row">
+              <span>{i18n.nearReset}</span>
+              <input
+                type="number"
+                min={1}
+                max={168}
+                style={{ width: 72 }}
+                value={settings.nearResetAlertHours ?? 24}
+                onChange={(e) =>
+                  void patchSettings({ nearResetAlertHours: Number(e.target.value) || 24 })
+                }
+              />
+            </label>
+            <label className="row">
+              <span>{i18n.underuse}</span>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                style={{ width: 72 }}
+                value={settings.underuseAlertRemaining ?? 40}
+                onChange={(e) =>
+                  void patchSettings({ underuseAlertRemaining: Number(e.target.value) || 40 })
+                }
               />
             </label>
           </section>
 
           <section className="block">
-            <h2>本机路径（供你对照）</h2>
+            <h2>固定窗口 / 排序</h2>
+            <label className="row">
+              <span>窗口置顶（固定）</span>
+              <input
+                type="checkbox"
+                checked={!!settings.windowPinned}
+                onChange={(e) =>
+                  void invoke<AppSettings>("set_window_pinned", { pinned: e.target.checked }).then(
+                    setSettings
+                  )
+                }
+              />
+            </label>
+            <p className="hint">拖拽排序：使用 ↑ ↓ 调整主页卡片顺序</p>
+            {providers.map((p, idx) => (
+              <div key={p.id} className="row-input plan-row">
+                <span className="plan-id">
+                  {idx + 1}. {p.name}
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={idx === 0}
+                  onClick={() => {
+                    const order = (settings.providerOrder?.length
+                      ? [...settings.providerOrder]
+                      : providers.map((x) => x.id));
+                    // ensure all
+                    for (const x of providers) if (!order.includes(x.id)) order.push(x.id);
+                    const i = order.indexOf(p.id);
+                    if (i > 0) {
+                      [order[i - 1], order[i]] = [order[i], order[i - 1]];
+                      void invoke<AppSettings>("set_provider_order", { order }).then((s) => {
+                        setSettings(s);
+                        void refresh();
+                      });
+                    }
+                  }}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={idx >= providers.length - 1}
+                  onClick={() => {
+                    const order = (settings.providerOrder?.length
+                      ? [...settings.providerOrder]
+                      : providers.map((x) => x.id));
+                    for (const x of providers) if (!order.includes(x.id)) order.push(x.id);
+                    const i = order.indexOf(p.id);
+                    if (i >= 0 && i < order.length - 1) {
+                      [order[i + 1], order[i]] = [order[i], order[i + 1]];
+                      void invoke<AppSettings>("set_provider_order", { order }).then((s) => {
+                        setSettings(s);
+                        void refresh();
+                      });
+                    }
+                  }}
+                >
+                  ↓
+                </button>
+              </div>
+            ))}
+          </section>
+
+          <section className="block">
+            <h2>用户扩展</h2>
+            <label className="row">
+              <span>启用 ~/.smartquota/extensions</span>
+              <input
+                type="checkbox"
+                checked={settings.extensionsEnabled ?? true}
+                onChange={(e) => void patchSettings({ extensionsEnabled: e.target.checked })}
+              />
+            </label>
+            {extList.length === 0 ? (
+              <p className="hint">暂无扩展。在扩展目录放置 manifest.json + 脚本。</p>
+            ) : (
+              extList.map((ex) => (
+                <div key={ex.id} className="detect-row">
+                  <strong>
+                    {ex.name} <span className="hint">v{ex.version}</span>
+                  </strong>
+                  <p className="detail">{ex.description || ex.path}</p>
+                </div>
+              ))
+            )}
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void invoke("open_extensions_folder")}
+            >
+              打开扩展目录
+            </button>
+          </section>
+
+          <section className="block">
+            <h2>{i18n.updateTitle}</h2>
+            <p className="hint">{i18n.updateHint}</p>
+            <div className="row-input">
+              <button
+                type="button"
+                className="btn"
+                disabled={updateChecking}
+                onClick={() => void checkUpdate()}
+              >
+                {updateChecking ? "…" : i18n.checkUpdate}
+              </button>
+              {updateAvailable && updateUrl && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void invoke("open_external_url", { url: updateUrl })}
+                >
+                  {i18n.download}
+                </button>
+              )}
+            </div>
+            {updateMsg && <p className="detail">{updateMsg}</p>}
+          </section>
+
+          <section className="block">
+            <h2>{i18n.pathsTitle}</h2>
             {paths && (
               <ul className="paths">
                 <li>
-                  <code>配置</code> {paths.configDir}
+                  <code>config</code> {paths.configDir}
                 </li>
                 <li>
-                  <code>Codex</code> {paths.codexAuth}
+                  <code>codex</code> {paths.codexAuth}
                 </li>
                 <li>
-                  <code>Grok</code> {paths.grokAuth}
+                  <code>grok</code> {paths.grokAuth}
                 </li>
                 <li>
-                  <code>MiniMax</code> {paths.minimaxConfig}
+                  <code>minimax</code> {paths.minimaxConfig}
                 </li>
+                {paths.kimiConfig && (
+                  <li>
+                    <code>kimi</code> {paths.kimiConfig}
+                  </li>
+                )}
+                {paths.geminiOauth && (
+                  <li>
+                    <code>gemini</code> {paths.geminiOauth}
+                  </li>
+                )}
+                {paths.cursorDb && (
+                  <li>
+                    <code>cursor</code> {paths.cursorDb}
+                  </li>
+                )}
+                {paths.claudeJson && (
+                  <li>
+                    <code>claude</code> {paths.claudeJson}
+                  </li>
+                )}
               </ul>
             )}
             <div className="row-input">
               <button type="button" className="btn" onClick={() => void invoke("open_config_folder")}>
-                打开配置目录
+                {i18n.openConfig}
               </button>
               <button type="button" className="btn" onClick={() => void invoke("open_logs_dir")}>
-                打开日志目录
+                {i18n.openLogs}
               </button>
             </div>
           </section>
         </main>
       )}
 
-      <footer className="footer">{data?.updatedAt ? `更新于 ${data.updatedAt}` : "—"}</footer>
+      <footer className="footer">
+        {data?.updatedAt ? `${i18n.updatedAt} ${data.updatedAt}` : "—"} · v0.5.0
+      </footer>
     </div>
   );
 }
 
-function statusLabel(s: string): string {
-  const map: Record<string, string> = {
-    healthy: "正常",
-    warning: "偏低",
-    critical: "紧急",
-    depleted: "用尽",
-    unknown: "未知",
-    error: "失败",
-    disabled: "关闭",
-    setup: "待配置",
-  };
-  return map[s] ?? s;
-}
-
-function sourceLabel(mode: string): string {
-  if (mode === "auto") return "自动识别";
-  if (mode === "manual") return "你填写的";
-  return "未识别";
+function nearestRefresh(secs: number): number {
+  if (!secs) return 0;
+  const opts = [300, 600, 900, 1800];
+  return opts.reduce((a, b) => (Math.abs(b - secs) < Math.abs(a - secs) ? b : a));
 }
 
 function fallbackMeters(card: QuotaCard): QuotaMeter[] {
   return [
-    { label: "5 小时", remainingPercent: card.sessionRemainingPercent, resetText: null },
-    { label: "7 天", remainingPercent: card.weeklyRemainingPercent, resetText: null },
+    {
+      key: "session",
+      kind: "session",
+      label: "5 小时",
+      remainingPercent: card.sessionRemainingPercent,
+      resetText: null,
+    },
+    {
+      key: "weekly",
+      kind: "weekly",
+      label: "7 天",
+      remainingPercent: card.weeklyRemainingPercent,
+      resetText: null,
+    },
   ];
+}
+
+function resetUrgency(unix: number | null | undefined, nearHours: number): string {
+  if (unix == null) return "normal";
+  const hours = (unix - Date.now() / 1000) / 3600;
+  if (hours <= 0 || hours <= 6) return "imminent";
+  if (hours <= nearHours) return "soon";
+  return "normal";
 }
 
 function Meter({
   label,
   value,
   hint,
+  urgency = "normal",
 }: {
   label: string;
   value: number | null | undefined;
   hint?: string | null;
+  urgency?: string;
 }) {
   const pct = value == null ? null : Math.max(0, Math.min(100, value));
   return (
-    <div className="meter">
+    <div className={`meter urgency-${urgency}`}>
       <div className="meter-label">
         <span>{label}</span>
         <span>{pct == null ? "—" : `${Math.round(pct)}%`}</span>
@@ -469,7 +953,7 @@ function Meter({
       <div className="meter-track">
         <div className="meter-fill" style={{ width: pct == null ? "0%" : `${pct}%` }} />
       </div>
-      {hint ? <div className="meter-hint">{hint}</div> : null}
+      {hint ? <div className={`meter-hint urgency-${urgency}`}>{hint}</div> : null}
     </div>
   );
 }

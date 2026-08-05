@@ -8,7 +8,7 @@
 | 类别 | 结论 |
 |------|------|
 | 后门 / 隐蔽上报 | **未发现** |
-| 远程自动更新 | **已移除**（不再链接 Sparkle） |
+| 远程自动更新 | **已移除**（不再链接 Sparkle；设置里可**手动**查 GitHub 公开 Release 版本，不自动下载安装） |
 | 硬编码密钥 / 私有 token | **未发现**（测试仅用假数据） |
 | 硬编码个人会员档位 | **已清空**（`defaultPlanLabels` 为空；套餐由用户本机填写） |
 | 混淆 / 动态下载执行 | **未发现** |
@@ -24,7 +24,9 @@
 - Kimi、MiniMax、阿里云百炼、GitHub Copilot、Cursor、Gemini 等对应官方 API  
 - 用户在「扩展」里配置的 **http(s)** 健康检查 URL  
 
-**不会**连接：统计 SDK、Sentry/Firebase、作者自有服务器、更新 feed。
+**不会**连接：统计 SDK、Sentry/Firebase、作者自有服务器、Sparkle 更新 feed。  
+
+可选：用户在设置中点击「检查更新」时，会请求 GitHub 公开 API（`api.github.com/repos/…/releases`）比对版本。若发现新版，可**下载** GitHub Release 上的 dmg/pkg 到「下载」文件夹并**用系统打开**（挂载 dmg / 打开 pkg 向导）。**不会**静默替换 `/Applications` 里的 App；仍需用户拖入应用程序或确认安装。
 
 本地 Hook 服务只监听 **`127.0.0.1`（loopback）**，接收 Claude Code 的 hook 事件。
 
@@ -66,6 +68,9 @@ ls 智额.app/Contents/Frameworks/
 
 # 源码敏感模式
 rg -n 'Sparkle|SUFeed|telemetry|mixpanel|sentry|firebase' Sources Project.swift Tuist
+
+# 手动检查更新仅允许 GitHub 公开 API（不应出现作者私有更新服）
+rg -n 'github.com|api.github.com' Sources/Domain Sources/Infrastructure/Update
 
 # 确认没有把本机配置带进仓库
 rg -n 'sk-[a-zA-Z0-9]{20,}|ghp_|gho_' --glob '!Tests/**' Sources scripts || true

@@ -263,8 +263,73 @@ struct CodexAPIUsageProbeTests {
         let snapshot = try await probe.probe()
 
         #expect(snapshot.costUsage != nil)
-        #expect(snapshot.costUsage?.totalCost == 250) // 1000 - 750
-        #expect(snapshot.costUsage?.budget == 1000)
+        #expect(snapshot.costUsage?.budget == 750)
+        let credits = snapshot.quotas.first { $0.compactTitle == "积分" }
+        #expect(credits != nil)
+        #expect(credits?.dollarRemaining == 750)
+    }
+
+    @Test
+    func `probe parses GPT-5.3-Codex-Spark weekly from additional_rate_limits`() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try createAuthFile(at: tempDir)
+
+        let mockNetwork = MockNetworkClient()
+        let responseJSON = """
+        {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 20.0,
+              "limit_window_seconds": 18000
+            },
+            "secondary_window": {
+              "used_percent": 40.0,
+              "limit_window_seconds": 604800
+            }
+          },
+          "additional_rate_limits": [
+            {
+              "limit_name": "GPT-5.3-Codex-Spark",
+              "metered_feature": "codex_bengalfox",
+              "rate_limit": {
+                "primary_window": {
+                  "used_percent": 5.0,
+                  "limit_window_seconds": 18000
+                },
+                "secondary_window": {
+                  "used_percent": 45.0,
+                  "limit_window_seconds": 604800,
+                  "reset_after_seconds": 259200
+                }
+              }
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: URL(string: "https://chatgpt.com")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+
+        given(mockNetwork).request(.any).willReturn((responseJSON, response))
+
+        let loader = CodexCredentialLoader(homeDirectory: tempDir.path)
+        let probe = CodexAPIUsageProbe(credentialLoader: loader, networkClient: mockNetwork)
+
+        let snapshot = try await probe.probe()
+
+        let sparkQ = snapshot.quotas.first { q in
+            if case .modelSpecific(let name) = q.quotaType { return name.contains("Spark") }
+            return false
+        }
+        #expect(sparkQ != nil)
+        #expect(sparkQ?.percentRemaining == 55.0) // 100 - 45
+        #expect(sparkQ?.compactTitle == "GPT-5.3 周额度")
     }
 
     // MARK: - Empty Response Tests

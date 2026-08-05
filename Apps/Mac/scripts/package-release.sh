@@ -11,6 +11,7 @@
 #     智额-X.Y.Z.pkg     ← 双击安装包
 #     RELEASE_NOTES.md
 #     SHA256SUMS.txt
+#   不在 releases 目录保留 智额.app（避免 Spotlight 搜出多份同名 App）
 #
 # 用法（在 Apps/Mac 下）：
 #   ./scripts/package-release.sh
@@ -96,8 +97,9 @@ else
   SIGN_NOTE="已签名：${SIGN_IDENTITY}"
 fi
 
-# Keep a copy of the app inside the version folder (for archive / debugging)
-ditto --norsrc --noextattr --noqtn "$WORK/app/${APP_NAME}.app" "$STAGE/${APP_NAME}.app"
+# Do NOT copy 智额.app into $STAGE — only dmg/pkg. Loose .app copies are
+# indexed by Spotlight and show as duplicate apps in system search.
+rm -rf "${STAGE}/${APP_NAME}.app" 2>/dev/null || true
 
 printf '%s\n' "==> [4/5] build installer DMG + PKG"
 
@@ -318,6 +320,8 @@ fi
 rm -f "${STAGE}/安装到「应用程序」.command" "${STAGE}/安装说明.txt" "${STAGE}/README.txt" 2>/dev/null || true
 # Old zip style no longer primary
 rm -f "${STAGE}"/*.zip 2>/dev/null || true
+# Ensure no loose .app left in the version folder (Spotlight noise)
+rm -rf "${STAGE}/${APP_NAME}.app" 2>/dev/null || true
 
 echo ""
 echo "======== 安装包已就绪 ========"
