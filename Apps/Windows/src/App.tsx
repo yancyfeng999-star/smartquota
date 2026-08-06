@@ -980,7 +980,7 @@ function calendarMonthlyMeter(renewalDate?: string | null): QuotaMeter {
   return {
     key: "monthly-est",
     kind: "time",
-    label: "总额·估",
+    label: "总额",
     remainingPercent: remaining,
     resetText: `${y}-${mo}-${d}`,
     resetsAtUnix: Math.floor(renewDay.getTime() / 1000),

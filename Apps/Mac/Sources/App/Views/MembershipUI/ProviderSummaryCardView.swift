@@ -162,17 +162,9 @@ struct ProviderSummaryCardView: View {
     private func quotaColumn(_ item: SummaryQuotaItem) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                HStack(spacing: 2) {
-                    Text(item.title)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    // Calendar / non-API 总额: keep same scheme, light “估” so it is not mistaken for probe %
-                    if item.isEstimated {
-                        Text("估")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
+                Text(item.title)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
                 Spacer(minLength: 2)
                 Text(item.displayValue)
                     .font(.system(size: 12, weight: .bold, design: .rounded))
