@@ -952,9 +952,10 @@ function isRealMonthlyMeter(m: QuotaMeter): boolean {
   if (kind === "session" || kind === "weekly" || key === "session" || key === "weekly") {
     return false;
   }
+  // Explicit monthly only — do not treat bare "billing" as monthly
   if (kind === "monthly" || key.includes("month") || key.includes("月")) return true;
-  if (label.includes("month") || label.includes("月") || label.includes("总额")) return true;
-  if (kind === "time" && (label.includes("billing") || label.includes("本月"))) return true;
+  if (label.includes("month") || label.includes("月") || label.includes("本月") || label.includes("月度"))
+    return true;
   return false;
 }
 
@@ -979,7 +980,7 @@ function calendarMonthlyMeter(renewalDate?: string | null): QuotaMeter {
   return {
     key: "monthly-est",
     kind: "time",
-    label: "总额",
+    label: "总额·估",
     remainingPercent: remaining,
     resetText: `${y}-${mo}-${d}`,
     resetsAtUnix: Math.floor(renewDay.getTime() / 1000),

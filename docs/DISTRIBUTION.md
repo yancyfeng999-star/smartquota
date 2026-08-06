@@ -80,7 +80,7 @@ gh release create v0.3.12 \
 ```
 
 最新 Mac 安装包：  
-https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.12
+https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.15
 
 ---
 

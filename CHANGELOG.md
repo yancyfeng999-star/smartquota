@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **文档**：`PRODUCT.md` / `Apps/README.md` 版本对齐到 0.3.15
+- **命名**：`MonthlyFromWeekly` → `MembershipCycleRemaining`（去掉误导性 legacy 重载）
+- **真月额度识别**：去掉过宽的 `billing` 关键字匹配
+- **估算总额**：卡片上显示「估」标记（算法不变）
+- **无 snapshot 状态**：不再一律 `depleted`，有错误为 critical、否则 warning
+
+---
+
 ## [Mac 0.3.15] — 2026-08-06
 
 ### Changed

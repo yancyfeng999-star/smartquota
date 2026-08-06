@@ -162,9 +162,17 @@ struct ProviderSummaryCardView: View {
     private func quotaColumn(_ item: SummaryQuotaItem) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(item.title)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 2) {
+                    Text(item.title)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    // Calendar / non-API 总额: keep same scheme, light “估” so it is not mistaken for probe %
+                    if item.isEstimated {
+                        Text("估")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
                 Spacer(minLength: 2)
                 Text(item.displayValue)
                     .font(.system(size: 12, weight: .bold, design: .rounded))
@@ -269,7 +277,7 @@ struct ProviderSummaryCardView: View {
         let title = l10n.t("quota.monthly")
         if let activation = MembershipRenewal.parse(raw) {
             let renew = MembershipRenewal.nextRenewal(fromActivation: activation)
-            let est = MonthlyFromWeekly.estimate(renewalAt: renew)
+            let est = MembershipCycleRemaining.estimate(renewalAt: renew)
             return SummaryQuotaItem(
                 title: title,
                 percentRemaining: est.percentRemaining,
@@ -277,7 +285,7 @@ struct ProviderSummaryCardView: View {
                 isEstimated: true
             )
         }
-        let est = MonthlyFromWeekly.estimateWithoutRenewal()
+        let est = MembershipCycleRemaining.estimateWithoutRenewal()
         return SummaryQuotaItem(
             title: title,
             percentRemaining: est.percentRemaining,
@@ -341,16 +349,14 @@ struct ProviderSummaryCardView: View {
         return cols
     }
 
-    /// Real monthly meter from probe (any provider). Prefer explicit names, then ~month window.
+    /// Real monthly meter from probe only — explicit month naming (no broad “billing” match).
     private func realMonthly(in snapshot: UsageSnapshot) -> UsageQuota? {
         if let named = snapshot.quotas.first(where: { quota in
             if case .timeLimit(let name) = quota.quotaType {
-                let n = name.lowercased()
-                return n.contains("month") || n.contains("月") || n.contains("billing")
+                return Self.isMonthlyName(name)
             }
             if case .modelSpecific(let name) = quota.quotaType {
-                let n = name.lowercased()
-                return n.contains("month") || n.contains("月")
+                return Self.isMonthlyName(name)
             }
             return false
         }) {
@@ -366,12 +372,21 @@ struct ProviderSummaryCardView: View {
         }
     }
 
+    private static func isMonthlyName(_ name: String) -> Bool {
+        let n = name.lowercased()
+        if n.contains("month") || n.contains("月") { return true }
+        // Chinese probe labels sometimes use 本月 / 月度 without “month”
+        if n.contains("本月") || n.contains("月度") || n.contains("月额度") { return true }
+        return false
+    }
+
     // MARK: - Status
 
     private var effectiveStatus: QuotaStatus {
         if provider.isSyncing { return .healthy }
         if let snapshot { return snapshot.overallStatus }
-        return .depleted
+        // No snapshot: error → critical; not yet configured / empty → warning (not depleted)
+        return provider.lastError != nil ? .critical : .warning
     }
 
     private var statusTint: Color {

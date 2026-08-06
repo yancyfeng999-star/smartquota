@@ -1,16 +1,16 @@
 import Foundation
 
-/// **总额** fallback for **every** membership channel (Codex / Kimi / MiniMax / Grok / …).
+/// Calendar remaining for the **总额** column when no real monthly meter exists.
 ///
-/// Product policy:
-/// 1. Prefer a real monthly meter from the probe when present (handled in UI).
-/// 2. Otherwise: **calendar linear remaining** to the next membership renewal —
-///    `remaining% = daysLeft / cycleDays × 100`, decreasing roughly once per day.
-///    Independent of 5H / 7D usage (weekly resets must not fake a full tank).
+/// Product policy (all channels):
+/// 1. Prefer a real monthly meter from the probe (UI layer).
+/// 2. Else: linear remaining until next membership renewal —
+///    `remaining% = daysLeft / cycleDays × 100`.
+///    Independent of 5H / 7D usage.
 ///
-/// Cycle is anchored on next renewal: previous anniversary → renewal (≈ one calendar month).
-public enum MonthlyFromWeekly {
-    /// Calendar-based remaining until `renewalAt` (next membership renewal day).
+/// Cycle: previous anniversary → next renewal (≈ one calendar month).
+public enum MembershipCycleRemaining {
+    /// Remaining % until `renewalAt` (next membership renewal day).
     public static func estimate(
         renewalAt: Date,
         now: Date = Date()
@@ -19,14 +19,12 @@ public enum MonthlyFromWeekly {
         let today = cal.startOfDay(for: now)
         let renewDay = cal.startOfDay(for: renewalAt)
 
-        // Previous cycle start ≈ one calendar month before next renewal
         let cycleStart = cal.date(byAdding: .month, value: -1, to: renewDay) ?? today
         let cycleDays = max(
             1,
             cal.dateComponents([.day], from: cycleStart, to: renewDay).day ?? 30
         )
 
-        // Days strictly remaining until renewal (renewal day itself → 0)
         let daysLeft: Int
         if renewDay <= today {
             daysLeft = 0
@@ -36,17 +34,6 @@ public enum MonthlyFromWeekly {
 
         let remaining = max(0, min(100, 100.0 * Double(daysLeft) / Double(cycleDays)))
         return (remaining, renewDay)
-    }
-
-    /// Legacy entry that ignored weekly burn after product change; kept so call sites
-    /// can migrate. Prefer `estimate(renewalAt:now:)`.
-    public static func estimate(
-        weeklyRemaining: Double,
-        renewalAt: Date,
-        now: Date = Date()
-    ) -> (percentRemaining: Double?, resetsAt: Date) {
-        let est = estimate(renewalAt: renewalAt, now: now)
-        return (est.percentRemaining, est.resetsAt)
     }
 
     /// No renewal date: linear remaining to end of the current calendar month.
@@ -68,15 +55,6 @@ public enum MonthlyFromWeekly {
         }
         let remaining = max(0, min(100, 100.0 * Double(daysLeft) / Double(cycleDays)))
         return (remaining, end)
-    }
-
-    /// Legacy signature (weekly ignored).
-    public static func estimateWithoutRenewal(
-        weeklyRemaining: Double,
-        now: Date = Date()
-    ) -> (percentRemaining: Double?, resetsAt: Date) {
-        let est = estimateWithoutRenewal(now: now)
-        return (est.percentRemaining, est.resetsAt)
     }
 
     public static func endOfMonth(containing date: Date) -> Date {
