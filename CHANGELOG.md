@@ -6,13 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [Mac 0.3.16] — 2026-08-06
 
 ### Fixed
-- **文档**：`PRODUCT.md` / `Apps/README.md` 版本对齐到 0.3.15
-- **命名**：`MonthlyFromWeekly` → `MembershipCycleRemaining`（去掉误导性 legacy 重载）
+- **文档**：`PRODUCT.md` / `Apps/README.md` 版本对齐
+- **命名**：`MonthlyFromWeekly` → `MembershipCycleRemaining`
 - **真月额度识别**：去掉过宽的 `billing` 关键字匹配
 - **无 snapshot 状态**：不再一律 `depleted`，有错误为 critical、否则 warning
+
+### Release
+- GitHub：`v0.3.16` · `SmartQuota-0.3.16.dmg` / `.pkg`
 
 ---
 

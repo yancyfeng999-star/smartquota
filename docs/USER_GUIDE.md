@@ -3,7 +3,7 @@
 面向日常使用。开发相关见 [DEVELOPER.md](./DEVELOPER.md)。  
 下载安装见仓库根 [README.md](../README.md) 与 [DISTRIBUTION.md](./DISTRIBUTION.md)。
 
-**当前 Mac 版本：0.3.15**
+**当前 Mac 版本：0.3.16**
 
 ---
 
@@ -11,8 +11,8 @@
 
 ### 1.1 从 GitHub 安装（推荐）
 
-1. 打开 [v0.3.15 Release](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.15)  
-2. 下载 **SmartQuota-0.3.15.dmg**  
+1. 打开 [v0.3.16 Release](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.16)  
+2. 下载 **SmartQuota-0.3.16.dmg**  
 3. 打开 dmg，把 **智额** 拖到 **应用程序**  
 4. 从启动台打开「智额」  
 5. 菜单栏出现仪表盘类图标即表示在运行  
