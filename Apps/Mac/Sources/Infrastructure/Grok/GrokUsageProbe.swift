@@ -191,6 +191,10 @@ public struct GrokUsageProbe: UsageProbe, @unchecked Sendable {
     ///   }
     /// }
     /// ```
+    ///
+    /// **Post-reset quirk:** After a weekly period rolls over, xAI may omit
+    /// `creditUsagePercent` and `productUsage` until any spend occurs in the new
+    /// window. `currentPeriod` still has start/end — treat missing usage as 0%.
     static func parseResponse(
         _ data: Data,
         providerId: String,
@@ -216,10 +220,20 @@ public struct GrokUsageProbe: UsageProbe, @unchecked Sendable {
 
         var quotas: [UsageQuota] = []
 
-        // Overall credit usage for the current period
+        // Overall credit usage for the current period.
+        // Missing field after 7D reset means 0% used (100% remaining), not "no data".
         if let creditUsagePercent = doubleValue(config["creditUsagePercent"]) {
             quotas.append(UsageQuota(
                 percentRemaining: max(-100, 100 - creditUsagePercent),
+                quotaType: periodQuotaType,
+                providerId: providerId,
+                resetsAt: periodEnd,
+                resetText: resetText,
+                windowDuration: windowDuration
+            ))
+        } else if period != nil {
+            quotas.append(UsageQuota(
+                percentRemaining: 100,
                 quotaType: periodQuotaType,
                 providerId: providerId,
                 resetsAt: periodEnd,

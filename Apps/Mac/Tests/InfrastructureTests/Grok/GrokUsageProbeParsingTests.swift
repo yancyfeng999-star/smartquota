@@ -151,6 +151,60 @@ struct GrokUsageProbeParsingTests {
         #expect(snapshot.quotas.isEmpty)
     }
 
+    /// Real post-7D-reset payload: xAI drops `creditUsagePercent` / `productUsage`
+    /// until the user spends anything in the new window. Period bounds remain.
+    @Test
+    func `post weekly reset without usage fields yields full weekly remaining`() throws {
+        let json = """
+        {
+          "config": {
+            "currentPeriod": {
+              "type": "USAGE_PERIOD_TYPE_WEEKLY",
+              "start": "2026-08-06T02:57:25.059507+00:00",
+              "end": "2026-08-13T02:57:25.059507+00:00"
+            },
+            "onDemandCap": {"val": 0},
+            "onDemandUsed": {"val": 0},
+            "isUnifiedBillingUser": true,
+            "prepaidBalance": {"val": 0},
+            "topUpMethod": "TOP_UP_METHOD_SAVED_PAYMENT_METHOD",
+            "billingPeriodStart": "2026-08-06T02:57:25.059507+00:00",
+            "billingPeriodEnd": "2026-08-13T02:57:25.059507+00:00"
+          }
+        }
+        """
+        let now = try #require(GrokCredentialLoader.parseDate("2026-08-06T03:00:00.000Z"))
+
+        let snapshot = try GrokUsageProbe.parseResponse(
+            Data(json.utf8),
+            providerId: "grok",
+            now: now
+        )
+
+        let weekly = try #require(snapshot.quota(for: .weekly))
+        #expect(weekly.percentRemaining == 100.0)
+        let expectedEnd = try #require(GrokCredentialLoader.parseDate("2026-08-13T02:57:25.059507+00:00"))
+        #expect(weekly.resetsAt == expectedEnd)
+        #expect(weekly.windowDuration == TimeInterval(7 * 24 * 3600))
+        #expect(weekly.resetText != nil)
+    }
+
+    @Test
+    func `explicit zero credit usage still maps to full remaining`() throws {
+        let json = """
+        {
+          "config": {
+            "currentPeriod": {"type": "USAGE_PERIOD_TYPE_WEEKLY"},
+            "creditUsagePercent": 0
+          }
+        }
+        """
+
+        let snapshot = try GrokUsageProbe.parseResponse(Data(json.utf8), providerId: "grok")
+
+        #expect(snapshot.quota(for: .weekly)?.percentRemaining == 100.0)
+    }
+
     @Test
     func `throws parseFailed on invalid JSON`() {
         #expect(throws: ProbeError.parseFailed("Failed to parse billing response as JSON")) {

@@ -161,24 +161,33 @@ fn as_f64(v: Option<&Value>) -> Option<f64> {
     v.and_then(|x| x.as_f64().or_else(|| x.as_i64().map(|i| i as f64)))
 }
 
+/// Parse billing meters.
+///
+/// After a weekly reset, xAI often omits `creditUsagePercent` / `productUsage`
+/// until any spend occurs. `currentPeriod` still has bounds — treat missing
+/// usage as 0% used (100% remaining).
 fn parse_meters(root: &Value) -> Vec<QuotaMeter> {
     let config = root.get("config").unwrap_or(root);
     let mut meters = Vec::new();
 
-    if let Some(pct) = as_f64(config.get("creditUsagePercent")) {
-        let period = config.get("currentPeriod");
-        let ptype = period
-            .and_then(|p| p.get("type"))
-            .and_then(|t| t.as_str())
-            .unwrap_or("");
-        let end_str = period.and_then(|p| p.get("end")).and_then(|e| e.as_str());
-        let reset_text = end_str.map(|s| format!("重置: {s}"));
-        let resets_at = crate::models::parse_iso_unix(end_str);
-        let rem = Some((100.0 - pct).clamp(-100.0, 100.0));
-        if ptype.contains("WEEK") {
-            meters.push(QuotaMeter::weekly(rem, reset_text, resets_at));
-        } else if ptype.contains("MONTH") {
+    let period = config.get("currentPeriod");
+    let ptype = period
+        .and_then(|p| p.get("type"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+    let end_str = period.and_then(|p| p.get("end")).and_then(|e| e.as_str());
+    let reset_text = end_str.map(|s| format!("重置: {s}"));
+    let resets_at = crate::models::parse_iso_unix(end_str);
+
+    // Missing after 7D reset → 0% used, not "no data"
+    let usage_pct = as_f64(config.get("creditUsagePercent"));
+    if usage_pct.is_some() || period.is_some() {
+        let rem = Some((100.0 - usage_pct.unwrap_or(0.0)).clamp(-100.0, 100.0));
+        if ptype.contains("MONTH") {
             meters.push(QuotaMeter::time_limit("本月额度", rem, reset_text, resets_at));
+        } else if ptype.contains("WEEK") || period.is_some() {
+            // Default to weekly when period exists (incl. post-reset with no type spend yet)
+            meters.push(QuotaMeter::weekly(rem, reset_text, resets_at));
         } else {
             meters.push(QuotaMeter::time_limit("额度", rem, reset_text, resets_at));
         }
@@ -198,6 +207,50 @@ fn parse_meters(root: &Value) -> Vec<QuotaMeter> {
         }
     }
     meters
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn post_weekly_reset_without_usage_fields_yields_full_weekly() {
+        let root = json!({
+            "config": {
+                "currentPeriod": {
+                    "type": "USAGE_PERIOD_TYPE_WEEKLY",
+                    "start": "2026-08-06T02:57:25.059507+00:00",
+                    "end": "2026-08-13T02:57:25.059507+00:00"
+                },
+                "onDemandCap": {"val": 0},
+                "onDemandUsed": {"val": 0}
+            }
+        });
+        let meters = parse_meters(&root);
+        assert_eq!(meters.len(), 1);
+        assert_eq!(meters[0].key, "weekly");
+        assert_eq!(meters[0].remaining_percent, Some(100.0));
+        assert!(meters[0].resets_at_unix.is_some());
+    }
+
+    #[test]
+    fn empty_root_has_no_meters() {
+        let meters = parse_meters(&json!({}));
+        assert!(meters.is_empty());
+    }
+
+    #[test]
+    fn explicit_usage_still_maps_remaining() {
+        let root = json!({
+            "config": {
+                "currentPeriod": {"type": "USAGE_PERIOD_TYPE_WEEKLY"},
+                "creditUsagePercent": 25.0
+            }
+        });
+        let meters = parse_meters(&root);
+        assert_eq!(meters[0].remaining_percent, Some(75.0));
+    }
 }
 
 pub async fn probe_grok() -> Result<Vec<QuotaMeter>, String> {

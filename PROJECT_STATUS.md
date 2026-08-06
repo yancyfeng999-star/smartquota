@@ -2,8 +2,8 @@
 
 | 字段 | 值 |
 |------|-----|
-| **日期** | 2026-08-05 |
-| **Mac** | 0.3.12 (build 15) · [GitHub Release v0.3.12](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.12) |
+| **日期** | 2026-08-06 |
+| **Mac** | 0.3.13 (build 16) · [GitHub Release v0.3.13](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.13) |
 | **Windows** | 源码 0.5.0；公开安装包见 [windows-v0.1.0](https://github.com/yancyfeng999-star/smartquota/releases/tag/windows-v0.1.0) |
 | **状态** | **暂时完结** — 功能与文档已交付，可日常使用 |
 

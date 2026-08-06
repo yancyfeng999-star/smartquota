@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.13] — 2026-08-06
+
+### Fixed
+- **Grok 7D 重置后额度全 `-`**：xAI billing 在新周期尚无消耗时会省略 `creditUsagePercent` / `productUsage`；现按 `currentPeriod` 视为 0% 已用（7D=100%，总额可估算）。Mac + Windows 同步修复
+
+### Release
+- GitHub：`v0.3.13` · `SmartQuota-0.3.13.dmg` / `.pkg`
+
+---
+
 ## [Mac 0.3.12] — 2026-08-05
 
 ### Fixed
