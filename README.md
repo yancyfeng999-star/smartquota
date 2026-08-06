@@ -6,7 +6,7 @@
 |--|--|
 | **中文名** | 智额 |
 | **英文名** | SmartQuota |
-| **macOS** | **0.3.14** (build 17) · 菜单栏 · Swift / Tuist · macOS 15+ |
+| **macOS** | **0.3.15** (build 18) · 菜单栏 · Swift / Tuist · macOS 15+ |
 | **Windows** | **0.5.0** · 系统托盘 · Tauri 2 · Setup.exe · Win 10/11 |
 | **许可证** | [MIT](./LICENSE) |
 | **仓库** | [github.com/yancyfeng999-star/smartquota](https://github.com/yancyfeng999-star/smartquota) |
@@ -22,12 +22,12 @@
 
 ### macOS 最新版
 
-**Release：** [v0.3.14](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.14)
+**Release：** [v0.3.15](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.15)
 
 | 文件 | 用法 |
 |------|------|
-| [SmartQuota-0.3.14.dmg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.14/SmartQuota-0.3.14.dmg) | 打开后把 **智额.app** 拖到 Applications（推荐） |
-| [SmartQuota-0.3.14.pkg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.14/SmartQuota-0.3.14.pkg) | 双击安装向导 |
+| [SmartQuota-0.3.15.dmg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.15/SmartQuota-0.3.15.dmg) | 打开后把 **智额.app** 拖到 Applications（推荐） |
+| [SmartQuota-0.3.15.pkg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.15/SmartQuota-0.3.15.pkg) | 双击安装向导 |
 
 - 系统：**macOS 15.0+**
 - 首次打开若提示「无法验证开发者」：**Control + 点击 → 打开**，或 **系统设置 → 隐私与安全性 → 仍要打开**
@@ -55,9 +55,9 @@
 - **固定窗口 / 排序 / 告警阈值 / 临近重置提醒**  
 - **用户扩展**：`~/.smartquota/extensions`（manifest + 脚本）
 
-### Mac 0.3.14 亮点
+### Mac 0.3.15 亮点
 
-- **总额**：有接口月额度读真值；否则按**续费日日历线性递减**（与 7D 脱钩）  
+- **总额（全渠道）**：真月额度优先；否则续费日线性递减（Codex/Kimi/MiniMax/Grok 统一）  
 - **修复 Grok**：7D 重置后本周尚无消耗时，额度不再显示为全 `-`  
 - **检查更新**：读 GitHub Releases → 下载 dmg/pkg → 打开安装器 → 退出当前 App  
 - MiniMax 视频按 **条数**（如 3/3）显示  

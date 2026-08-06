@@ -230,34 +230,29 @@ struct ProviderSummaryCardView: View {
 
     private var isCodex: Bool { provider.id == "codex" }
 
-    /// First row always: 5h · 7d · 总额（缺数据时占位，不由 7d 估算总额）
+    /// First row always: 5H · 7D · 总额（**所有渠道**同一规则）
+    /// - 5H / 7D：读到用真值，否则 `—`
+    /// - 总额：读到真实月额度用真值；否则按续费日日历线性递减（与 7D 脱钩）
     private var primaryColumns: [SummaryQuotaItem] {
-        // Even without snapshot, keep three slots so layout is stable
-        guard let snapshot else {
-            return [
-                SummaryQuotaItem.placeholder(title: l10n.t("quota.5h")),
-                SummaryQuotaItem.placeholder(title: l10n.t("quota.weekly")),
-                SummaryQuotaItem.placeholder(title: l10n.t("quota.monthly")),
-            ]
-        }
+        let snapshot = self.snapshot
 
         let session: SummaryQuotaItem = {
-            if let q = snapshot.sessionQuota {
+            if let q = snapshot?.sessionQuota {
                 return SummaryQuotaItem(from: q, title: l10n.t("quota.5h"))
             }
             return SummaryQuotaItem.placeholder(title: l10n.t("quota.5h"))
         }()
 
         let weekly: SummaryQuotaItem = {
-            if let q = snapshot.weeklyQuota {
+            if let q = snapshot?.weeklyQuota {
                 return SummaryQuotaItem(from: q, title: l10n.t("quota.weekly"))
             }
             return SummaryQuotaItem.placeholder(title: l10n.t("quota.weekly"))
         }()
 
-        // 总额：① 接口真实月额度 ② 否则按续费日日历线性递减（与 7D 脱钩）
+        // 总额：全渠道统一 — 真月额度优先，否则续费日递减（无 snapshot 也估）
         let monthly: SummaryQuotaItem = {
-            if let q = realMonthly(in: snapshot) {
+            if let snapshot, let q = realMonthly(in: snapshot) {
                 return SummaryQuotaItem(from: q, title: l10n.t("quota.monthly"))
             }
             return estimatedMonthlyItem(providerId: provider.id)
@@ -266,8 +261,8 @@ struct ProviderSummaryCardView: View {
         return [session, weekly, monthly]
     }
 
-    /// 总额估算：读不到真实月额度时，按开通日推算的下一续费日做日历线性剩余
-    /// `remaining% = 剩余天数 / 周期天数 × 100`（每天自然下降，不跟 7D 用量挂钩）。
+    /// 全渠道总额回退：开通日 → 下一续费日，`remaining% = 剩余天数/周期天数×100`。
+    /// 未填续费日时退回到本自然月末线性（仍保证「总额」列有数，不跟 7D 挂钩）。
     private func estimatedMonthlyItem(providerId: String) -> SummaryQuotaItem {
         _ = settings.planLabelsRevision // refresh when 开通/续费日 changes
         let raw = AppSettings.shared.renewalDate(for: providerId)
@@ -282,7 +277,6 @@ struct ProviderSummaryCardView: View {
                 isEstimated: true
             )
         }
-        // 未填续费日：退回到本自然月末线性
         let est = MonthlyFromWeekly.estimateWithoutRenewal()
         return SummaryQuotaItem(
             title: title,
@@ -347,13 +341,28 @@ struct ProviderSummaryCardView: View {
         return cols
     }
 
+    /// Real monthly meter from probe (any provider). Prefer explicit names, then ~month window.
     private func realMonthly(in snapshot: UsageSnapshot) -> UsageQuota? {
-        snapshot.quotas.first { quota in
+        if let named = snapshot.quotas.first(where: { quota in
             if case .timeLimit(let name) = quota.quotaType {
+                let n = name.lowercased()
+                return n.contains("month") || n.contains("月") || n.contains("billing")
+            }
+            if case .modelSpecific(let name) = quota.quotaType {
                 let n = name.lowercased()
                 return n.contains("month") || n.contains("月")
             }
             return false
+        }) {
+            return named
+        }
+        // Window length ≈ one calendar month (exclude session / weekly)
+        return snapshot.quotas.first { quota in
+            if case .session = quota.quotaType { return false }
+            if case .weekly = quota.quotaType { return false }
+            guard let duration = quota.windowDuration else { return false }
+            let day: TimeInterval = 86_400
+            return duration >= 25 * day && duration <= 40 * day
         }
     }
 

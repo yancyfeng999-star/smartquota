@@ -1,12 +1,12 @@
 import Foundation
 
-/// **总额** when the API has no real monthly quota window.
+/// **总额** fallback for **every** membership channel (Codex / Kimi / MiniMax / Grok / …).
 ///
-/// Policy (product):
+/// Product policy:
 /// 1. Prefer a real monthly meter from the probe when present (handled in UI).
 /// 2. Otherwise: **calendar linear remaining** to the next membership renewal —
 ///    `remaining% = daysLeft / cycleDays × 100`, decreasing roughly once per day.
-///    Independent of 7D / weekly usage (weekly resets must not fake a full tank).
+///    Independent of 5H / 7D usage (weekly resets must not fake a full tank).
 ///
 /// Cycle is anchored on next renewal: previous anniversary → renewal (≈ one calendar month).
 public enum MonthlyFromWeekly {

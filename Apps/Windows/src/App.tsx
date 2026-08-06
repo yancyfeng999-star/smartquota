@@ -393,21 +393,25 @@ export default function App() {
                   {i18n.status[card.status] ?? card.status}
                 </span>
               </div>
-              {card.status === "setup" ||
-              card.status === "error" ||
-              card.status === "disabled" ? (
+              {card.status === "disabled" ? (
                 <p className="detail setup">{card.detail}</p>
               ) : (
                 <>
-                  {(card.meters?.length ? card.meters : fallbackMeters(card)).map((m) => (
-                    <Meter
-                      key={m.key || m.label}
-                      label={m.label}
-                      value={m.remainingPercent}
-                      hint={m.resetText}
-                      urgency={resetUrgency(m.resetsAtUnix, settings?.nearResetAlertHours ?? 24)}
-                    />
-                  ))}
+                  {/* 全渠道统一：5H · 7D · 总额（真月额度优先，否则续费日线性递减） */}
+                  {primaryMeters(card, settings?.providers?.[card.providerId]?.renewalDate).map(
+                    (m) => (
+                      <Meter
+                        key={m.key || m.label}
+                        label={m.label}
+                        value={m.remainingPercent}
+                        hint={m.resetText}
+                        urgency={resetUrgency(
+                          m.resetsAtUnix,
+                          settings?.nearResetAlertHours ?? 24
+                        )}
+                      />
+                    )
+                  )}
                   <p className="detail">{card.detail}</p>
                 </>
               )}
@@ -905,23 +909,115 @@ function nearestRefresh(secs: number): number {
   return opts.reduce((a, b) => (Math.abs(b - secs) < Math.abs(a - secs) ? b : a));
 }
 
-function fallbackMeters(card: QuotaCard): QuotaMeter[] {
-  return [
-    {
+/** 5H · 7D · 总额 — same policy as Mac for every provider. */
+function primaryMeters(card: QuotaCard, renewalDate?: string | null): QuotaMeter[] {
+  const meters = card.meters ?? [];
+
+  const session =
+    meters.find((m) => m.kind === "session" || m.key === "session") ??
+    ({
       key: "session",
       kind: "session",
-      label: "5 小时",
+      label: "5H",
       remainingPercent: card.sessionRemainingPercent,
       resetText: null,
-    },
-    {
+    } satisfies QuotaMeter);
+
+  const weekly =
+    meters.find((m) => m.kind === "weekly" || m.key === "weekly") ??
+    ({
       key: "weekly",
       kind: "weekly",
-      label: "7 天",
+      label: "7D",
       remainingPercent: card.weeklyRemainingPercent,
       resetText: null,
-    },
+    } satisfies QuotaMeter);
+
+  const realMonthly = meters.find((m) => isRealMonthlyMeter(m));
+  const monthly: QuotaMeter = realMonthly
+    ? { ...realMonthly, key: realMonthly.key || "monthly", label: "总额" }
+    : calendarMonthlyMeter(renewalDate);
+
+  return [
+    { ...session, label: "5H" },
+    { ...weekly, label: "7D" },
+    monthly,
   ];
+}
+
+function isRealMonthlyMeter(m: QuotaMeter): boolean {
+  const label = (m.label || "").toLowerCase();
+  const key = (m.key || "").toLowerCase();
+  const kind = (m.kind || "").toLowerCase();
+  if (kind === "session" || kind === "weekly" || key === "session" || key === "weekly") {
+    return false;
+  }
+  if (kind === "monthly" || key.includes("month") || key.includes("月")) return true;
+  if (label.includes("month") || label.includes("月") || label.includes("总额")) return true;
+  if (kind === "time" && (label.includes("billing") || label.includes("本月"))) return true;
+  return false;
+}
+
+/** remaining% = daysLeft / cycleDays × 100 to next renewal (or end of calendar month). */
+function calendarMonthlyMeter(renewalDate?: string | null): QuotaMeter {
+  const now = new Date();
+  const today = startOfLocalDay(now);
+  let renewDay: Date;
+  if (renewalDate && renewalDate.trim()) {
+    const activation = parseYmd(renewalDate.trim());
+    renewDay = activation ? nextRenewal(activation, today) : endOfLocalMonth(today);
+  } else {
+    renewDay = endOfLocalMonth(today);
+  }
+  const cycleStart = addMonths(renewDay, -1);
+  const cycleDays = Math.max(1, daysBetween(cycleStart, renewDay));
+  const daysLeft = renewDay.getTime() <= today.getTime() ? 0 : daysBetween(today, renewDay);
+  const remaining = Math.max(0, Math.min(100, (100 * daysLeft) / cycleDays));
+  const y = renewDay.getFullYear();
+  const mo = String(renewDay.getMonth() + 1).padStart(2, "0");
+  const d = String(renewDay.getDate()).padStart(2, "0");
+  return {
+    key: "monthly-est",
+    kind: "time",
+    label: "总额",
+    remainingPercent: remaining,
+    resetText: `${y}-${mo}-${d}`,
+    resetsAtUnix: Math.floor(renewDay.getTime() / 1000),
+  };
+}
+
+function parseYmd(raw: string): Date | null {
+  const m = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(d.getTime()) ? null : startOfLocalDay(d);
+}
+
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function endOfLocalMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+}
+
+function addMonths(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + n, d.getDate());
+}
+
+/** Next calendar-month anniversary on or after today (activation day-of-month). */
+function nextRenewal(activation: Date, today: Date): Date {
+  let candidate = startOfLocalDay(activation);
+  if (candidate.getTime() > today.getTime()) return candidate;
+  while (candidate.getTime() < today.getTime()) {
+    candidate = addMonths(candidate, 1);
+  }
+  return candidate;
+}
+
+function daysBetween(from: Date, to: Date): number {
+  const ms = startOfLocalDay(to).getTime() - startOfLocalDay(from).getTime();
+  return Math.round(ms / 86_400_000);
 }
 
 function resetUrgency(unix: number | null | undefined, nearHours: number): string {

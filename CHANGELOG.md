@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.15] — 2026-08-06
+
+### Changed
+- **总额（全渠道）**：Codex / Kimi / MiniMax / Grok 及扩展统一规则——能读到真实月额度用真值；否则一律按**续费日日历线性递减**（无探测数据时也显示总额列；Windows 同步）
+
+### Release
+- GitHub：`v0.3.15` · `SmartQuota-0.3.15.dmg` / `.pkg`
+
+---
+
 ## [Mac 0.3.14] — 2026-08-06
 
 ### Changed
