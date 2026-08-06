@@ -2,7 +2,7 @@
 
 macOS **菜单栏**应用。  
 技术：**Swift / SwiftUI / Tuist**  
-当前版本：**0.3.13**（build 16）
+当前版本：**0.3.14**（build 17）
 
 与 [`../Windows`](../Windows/) **平级**。
 

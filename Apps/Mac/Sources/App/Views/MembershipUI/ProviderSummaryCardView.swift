@@ -255,42 +255,37 @@ struct ProviderSummaryCardView: View {
             return SummaryQuotaItem.placeholder(title: l10n.t("quota.weekly"))
         }()
 
-        // 总额：优先真实月额度；否则用 7d + 会员续费日反推
+        // 总额：① 接口真实月额度 ② 否则按续费日日历线性递减（与 7D 脱钩）
         let monthly: SummaryQuotaItem = {
             if let q = realMonthly(in: snapshot) {
                 return SummaryQuotaItem(from: q, title: l10n.t("quota.monthly"))
             }
-            if let w = snapshot.weeklyQuota {
-                return estimatedMonthlyItem(from: w, providerId: provider.id)
-            }
-            return SummaryQuotaItem.placeholder(title: l10n.t("quota.monthly"))
+            return estimatedMonthlyItem(providerId: provider.id)
         }()
 
         return [session, weekly, monthly]
     }
 
-    /// 总额估算：7d 剩余 + 会员开通日推算的续费日（无续费日则 7/30 回退）
-    private func estimatedMonthlyItem(from weekly: UsageQuota, providerId: String) -> SummaryQuotaItem {
+    /// 总额估算：读不到真实月额度时，按开通日推算的下一续费日做日历线性剩余
+    /// `remaining% = 剩余天数 / 周期天数 × 100`（每天自然下降，不跟 7D 用量挂钩）。
+    private func estimatedMonthlyItem(providerId: String) -> SummaryQuotaItem {
         _ = settings.planLabelsRevision // refresh when 开通/续费日 changes
         let raw = AppSettings.shared.renewalDate(for: providerId)
+        let title = l10n.t("quota.monthly")
         if let activation = MembershipRenewal.parse(raw) {
             let renew = MembershipRenewal.nextRenewal(fromActivation: activation)
-            let est = MonthlyFromWeekly.estimate(
-                weeklyRemaining: weekly.percentRemaining,
-                renewalAt: renew
-            )
+            let est = MonthlyFromWeekly.estimate(renewalAt: renew)
             return SummaryQuotaItem(
-                title: l10n.t("quota.monthly"),
+                title: title,
                 percentRemaining: est.percentRemaining,
                 resetText: SummaryQuotaItem.formatTimeOnly(est.resetsAt),
                 isEstimated: true
             )
         }
-        let est = MonthlyFromWeekly.estimateWithoutRenewal(
-            weeklyRemaining: weekly.percentRemaining
-        )
+        // 未填续费日：退回到本自然月末线性
+        let est = MonthlyFromWeekly.estimateWithoutRenewal()
         return SummaryQuotaItem(
-            title: l10n.t("quota.monthly"),
+            title: title,
             percentRemaining: est.percentRemaining,
             resetText: SummaryQuotaItem.formatTimeOnly(est.resetsAt),
             isEstimated: true

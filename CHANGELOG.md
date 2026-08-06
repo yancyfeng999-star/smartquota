@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.14] — 2026-08-06
+
+### Changed
+- **总额**：有接口月额度则读真值；否则按**续费日日历线性递减** `剩余天数/周期天数×100`（每天下降，与 7D 用量脱钩，避免重置后假 100%）
+
+### Release
+- GitHub：`v0.3.14` · `SmartQuota-0.3.14.dmg` / `.pkg`
+
+---
+
 ## [Mac 0.3.13] — 2026-08-06
 
 ### Fixed
