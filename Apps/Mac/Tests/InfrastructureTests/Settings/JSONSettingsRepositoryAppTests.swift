@@ -84,6 +84,26 @@ struct JSONSettingsRepositoryAppTests {
     }
 
     @Test
+    func `menuBarStatusIconEnabled defaults to false`() {
+        let (repo, dir) = makeRepository()
+        defer { cleanup(dir) }
+
+        #expect(repo.menuBarStatusIconEnabled() == false)
+    }
+
+    @Test
+    func `setMenuBarStatusIconEnabled persists value`() {
+        let (repo, dir) = makeRepository()
+        defer { cleanup(dir) }
+
+        repo.setMenuBarStatusIconEnabled(true)
+        #expect(repo.menuBarStatusIconEnabled() == true)
+
+        repo.setMenuBarStatusIconEnabled(false)
+        #expect(repo.menuBarStatusIconEnabled() == false)
+    }
+
+    @Test
     func `menuBarPercentageSelection defaults to claude session`() {
         let (repo, dir) = makeRepository()
         defer { cleanup(dir) }
@@ -323,6 +343,7 @@ struct JSONSettingsRepositoryAppTests {
         repo1.setShowDailyUsageCards(false)
         repo1.setOverviewModeEnabled(true)
         repo1.setMenuBarPercentageEnabled(true)
+        repo1.setMenuBarStatusIconEnabled(true)
         repo1.setMenuBarPercentageProviderId("codex")
         repo1.setMenuBarPercentageQuotaKey("model:gpt-5")
 
@@ -332,6 +353,7 @@ struct JSONSettingsRepositoryAppTests {
         #expect(repo2.showDailyUsageCards() == false)
         #expect(repo2.overviewModeEnabled() == true)
         #expect(repo2.menuBarPercentageEnabled() == true)
+        #expect(repo2.menuBarStatusIconEnabled() == true)
         #expect(repo2.menuBarPercentageProviderId() == "codex")
         #expect(repo2.menuBarPercentageQuotaKey() == "model:gpt-5")
     }

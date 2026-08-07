@@ -59,6 +59,15 @@ public final class AppSettings {
         }
     }
 
+    /// When true, the menu bar shows quota-status icons (green bars, warning
+    /// triangle, etc.). When false (default), shows the brand logo.
+    /// Only applies when percentage/duration text is not shown.
+    public var menuBarStatusIconEnabled: Bool {
+        didSet {
+            repository.setMenuBarStatusIconEnabled(menuBarStatusIconEnabled)
+        }
+    }
+
     /// Whether the menu bar label should show the compact reset duration for the
     /// selected quota. Independent of `menuBarPercentageEnabled`; both can be on
     /// simultaneously (in which case they are joined by " · ").
@@ -321,6 +330,7 @@ public final class AppSettings {
         self.nearResetAlertHours = repository.nearResetAlertHours()
         self.underuseAlertRemaining = repository.underuseAlertRemaining()
         self.menuBarPercentageEnabled = repository.menuBarPercentageEnabled()
+        self.menuBarStatusIconEnabled = repository.menuBarStatusIconEnabled()
         self.menuBarDurationEnabled = repository.menuBarDurationEnabled()
         self.menuBarStackedEnabled = repository.menuBarStackedEnabled()
         // The stored size decodes through the Domain fallback so an unknown
