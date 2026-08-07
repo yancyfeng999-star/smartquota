@@ -24,6 +24,11 @@ public protocol AppSettingsRepository: Sendable {
     func menuBarPercentageEnabled() -> Bool
     func setMenuBarPercentageEnabled(_ enabled: Bool)
 
+    /// When true, the status item shows quota-status SF Symbols (bars / warning
+    /// triangle). When false (default), shows the brand logo instead.
+    func menuBarStatusIconEnabled() -> Bool
+    func setMenuBarStatusIconEnabled(_ enabled: Bool)
+
     func menuBarDurationEnabled() -> Bool
     func setMenuBarDurationEnabled(_ enabled: Bool)
 

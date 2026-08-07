@@ -32,6 +32,7 @@ final class StatusItemLabelDriver {
     private var loopSync: ObservationRenderSync<RefreshLoopKey>?
     private var streamConsumer: Task<Void, Never>?
     private var wakeObserver: NSObjectProtocol?
+    private var appearanceObserver: NSObjectProtocol?
 
     /// The image currently owned by this driver, and the content it encodes.
     /// Used both to skip redundant redraws (repainting an intact image can
@@ -59,6 +60,8 @@ final class StatusItemLabelDriver {
         var fallbackStatus: QuotaStatus
         var sessionPhase: ClaudeSession.Phase?
         var themeModeId: String
+        /// When true, draw status-based SF Symbols; when false, brand logo.
+        var statusIconEnabled: Bool = false
         /// Whether a dual-window label should render as two stacked smaller
         /// lines instead of one long "A | B" line (opt-in setting).
         var stacked: Bool = false
@@ -66,6 +69,8 @@ final class StatusItemLabelDriver {
         /// content (not read at draw time) so changing the size in Settings
         /// invalidates the observation sync and repaints the label.
         var stackedSize: MenuBarStackedSize = .default
+        /// Captured so light/dark AppLogo variants repaint when appearance flips.
+        var appearanceIsDark: Bool = false
     }
 
     /// Attaches to the `NSStatusItem` exposed by MenuBarExtraAccess and starts
@@ -109,6 +114,17 @@ final class StatusItemLabelDriver {
                 Task { @MainActor in self?.labelSync?.renderNow() }
             }
         }
+
+        if appearanceObserver == nil {
+            // Light/dark logo assets and status colors depend on effective appearance.
+            appearanceObserver = NotificationCenter.default.addObserver(
+                forName: Notification.Name("NSApplicationDidChangeEffectiveAppearanceNotification"),
+                object: NSApp,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.labelSync?.renderNow() }
+            }
+        }
     }
 
     /// Defense-in-depth repaint around dropdown open/close (the KVO observer
@@ -130,13 +146,18 @@ final class StatusItemLabelDriver {
             burnRateThreshold: settings.burnRateThreshold
         )
 
+        let isDark = NSApp.effectiveAppearance
+            .bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+
         return LabelContent(
             label: freshLabel ?? lastKnownLabel(whenFreshIsMissing: freshLabel),
             fallbackStatus: effectiveSelectedProviderStatus,
             sessionPhase: sessionMonitor.activeSession?.phase,
             themeModeId: settings.themeMode,
+            statusIconEnabled: settings.menuBarStatusIconEnabled,
             stacked: settings.menuBarStackedEnabled,
-            stackedSize: settings.menuBarStackedSize
+            stackedSize: settings.menuBarStackedSize,
+            appearanceIsDark: isDark
         )
     }
 
@@ -188,8 +209,8 @@ final class StatusItemLabelDriver {
     // MARK: - Image Composition
 
     /// Composes the full status-item image: optional session glyph, then the
-    /// usage text — or the themed status icon when no label is configured or
-    /// no quota data exists yet. Mirrors the old SwiftUI label exactly.
+    /// usage text — or the brand logo (default) / status icon when no text
+    /// label is configured.
     static func compose(_ content: LabelContent, theme: any AppThemeProvider) -> NSImage {
         var parts: [NSImage] = []
 
@@ -219,15 +240,44 @@ final class StatusItemLabelDriver {
                     color: theme.statusColor(for: label.status)
                 ))
             }
-        } else {
+        } else if content.statusIconEnabled {
             let symbolName = theme.statusBarIconName ?? fallbackIconName(for: content.fallbackStatus)
             parts.append(symbolImage(
                 symbolName,
                 color: NSColor(theme.statusColor(for: content.fallbackStatus))
             ))
+        } else {
+            parts.append(brandLogoImage(preferDark: content.appearanceIsDark))
         }
 
         return hStack(parts, spacing: 3)
+    }
+
+    /// Brand mark for the default status-item look (~18pt, menu-bar height).
+    /// Uses `AppLogo` light/dark assets; falls back to a neutral gauge symbol.
+    private static func brandLogoImage(preferDark: Bool) -> NSImage {
+        let pointSize: CGFloat = 18
+        guard let source = NSImage(named: "AppLogo") else {
+            return symbolImage("gauge.with.dots.needle.67percent", color: .labelColor)
+        }
+
+        // Bake inside the matching appearance so light/dark AppLogo variants resolve.
+        let appearance = NSAppearance(named: preferDark ? .darkAqua : .aqua)
+        let image = NSImage(size: NSSize(width: pointSize, height: pointSize), flipped: false) { rect in
+            appearance?.performAsCurrentDrawingAppearance {
+                source.draw(
+                    in: rect,
+                    from: .zero,
+                    operation: .sourceOver,
+                    fraction: 1.0,
+                    respectFlipped: true,
+                    hints: [.interpolation: NSImageInterpolation.high]
+                )
+            }
+            return true
+        }
+        image.isTemplate = false
+        return image
     }
 
     private static func fallbackIconName(for status: QuotaStatus) -> String {

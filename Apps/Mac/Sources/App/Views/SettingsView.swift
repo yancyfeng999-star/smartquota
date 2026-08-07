@@ -53,6 +53,7 @@ struct SettingsContentView: View {
                     themeCard
                     LanguageSettingsCard()
                     simpleDisplayModeCard
+                    menuBarStatusIconCard
                     // 1) Toggle memberships on/off
                     SettingsMembershipSection(monitor: monitor, isExpanded: $providersExpanded)
                     QuotaDetectionConfigSection(monitor: monitor)
@@ -116,6 +117,59 @@ struct SettingsContentView: View {
                     }
                 }
             }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(theme.cardGradient)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(theme.glassBorder, lineWidth: 1)
+                )
+        )
+    }
+
+    // MARK: - Menu bar status icon (opt-in)
+
+    /// Default status item shows the brand logo; enable to show quota-status
+    /// SF Symbols (green bars / warning triangle / depleted bars).
+    private var menuBarStatusIconCard: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(theme.accentGradient)
+                    .frame(width: 28, height: 28)
+                Image(systemName: "chart.bar.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(theme.id == "cli" ? theme.textPrimary : .white)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(l10n.t("settings.menu_bar_status_icon"))
+                    .font(.system(size: 13, weight: .bold, design: theme.fontDesign))
+                    .foregroundStyle(theme.textPrimary)
+                    .lineLimit(1)
+                Text(l10n.t("settings.menu_bar_status_icon_sub"))
+                    .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                    .foregroundStyle(theme.textTertiary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 8)
+
+            Toggle("", isOn: Binding(
+                get: { settings.menuBarStatusIconEnabled },
+                set: { enabled in
+                    AppMotion.withSelection {
+                        settings.menuBarStatusIconEnabled = enabled
+                    }
+                }
+            ))
+            .toggleStyle(.switch)
+            .tint(theme.accentPrimary)
+            .scaleEffect(0.8)
+            .labelsHidden()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

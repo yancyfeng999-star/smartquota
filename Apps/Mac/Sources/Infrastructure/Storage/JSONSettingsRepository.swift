@@ -74,6 +74,14 @@ public final class JSONSettingsRepository:
         store.write(value: enabled, key: "app.menuBarPercentageEnabled")
     }
 
+    public func menuBarStatusIconEnabled() -> Bool {
+        store.read(key: "app.menuBarStatusIconEnabled") ?? false
+    }
+
+    public func setMenuBarStatusIconEnabled(_ enabled: Bool) {
+        store.write(value: enabled, key: "app.menuBarStatusIconEnabled")
+    }
+
     public func menuBarDurationEnabled() -> Bool {
         store.read(key: "app.menuBarDurationEnabled") ?? false
     }
