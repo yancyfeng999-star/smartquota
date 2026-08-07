@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.17] — 2026-08-07
+
+### Changed
+- **状态栏图标**：默认显示品牌 Logo；设置新增「状态栏额度图标」开关（默认关），开启后才显示绿柱 / 感叹三角等额度状态符号
+
+### Release
+- GitHub：`v0.3.17` · `SmartQuota-0.3.17.dmg` / `.pkg`
+
+---
+
 ## [Mac 0.3.16] — 2026-08-06
 
 ### Fixed
