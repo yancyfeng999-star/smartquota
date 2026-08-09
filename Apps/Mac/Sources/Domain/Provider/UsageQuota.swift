@@ -107,6 +107,16 @@ public struct UsageQuota: Sendable, Equatable, Hashable, Comparable {
         dollarRemaining != nil
     }
 
+    /// Whether this meter should drive card / menu-bar overall status (worst-wins).
+    ///
+    /// Uncapped credit balances (`dollarRemaining` with no `dollarCap`) are
+    /// informational top-ups (e.g. ChatGPT 加油包 / 积分). A zero balance is a
+    /// normal idle state and must **not** mark the membership as depleted when
+    /// rate-limit windows still have remaining quota.
+    public var affectsOverallStatus: Bool {
+        !(isDollarBased && dollarCap == nil)
+    }
+
     /// Formatted dollar remaining string (e.g., "$50.00"), nil for percentage-based quotas
     public var formattedDollarRemaining: String? {
         guard let dollarRemaining else { return nil }

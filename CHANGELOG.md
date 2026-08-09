@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## Unreleased
+
+### Fixed
+- **ChatGPT 积分 0 误标「用尽」**：加油包 / 积分余额为 0 时不再把整张会员卡标成用尽；周额度（7D / GPT-5.3）重置满后徽章应显示正常。无 cap 的美元余额不参与 overall 最差状态。
+
+---
+
 ## [Mac 0.3.18] — 2026-08-07
 
 ### Changed

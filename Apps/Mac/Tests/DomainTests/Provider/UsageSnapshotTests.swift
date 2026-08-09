@@ -166,6 +166,60 @@ struct UsageSnapshotTests {
         #expect(snapshot.overallStatus == .depleted)
     }
 
+    @Test
+    func `overall status ignores zero uncapped credit balance`() {
+        // ChatGPT 加油包 / 积分 at 0 must not mark the card "用尽" when rate limits are full.
+        let quotas = [
+            UsageQuota(percentRemaining: 100, quotaType: .weekly, providerId: "codex"),
+            UsageQuota(
+                percentRemaining: 0,
+                quotaType: .timeLimit("Credits"),
+                providerId: "codex",
+                dollarRemaining: 0,
+                compactTitle: "积分"
+            ),
+        ]
+        let snapshot = UsageSnapshot(providerId: "codex", quotas: quotas, capturedAt: Date())
+
+        #expect(snapshot.overallStatus == .healthy)
+    }
+
+    @Test
+    func `overall status still depleted when rate limit is zero despite credits`() {
+        let quotas = [
+            UsageQuota(percentRemaining: 0, quotaType: .weekly, providerId: "codex"),
+            UsageQuota(
+                percentRemaining: 100,
+                quotaType: .timeLimit("Credits"),
+                providerId: "codex",
+                dollarRemaining: 50,
+                compactTitle: "积分"
+            ),
+        ]
+        let snapshot = UsageSnapshot(providerId: "codex", quotas: quotas, capturedAt: Date())
+
+        #expect(snapshot.overallStatus == .depleted)
+    }
+
+    @Test
+    func `capped dollar spend still drives overall depleted when remaining is zero`() {
+        // dollarCap present → real budget meter, not optional top-up.
+        let quotas = [
+            UsageQuota(percentRemaining: 100, quotaType: .weekly, providerId: "claude"),
+            UsageQuota(
+                percentRemaining: 0,
+                quotaType: .timeLimit("API"),
+                providerId: "claude",
+                dollarRemaining: 0,
+                dollarUsed: 50,
+                dollarCap: 50
+            ),
+        ]
+        let snapshot = UsageSnapshot(providerId: "claude", quotas: quotas, capturedAt: Date())
+
+        #expect(snapshot.overallStatus == .depleted)
+    }
+
     // MARK: - Freshness
 
     @Test
