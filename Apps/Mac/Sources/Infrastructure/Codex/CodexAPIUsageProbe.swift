@@ -290,8 +290,11 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
                 resetsAt: nil,
                 resetText: "积分 \(Self.formatCredits(creditsRemaining))"
             )
+            // Uncapped top-up balance: keep percentRemaining at 100 (AmpCode-style).
+            // Zero credits is idle, not "rate limits exhausted" — overall status
+            // also excludes uncapped dollar balances via affectsOverallStatus.
             quotas.append(UsageQuota(
-                percentRemaining: creditsRemaining > 0 ? 100 : 0,
+                percentRemaining: 100,
                 quotaType: .timeLimit("Credits"),
                 providerId: "codex",
                 resetsAt: nil,

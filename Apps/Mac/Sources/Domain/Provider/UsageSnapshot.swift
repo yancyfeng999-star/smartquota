@@ -133,16 +133,22 @@ public struct UsageSnapshot: Sendable, Equatable {
         }
     }
 
-    /// The overall status is the worst status among all quotas.
-    /// This is a domain rule: overall health reflects the most critical issue.
+    /// The overall status is the worst status among status-driving quotas.
+    /// Uncapped credit balances are excluded — see `UsageQuota.affectsOverallStatus`.
     public var overallStatus: QuotaStatus {
-        quotas.map(\.status).max() ?? .healthy
+        quotas
+            .filter(\.affectsOverallStatus)
+            .map(\.status)
+            .max() ?? .healthy
     }
 
     /// The overall status using burn rate when enabled.
     /// Falls back to absolute thresholds for quotas without reset time.
     public func paceAwareOverallStatus(burnRateThreshold: Double) -> QuotaStatus {
-        quotas.map { $0.paceAwareStatus(burnRateThreshold: burnRateThreshold) }.max() ?? .healthy
+        quotas
+            .filter(\.affectsOverallStatus)
+            .map { $0.paceAwareStatus(burnRateThreshold: burnRateThreshold) }
+            .max() ?? .healthy
     }
 
     /// The quota with the lowest remaining percentage.
@@ -199,7 +205,10 @@ public struct QuotaGroup: Sendable, Equatable, Identifiable {
 
     /// The most critical status within this group — shown while collapsed.
     public var worstStatus: QuotaStatus {
-        quotas.map(\.status).max() ?? .healthy
+        quotas
+            .filter(\.affectsOverallStatus)
+            .map(\.status)
+            .max() ?? .healthy
     }
 
     /// The quota with the least headroom — summarized while collapsed.

@@ -267,6 +267,52 @@ struct CodexAPIUsageProbeTests {
         let credits = snapshot.quotas.first { $0.compactTitle == "积分" }
         #expect(credits != nil)
         #expect(credits?.dollarRemaining == 750)
+        #expect(credits?.percentRemaining == 100)
+    }
+
+    @Test
+    func `zero credits balance does not mark snapshot depleted when rate limits remain`() async throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try createAuthFile(at: tempDir)
+
+        let mockNetwork = MockNetworkClient()
+        let responseJSON = """
+        {
+          "rate_limit": {
+            "primary_window": {
+              "used_percent": 0.0,
+              "limit_window_seconds": 604800
+            }
+          },
+          "credits": {
+            "balance": 0
+          }
+        }
+        """.data(using: .utf8)!
+
+        let response = HTTPURLResponse(
+            url: URL(string: "https://chatgpt.com")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: [
+                "x-codex-credits-balance": "0"
+            ]
+        )!
+
+        given(mockNetwork).request(.any).willReturn((responseJSON, response))
+
+        let loader = CodexCredentialLoader(homeDirectory: tempDir.path)
+        let probe = CodexAPIUsageProbe(credentialLoader: loader, networkClient: mockNetwork)
+
+        let snapshot = try await probe.probe()
+
+        let credits = snapshot.quotas.first { $0.compactTitle == "积分" }
+        #expect(credits != nil)
+        #expect(credits?.dollarRemaining == 0)
+        #expect(credits?.percentRemaining == 100)
+        #expect(snapshot.overallStatus == .healthy)
     }
 
     @Test
