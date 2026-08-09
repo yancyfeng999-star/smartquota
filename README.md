@@ -22,12 +22,12 @@
 
 ### macOS 最新版
 
-**Release：** [v0.3.20](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.20)
+**Release：** [v0.3.21](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.21)
 
 | 文件 | 用法 |
 |------|------|
-| [SmartQuota-0.3.20.dmg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.20/SmartQuota-0.3.20.dmg) | 打开后把 **智额.app** 拖到 Applications（推荐） |
-| [SmartQuota-0.3.20.pkg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.20/SmartQuota-0.3.20.pkg) | 双击安装向导 |
+| [SmartQuota-0.3.21.dmg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.21/SmartQuota-0.3.21.dmg) | 打开后把 **智额.app** 拖到 Applications（推荐） |
+| [SmartQuota-0.3.21.pkg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.21/SmartQuota-0.3.21.pkg) | 双击安装向导 / 应用内一键更新 |
 
 - 系统：**macOS 15.0+**
 - 首次打开若提示「无法验证开发者」：**Control + 点击 → 打开**，或 **系统设置 → 隐私与安全性 → 仍要打开**

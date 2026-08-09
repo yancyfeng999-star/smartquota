@@ -2,10 +2,9 @@
 
 | | |
 |--|--|
-| **Version** | 0.3.20 (build 23) |
-| **Tag** | [`v0.3.20`](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.20) |
-| **DMG（GitHub）** | [SmartQuota-0.3.20.dmg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.20/SmartQuota-0.3.20.dmg) |
-| **PKG（GitHub）** | [SmartQuota-0.3.20.pkg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.20/SmartQuota-0.3.20.pkg) |
-| **本机目录** | [`./v0.3.20/`](./v0.3.20/) |
+| **Version** | 0.3.21 (build 24) |
+| **Tag** | [`v0.3.21`](./v0.3.21/) |
+| **DMG 安装盘** | [`智额-0.3.21.dmg`](./v0.3.21/智额-0.3.21.dmg) |
+| **PKG 安装包** | [`智额-0.3.21.pkg`](./v0.3.21/智额-0.3.21.pkg) |
 
-已装旧版：设置 → **检查更新**。
+安装：打开 DMG → 拖到 Applications；或双击 PKG 按向导安装。
