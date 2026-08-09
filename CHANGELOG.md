@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.23] — 2026-08-09
+
+### Changed
+- **静默更新对齐智余方案**：`pkgutil` 解包 → `nohup apply.sh` 在进程退出后 ditto 覆盖 → 自动打开  
+  - **不再**调用 `installer` / 管理员鉴权（不弹密码框）  
+  - 目标目录不可写时只在设置页报错  
+  - 日志：`~/Library/Logs/SmartQuota/update.log`  
+- 下载失败不再自动打开浏览器发布页
+
+### Release
+- GitHub：`v0.3.23` · `SmartQuota-0.3.23.dmg` / `.pkg`
+- 已装旧版：设置 → **检查更新**
+
+---
+
 ## [Mac 0.3.22] — 2026-08-09
 
 ### Changed

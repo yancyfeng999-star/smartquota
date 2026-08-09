@@ -1,24 +1,25 @@
 import Foundation
 import Domain
 
-/// Installs a local `.pkg` **without** opening Installer.app (no wizard UI).
+/// User-level silent update — **no Installer.app, no admin password sheet**.
 ///
-/// Strategy:
-/// 1. Expand the package with `pkgutil --expand-full`
-/// 2. Locate the embedded `.app`
-/// 3. Replace the running app bundle (or `/Applications/<name>.app`) via `ditto`
-/// 4. Hand off to a short shell script that waits for this process to exit, then relaunches
+/// Matches the SmartBalance / 智余 model:
+/// 1. `pkgutil --expand-full` → find embedded `.app`
+/// 2. Verify destination is **writable by the current user** (else fail with message)
+/// 3. Write `apply.sh` + `nohup` it so it outlives this process
+/// 4. Caller quits; script waits for our PID, then replaces the app and reopens
 ///
-/// If the destination is not writable, falls back to `/usr/sbin/installer -pkg … -target /`
-/// via a one-shot admin shell (may show the **system** password sheet — not an app dialog).
+/// Never calls `installer` / `osascript … administrator privileges`.
 public enum SilentPkgInstaller: Sendable {
 
     public struct Result: Sendable, Equatable {
         public let installedAppURL: URL
-        public let usedAdminInstaller: Bool
+        public let workDirectory: URL
     }
 
-    /// Install `pkgURL` and schedule relaunch of the app after this process quits.
+    private static let logRelativePath = "Library/Logs/SmartQuota/update.log"
+
+    /// Expand pkg, stage apply script, return. Caller should then `NSApp.terminate`.
     @MainActor
     public static func installAndRelaunch(pkgURL: URL) async throws -> Result {
         guard pkgURL.pathExtension.lowercased() == "pkg" else {
@@ -29,74 +30,113 @@ public enum SilentPkgInstaller: Sendable {
         }
 
         let fm = FileManager.default
-        let expandRoot = fm.temporaryDirectory
-            .appendingPathComponent("SmartQuota-pkg-\(UUID().uuidString)", isDirectory: true)
+        // Persist until apply.sh finishes (do NOT delete here).
+        let workDir = fm.temporaryDirectory
+            .appendingPathComponent("SmartQuota-update-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: workDir, withIntermediateDirectories: true)
 
-        defer {
-            try? fm.removeItem(at: expandRoot)
+        log("begin expand pkg=\(pkgURL.path) work=\(workDir.path)")
+
+        let expandRoot = workDir.appendingPathComponent("expanded", isDirectory: true)
+        do {
+            try runProcess(
+                "/usr/sbin/pkgutil",
+                arguments: ["--expand-full", pkgURL.path, expandRoot.path]
+            )
+        } catch {
+            try? fm.removeItem(at: workDir)
+            throw error
         }
 
-        try runProcess(
-            "/usr/sbin/pkgutil",
-            arguments: ["--expand-full", pkgURL.path, expandRoot.path]
-        )
-
         guard let embeddedApp = findAppBundle(under: expandRoot) else {
+            try? fm.removeItem(at: workDir)
             throw ManualUpdateError.install("No .app inside package")
         }
 
         let destination = preferredInstallDestination(forEmbeddedAppName: embeddedApp.lastPathComponent)
-        var usedAdmin = false
+        log("embedded=\(embeddedApp.path) dest=\(destination.path)")
 
-        let parentWritable = canWrite(toDirectory: destination.deletingLastPathComponent())
-        let canUserReplace = canWrite(toAppBundle: destination)
-            || (!fm.fileExists(atPath: destination.path) && parentWritable)
-
-        if canUserReplace {
-            try replaceApp(from: embeddedApp, to: destination)
-        } else {
-            // Needs elevation for /Applications (or locked bundle)
-            try runInstallerAsAdmin(pkgURL: pkgURL)
-            usedAdmin = true
+        guard isUserWritableInstallLocation(destination) else {
+            try? fm.removeItem(at: workDir)
+            let msg = """
+            无法写入 \(destination.path)（当前用户无写权限）。\
+            请将智额装到「应用程序」且由本用户安装后再更新；\
+            不会请求管理员密码。
+            """
+            log("not writable: \(destination.path)")
+            throw ManualUpdateError.install(msg)
         }
 
-        try scheduleRelaunch(appURL: destination, afterPid: ProcessInfo.processInfo.processIdentifier)
-        return Result(installedAppURL: destination, usedAdminInstaller: usedAdmin)
+        // Stage a clean copy under workDir so expand tree can stay intact / simpler paths in script
+        let stagedApp = workDir.appendingPathComponent(embeddedApp.lastPathComponent, isDirectory: true)
+        if fm.fileExists(atPath: stagedApp.path) {
+            try fm.removeItem(at: stagedApp)
+        }
+        try runProcess(
+            "/usr/bin/ditto",
+            arguments: ["--norsrc", "--noextattr", embeddedApp.path, stagedApp.path]
+        )
+
+        let pid = ProcessInfo.processInfo.processIdentifier
+        try writeAndSpawnApplyScript(
+            workDir: workDir,
+            stagedApp: stagedApp,
+            destination: destination,
+            afterPid: pid
+        )
+
+        log("apply.sh spawned; waiting for app quit pid=\(pid)")
+        return Result(installedAppURL: destination, workDirectory: workDir)
     }
 
-    // MARK: - Destination
+    // MARK: - Destination / writability
 
-    /// Prefer replacing the running bundle when installed under Applications; otherwise `/Applications/<name>.app`.
+    /// Prefer the running bundle when it is a real `.app`; else `/Applications/<name>.app`.
     private static func preferredInstallDestination(forEmbeddedAppName appName: String) -> URL {
         let applications = URL(fileURLWithPath: "/Applications/\(appName)", isDirectory: true)
         let running = Bundle.main.bundleURL
-        guard running.pathExtension == "app" else { return applications }
+        guard running.pathExtension.lowercased() == "app" else { return applications }
 
         let path = running.path
-        let homeApps = (NSHomeDirectory() as NSString).appendingPathComponent("Applications") + "/"
-        // Replace in place when the user is running a “real” install (not DerivedData / random folder).
-        if path.hasPrefix("/Applications/")
-            || path.hasPrefix(homeApps)
-            || path.contains("/Desktop/")
-            || path.hasSuffix("/\(appName)") {
-            return running
+        // DerivedData / random build folders → still target Applications (real install).
+        if path.contains("/DerivedData/")
+            || path.contains("/.build/")
+            || path.contains("/Build/Products/") {
+            return applications
         }
-        return applications
+        return running
     }
 
-    private static func canWrite(toAppBundle url: URL) -> Bool {
+    /// True if we can replace/create the app as the **current user** (no elevation).
+    private static func isUserWritableInstallLocation(_ destination: URL) -> Bool {
         let fm = FileManager.default
-        if fm.fileExists(atPath: url.path) {
-            return fm.isWritableFile(atPath: url.path)
+        let parent = destination.deletingLastPathComponent()
+
+        if fm.fileExists(atPath: destination.path) {
+            // Existing bundle: need write on the bundle (or ability to rename it away).
+            if fm.isWritableFile(atPath: destination.path) { return true }
+            // Sometimes the bundle root reports non-writable while parent allows rename.
+            return fm.isWritableFile(atPath: parent.path) && canCreateProbeFile(in: parent)
         }
-        return canWrite(toDirectory: url.deletingLastPathComponent())
+
+        // New install path
+        return canCreateProbeFile(in: parent)
     }
 
-    private static func canWrite(toDirectory url: URL) -> Bool {
-        FileManager.default.isWritableFile(atPath: url.path)
+    private static func canCreateProbeFile(in directory: URL) -> Bool {
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: directory.path) {
+            // Do not create /Applications ourselves without rights
+            return fm.isWritableFile(atPath: directory.path)
+        }
+        guard fm.isWritableFile(atPath: directory.path) else { return false }
+        let probe = directory.appendingPathComponent(".smartquota-write-probe-\(UUID().uuidString)")
+        let ok = fm.createFile(atPath: probe.path, contents: Data(), attributes: nil)
+        if ok { try? fm.removeItem(at: probe) }
+        return ok
     }
 
-    // MARK: - Expand / copy
+    // MARK: - Expand helpers
 
     private static func findAppBundle(under root: URL) -> URL? {
         let fm = FileManager.default
@@ -113,98 +153,99 @@ public enum SilentPkgInstaller: Sendable {
                 enumerator.skipDescendants()
             }
         }
-        // Prefer top-level-ish apps; pick shortest path (closest to expand root)
         return found.min(by: { $0.path.count < $1.path.count })
     }
 
-    private static func replaceApp(from source: URL, to destination: URL) throws {
+    // MARK: - apply.sh (post-quit replace)
+
+    private static func writeAndSpawnApplyScript(
+        workDir: URL,
+        stagedApp: URL,
+        destination: URL,
+        afterPid pid: Int32
+    ) throws {
         let fm = FileManager.default
-        let parent = destination.deletingLastPathComponent()
-        try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+        let scriptURL = workDir.appendingPathComponent("apply.sh")
+        let logPath = (NSHomeDirectory() as NSString).appendingPathComponent(logRelativePath)
+        let logDir = (logPath as NSString).deletingLastPathComponent
+        try? fm.createDirectory(atPath: logDir, withIntermediateDirectories: true)
 
-        // Stage next to destination, then swap — safer while the old app is still running.
-        let staging = parent.appendingPathComponent(
-            destination.deletingPathExtension().lastPathComponent + ".smartquota-update.app",
-            isDirectory: true
-        )
-        if fm.fileExists(atPath: staging.path) {
-            try fm.removeItem(at: staging)
-        }
-        try runProcess(
-            "/usr/bin/ditto",
-            arguments: ["--norsrc", "--noextattr", source.path, staging.path]
-        )
+        let dest = destination.path
+        let src = stagedApp.path
+        let preupdate = destination.deletingPathExtension().path + ".preupdate.app"
+        let work = workDir.path
 
-        let backup = parent.appendingPathComponent(
-            destination.deletingPathExtension().lastPathComponent + ".smartquota-backup.app",
-            isDirectory: true
-        )
-        if fm.fileExists(atPath: backup.path) {
-            try? fm.removeItem(at: backup)
-        }
+        // shell-escaped literals
+        let eDest = shellEscape(dest)
+        let eSrc = shellEscape(src)
+        let ePre = shellEscape(preupdate)
+        let eWork = shellEscape(work)
+        let eLog = shellEscape(logPath)
 
-        if fm.fileExists(atPath: destination.path) {
-            try fm.moveItem(at: destination, to: backup)
-        }
-        do {
-            try fm.moveItem(at: staging, to: destination)
-        } catch {
-            // Roll back
-            if fm.fileExists(atPath: backup.path) {
-                try? fm.moveItem(at: backup, to: destination)
-            }
-            try? fm.removeItem(at: staging)
-            throw ManualUpdateError.install(error.localizedDescription)
-        }
-        try? fm.removeItem(at: backup)
-
-        // Clear quarantine on the replaced app so Gatekeeper is less noisy on relaunch.
-        _ = try? runProcess(
-            "/usr/bin/xattr",
-            arguments: ["-dr", "com.apple.quarantine", destination.path]
-        )
-    }
-
-    // MARK: - Admin installer fallback (no Installer.app UI)
-
-    private static func runInstallerAsAdmin(pkgURL: URL) throws {
-        // `installer` has no GUI; only the system auth sheet may appear for admin rights.
-        let pkg = shellEscape(pkgURL.path)
-        let appleScript = """
-        do shell script "/usr/sbin/installer -pkg \(pkg) -target /" with administrator privileges
-        """
-        try runProcess("/usr/bin/osascript", arguments: ["-e", appleScript])
-    }
-
-    // MARK: - Relaunch after quit
-
-    /// Detached script: wait until `pid` exits, then `open` the installed app.
-    private static func scheduleRelaunch(appURL: URL, afterPid pid: Int32) throws {
-        let fm = FileManager.default
-        let scriptURL = fm.temporaryDirectory
-            .appendingPathComponent("smartquota-relaunch-\(pid).sh")
-        let appPath = appURL.path
         let body = """
         #!/bin/bash
-        while kill -0 \(pid) 2>/dev/null; do sleep 0.2; done
-        sleep 0.4
-        /usr/bin/open \(shellEscape(appPath))
-        rm -f "$0"
+        set +e
+        LOG=\(eLog)
+        log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG" 2>/dev/null; }
+        log "apply.sh start pid_wait=\(pid) src=\(src) dest=\(dest)"
+
+        # 1) Wait until old app process exits
+        while kill -0 \(pid) 2>/dev/null; do
+          sleep 0.2
+        done
+        sleep 0.6
+        log "old process exited"
+
+        # 2) Move old app aside
+        if [ -d \(eDest) ]; then
+          rm -rf \(ePre)
+          mv \(eDest) \(ePre) || {
+            log "ERROR: cannot move old app"
+            exit 1
+          }
+        fi
+
+        # 3) Install new app
+        /usr/bin/ditto --norsrc --noextattr \(eSrc) \(eDest) || {
+          log "ERROR: ditto failed; restore preupdate if any"
+          if [ -d \(ePre) ]; then mv \(ePre) \(eDest); fi
+          exit 1
+        }
+
+        # 4) Clear quarantine
+        /usr/bin/xattr -dr com.apple.quarantine \(eDest) 2>/dev/null || true
+
+        # 5) Remove backup
+        rm -rf \(ePre)
+
+        # 6) Relaunch
+        /usr/bin/open \(eDest)
+        log "opened new app"
+
+        # 7) Cleanup work dir
+        rm -rf \(eWork)
+        log "done"
         """
+
         try body.write(to: scriptURL, atomically: true, encoding: .utf8)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
 
+        // nohup so script survives parent termination
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [scriptURL.path]
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/nohup")
+        process.arguments = ["/bin/bash", scriptURL.path]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        // Detach so relaunch survives our termination
         process.qualityOfService = .userInitiated
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            throw ManualUpdateError.install("Failed to start apply script: \(error.localizedDescription)")
+        }
+        // Do not wait — script runs after we quit
     }
 
-    // MARK: - Process helpers
+    // MARK: - Process / log
 
     @discardableResult
     private static func runProcess(_ launchPath: String, arguments: [String]) throws -> String {
@@ -227,13 +268,30 @@ public enum SilentPkgInstaller: Sendable {
         let outText = String(data: outData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard process.terminationStatus == 0 else {
             let detail = errText.isEmpty ? outText : errText
+            log("process failed \(launchPath) \(arguments) → \(detail)")
             throw ManualUpdateError.install(detail.isEmpty ? "exit \(process.terminationStatus)" : detail)
         }
         return outText
     }
 
     private static func shellEscape(_ path: String) -> String {
-        // Single-quote for AppleScript / bash safety
         "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static func log(_ message: String) {
+        let path = (NSHomeDirectory() as NSString).appendingPathComponent(logRelativePath)
+        let dir = (path as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if FileManager.default.fileExists(atPath: path) {
+            if let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: path)) {
+                defer { try? handle.close() }
+                _ = try? handle.seekToEnd()
+                try? handle.write(contentsOf: data)
+            }
+        } else {
+            try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        }
     }
 }

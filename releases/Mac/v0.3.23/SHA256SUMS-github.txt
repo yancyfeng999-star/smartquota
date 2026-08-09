@@ -1,0 +1,2 @@
+e6555a81b3294de192f6d7c2d9a935e21f291f288c7c4445ded4b045a239a51e  SmartQuota-0.3.23.dmg
+719b1b06324b0ee72a430828737d81bdfde9dddaadffba3db816b5cb0d8fb9a6  SmartQuota-0.3.23.pkg
