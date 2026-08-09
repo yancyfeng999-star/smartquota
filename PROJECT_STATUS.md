@@ -3,7 +3,7 @@
 | 字段 | 值 |
 |------|-----|
 | **日期** | 2026-08-09 |
-| **Mac** | **0.3.22** (build 25) · [Release v0.3.22](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.22) |
+| **Mac** | **0.3.23** (build 26) · [Release v0.3.23](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.23) |
 | **Windows** | 源码 0.5.0；公开安装包见 [windows-v0.1.0](https://github.com/yancyfeng999-star/smartquota/releases/tag/windows-v0.1.0) |
 | **状态** | 可日常使用；按需热修 |
 
@@ -11,7 +11,7 @@
 
 - [x] Mac 菜单栏额度监控（核心四会员 + 扩展 catalog）  
 - [x] 额度 UI：5H / 7D / 总额、阈值、续费日  
-- [x] **检查更新 → 优先 pkg 静默安装并重启**（无二次确认）  
+- [x] **检查更新 → pkg 解包 + 退出后覆盖**（无确认框、无管理员密码）  
 - [x] dmg/pkg 打包与 GitHub Release（ASCII `SmartQuota-*` 资产名）  
 - [x] Windows 托盘 MVP 与 catalog 对齐推进  
 - [x] 开源文档：README / 用户手册 / 分发 / 开发 / 安全 / 变更日志  

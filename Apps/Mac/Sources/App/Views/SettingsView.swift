@@ -935,16 +935,11 @@ struct SettingsContentView: View {
             await finishWithLocalInstaller(file)
         } catch let error as ManualUpdateError {
             updateDownloadProgress = nil
+            // Stay in settings — show error only (no browser popup / no password).
             updateStatusText = manualUpdateErrorMessage(error)
-            if let page = updateOpenURL {
-                NSWorkspace.shared.open(page)
-            }
         } catch {
             updateDownloadProgress = nil
             updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
-            if let page = updateOpenURL {
-                NSWorkspace.shared.open(page)
-            }
         }
     }
 
@@ -955,10 +950,10 @@ struct SettingsContentView: View {
             isInstallingUpdate = true
             updateStatusText = l10n.t("settings.updates_installing")
             do {
+                // Expand + spawn apply.sh (user-level ditto after quit). Never asks password.
                 _ = try await SilentPkgInstaller.installAndRelaunch(pkgURL: file)
                 updateStatusText = l10n.t("settings.updates_relaunching")
-                // Relaunch script waits for our exit
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                try? await Task.sleep(nanoseconds: 250_000_000)
                 NSApp.terminate(nil)
             } catch let error as ManualUpdateError {
                 isInstallingUpdate = false
@@ -970,7 +965,7 @@ struct SettingsContentView: View {
             return
         }
 
-        // dmg / zip: open only (user finishes install)
+        // dmg / zip fallback only: open file (may show system UI). Main path is pkg silent.
         updateStatusText = l10n.t("settings.updates_opening")
         NSWorkspace.shared.open(file)
         updateStatusText = l10n.t("settings.updates_quitting")
