@@ -21,7 +21,7 @@ struct SettingsContentView: View {
     @State private var backgroundSyncExpanded: Bool = false
     @State private var thresholdAlertsExpanded: Bool = false
 
-    // Manual free update check + download/open installer (not silent install)
+    // Manual update: check → download pkg → silent install (no confirm dialogs)
     @State private var isCheckingUpdate = false
     @State private var updateStatusText: String?
     @State private var updateOpenURL: URL?
@@ -30,6 +30,8 @@ struct SettingsContentView: View {
     @State private var updateLocalInstallerURL: URL?
     /// 0…1 while downloading; nil when not downloading.
     @State private var updateDownloadProgress: Double?
+    /// True while expanding/copying pkg (no system Installer UI).
+    @State private var isInstallingUpdate = false
 
     // Hook settings state
     @State private var hooksExpanded: Bool = false
@@ -758,7 +760,7 @@ struct SettingsContentView: View {
                     Task { await runManualUpdateCheck() }
                 } label: {
                     HStack(spacing: 4) {
-                        if isCheckingUpdate && updateDownloadProgress == nil {
+                        if isCheckingUpdate && updateDownloadProgress == nil && !isInstallingUpdate {
                             ProgressView()
                                 .controlSize(.mini)
                                 .frame(width: 12, height: 12)
@@ -788,7 +790,15 @@ struct SettingsContentView: View {
                 .opacity(isCheckingUpdate ? 0.7 : 1)
             }
 
-            if let progress = updateDownloadProgress {
+            if isInstallingUpdate {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(l10n.t("settings.updates_installing"))
+                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                        .foregroundStyle(theme.textTertiary)
+                }
+            } else if let progress = updateDownloadProgress {
                 VStack(alignment: .leading, spacing: 4) {
                     ProgressView(value: progress, total: 1)
                         .progressViewStyle(.linear)
@@ -820,6 +830,9 @@ struct SettingsContentView: View {
     }
 
     private var checkUpdateButtonTitle: String {
+        if isInstallingUpdate {
+            return l10n.t("settings.updates_installing_btn")
+        }
         if updateDownloadProgress != nil {
             return l10n.t("settings.updates_downloading_btn")
         }
@@ -846,10 +859,12 @@ struct SettingsContentView: View {
         updateLocalInstallerURL = nil
         updateIsAvailable = false
         updateDownloadProgress = nil
+        isInstallingUpdate = false
         defer {
+            // If we quit for relaunch, this may not run; otherwise reset busy state.
             isCheckingUpdate = false
-            // Keep progress visible only while downloading; clear if we didn't quit
-            if updateDownloadProgress != nil && updateDownloadProgress! < 1 {
+            isInstallingUpdate = false
+            if let p = updateDownloadProgress, p < 1 {
                 updateDownloadProgress = nil
             }
         }
@@ -870,8 +885,8 @@ struct SettingsContentView: View {
                     latest.version.description,
                     current.description
                 )
-                // Auto download + open (no second button)
-                await downloadAndOpenInstaller()
+                // One tap: download + install. No confirm dialog.
+                await downloadAndInstallUpdate()
             }
         } catch let error as ManualUpdateError {
             updateIsAvailable = false
@@ -884,15 +899,11 @@ struct SettingsContentView: View {
         }
     }
 
-    /// Download installer with progress bar, open it, then quit for replace-install.
+    /// Download preferred installer (pkg first). Silent-install pkg; dmg falls back to open.
     @MainActor
-    private func downloadAndOpenInstaller() async {
+    private func downloadAndInstallUpdate() async {
         if let local = updateLocalInstallerURL, FileManager.default.fileExists(atPath: local.path) {
-            updateDownloadProgress = nil
-            updateStatusText = l10n.t("settings.updates_opening")
-            NSWorkspace.shared.open(local)
-            updateStatusText = l10n.t("settings.updates_quitting")
-            await quitAfterOpeningInstaller()
+            await finishWithLocalInstaller(local)
             return
         }
 
@@ -921,10 +932,7 @@ struct SettingsContentView: View {
             }
             updateLocalInstallerURL = file
             updateDownloadProgress = 1
-            updateStatusText = l10n.t("settings.updates_opening")
-            NSWorkspace.shared.open(file)
-            updateStatusText = l10n.t("settings.updates_quitting")
-            await quitAfterOpeningInstaller()
+            await finishWithLocalInstaller(file)
         } catch let error as ManualUpdateError {
             updateDownloadProgress = nil
             updateStatusText = manualUpdateErrorMessage(error)
@@ -940,10 +948,33 @@ struct SettingsContentView: View {
         }
     }
 
-    /// Brief delay so Finder/Installer can take focus, then terminate.
     @MainActor
-    private func quitAfterOpeningInstaller() async {
-        try? await Task.sleep(nanoseconds: 800_000_000) // 0.8s
+    private func finishWithLocalInstaller(_ file: URL) async {
+        if file.pathExtension.lowercased() == "pkg" {
+            updateDownloadProgress = nil
+            isInstallingUpdate = true
+            updateStatusText = l10n.t("settings.updates_installing")
+            do {
+                _ = try await SilentPkgInstaller.installAndRelaunch(pkgURL: file)
+                updateStatusText = l10n.t("settings.updates_relaunching")
+                // Relaunch script waits for our exit
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                NSApp.terminate(nil)
+            } catch let error as ManualUpdateError {
+                isInstallingUpdate = false
+                updateStatusText = manualUpdateErrorMessage(error)
+            } catch {
+                isInstallingUpdate = false
+                updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
+            }
+            return
+        }
+
+        // dmg / zip: open only (user finishes install)
+        updateStatusText = l10n.t("settings.updates_opening")
+        NSWorkspace.shared.open(file)
+        updateStatusText = l10n.t("settings.updates_quitting")
+        try? await Task.sleep(nanoseconds: 800_000_000)
         NSApp.terminate(nil)
     }
 
@@ -953,7 +984,7 @@ struct SettingsContentView: View {
             return l10n.t("settings.updates_failed_version")
         case .noMacReleaseFound:
             return l10n.t("settings.updates_failed_none")
-        case .network(let detail), .decode(let detail):
+        case .network(let detail), .decode(let detail), .install(let detail):
             return l10n.tf("settings.updates_failed_fmt", detail)
         }
     }

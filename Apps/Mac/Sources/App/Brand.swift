@@ -9,8 +9,8 @@ enum Brand {
     /// 标题栏 / 关于：中英并列
     static let displayTitle = "\(nameCN)"
     /// 副标题
-    static let taglineCN = "会员额度监控"
-    static let taglineEN = "Membership quota monitor"
+    static let taglineCN = "会员与 Token Plan 仪表盘"
+    static let taglineEN = "Membership & Token Plan dashboard"
 
     /// 关于页完整说明（随界面语言切换）
     @MainActor

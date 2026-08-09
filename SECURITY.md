@@ -26,7 +26,7 @@
 
 **不会**连接：统计 SDK、Sentry/Firebase、作者自有服务器、Sparkle 更新 feed。  
 
-可选：用户在设置中点击「检查更新」时，会请求 GitHub 公开 API（`api.github.com/repos/…/releases`）比对版本。若发现新版，可**下载** GitHub Release 上的 dmg/pkg 到「下载」文件夹并**用系统打开**（挂载 dmg / 打开 pkg 向导）。**不会**静默替换 `/Applications` 里的 App；仍需用户拖入应用程序或确认安装。
+可选：用户在设置中点击「检查更新」时，会请求 GitHub 公开 API（`api.github.com/repos/…/releases`）比对版本。若发现新版，优先下载 `.pkg` 到「下载」文件夹并**由本机一键静默安装**（展开 pkg + 覆盖 App，或在无写权限时用系统 `installer` 鉴权），然后自动重启。**不会**在后台无人点击时自动下载/安装；**不会**打开 Installer.app 向导（dmg 回退路径除外）。
 
 本地 Hook 服务只监听 **`127.0.0.1`（loopback）**，接收 Claude Code 的 hook 事件。
 

@@ -1,12 +1,12 @@
 import Foundation
 import Domain
 
-/// Downloads a GitHub release installer (dmg/pkg) to the user's Downloads folder.
-/// Reports 0…1 progress via callback. Free path — not silent install.
+/// Downloads a GitHub release installer (prefer `.pkg`) to the user's Downloads folder.
+/// Reports 0…1 progress via callback. Installation is handled separately by `SilentPkgInstaller`.
 public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     private var progressHandler: (@Sendable (Double) -> Void)?
     private var continuation: CheckedContinuation<URL, Error>?
-    private var destinationFileName: String = "SmartQuota-update.dmg"
+    private var destinationFileName: String = "SmartQuota-update.pkg"
     private var session: URLSession?
 
     public override init() {
@@ -123,12 +123,12 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
 
     private static func safeFileName(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return "SmartQuota-update.dmg" }
+        if trimmed.isEmpty { return "SmartQuota-update.pkg" }
         let base = (trimmed as NSString).lastPathComponent
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
         let cleaned = String(base.unicodeScalars.map { allowed.contains($0) ? Character($0) : Character("_") })
         if cleaned.isEmpty || cleaned == "." || cleaned == ".." {
-            return "SmartQuota-update.dmg"
+            return "SmartQuota-update.pkg"
         }
         return cleaned
     }
