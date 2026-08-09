@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.21] — 2026-08-09
+
+### Changed
+- **一键更新（PKG 静默安装）**：设置 → **检查更新** 发现新版后，优先下载 `.pkg`，**无二次确认弹窗**，静默覆盖安装并自动重启。
+  - 不打开系统 Installer.app 向导；设置页内显示下载/安装进度。
+  - 若目标目录无写权限，会回退到管理员 `installer`（可能出现**系统**密码框，非应用内弹窗）。
+  - 若 Release 仅有 dmg，仍打开 dmg（需用户拖到应用程序）。
+
+### Release
+- GitHub：`v0.3.21` · `SmartQuota-0.3.21.dmg` / `.pkg`（打版后上传）
+- 已装旧版：设置 → **检查更新**
+
+---
+
 ## [Mac 0.3.20] — 2026-08-09
 
 ### Added

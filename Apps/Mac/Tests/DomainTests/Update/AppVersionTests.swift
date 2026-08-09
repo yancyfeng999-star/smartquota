@@ -79,14 +79,25 @@ struct AppVersionTests {
     }
 
     @Test
-    func `prefers smartquota dmg over other installers`() {
+    func `prefers smartquota pkg over dmg and other installers`() {
         let urls = [
-            (name: "智额-0.3.4.pkg", url: URL(string: "https://x/a.pkg")!),
             (name: "SmartQuota-0.3.4.dmg", url: URL(string: "https://x/b.dmg")!),
-            (name: "notes.txt", url: URL(string: "https://x/c.txt")!),
+            (name: "智额-0.3.4.pkg", url: URL(string: "https://x/a.pkg")!),
+            (name: "SmartQuota-0.3.4.pkg", url: URL(string: "https://x/c.pkg")!),
+            (name: "notes.txt", url: URL(string: "https://x/n.txt")!),
         ]
         let preferred = ManualUpdateEvaluator.preferredDownloadURL(assetNamesAndURLs: urls)
-        #expect(preferred?.absoluteString == "https://x/b.dmg")
+        #expect(preferred?.absoluteString == "https://x/c.pkg")
+    }
+
+    @Test
+    func `prefers any pkg when no smartquota pkg`() {
+        let urls = [
+            (name: "智额-0.3.4.dmg", url: URL(string: "https://x/b.dmg")!),
+            (name: "智额-0.3.4.pkg", url: URL(string: "https://x/a.pkg")!),
+        ]
+        let preferred = ManualUpdateEvaluator.preferredDownloadURL(assetNamesAndURLs: urls)
+        #expect(preferred?.absoluteString == "https://x/a.pkg")
     }
 
     @Test

@@ -1,11 +1,12 @@
 import Foundation
 
-/// A remote release discovered via public GitHub Releases (no auto-install).
+/// A remote release discovered via public GitHub Releases.
+/// Install is still **user-triggered** (tap check/update); preferred asset is `.pkg` for one-click replace.
 public struct RemoteRelease: Equatable, Sendable {
     public let version: AppVersion
     public let tagName: String
     public let htmlURL: URL
-    /// Preferred installer download if present (e.g. `.dmg`); otherwise nil → open release page.
+    /// Preferred installer download if present (prefer `.pkg`); otherwise nil → open release page.
     public let downloadURL: URL?
 
     public init(version: AppVersion, tagName: String, htmlURL: URL, downloadURL: URL?) {
@@ -32,6 +33,8 @@ public enum ManualUpdateError: Error, Equatable, Sendable {
     case noMacReleaseFound
     case network(String)
     case decode(String)
+    /// Silent pkg install failed (expand/copy/installer).
+    case install(String)
 }
 
 /// Pure evaluation: compare installed version with a candidate remote release.
@@ -48,18 +51,19 @@ public enum ManualUpdateEvaluator: Sendable {
         releases.max(by: { $0.version < $1.version })
     }
 
-    /// Prefer ASCII SmartQuota dmg, then any dmg, then pkg, then zip.
+    /// Prefer pkg (one-click install), then dmg, then zip.
+    /// Within the same type: ASCII `smartquota` name ranks above localized names.
     public static func preferredDownloadURL(assetNamesAndURLs: [(name: String, url: URL)]) -> URL? {
         let ranked = assetNamesAndURLs.compactMap { item -> (Int, URL)? in
             let name = item.name.lowercased()
+            let asciiBoost = name.contains("smartquota") ? 0 : 1
             let score: Int
-            if name.hasSuffix(".dmg") {
-                if name.contains("smartquota") { score = 0 }
-                else { score = 1 }
-            } else if name.hasSuffix(".pkg") {
-                score = 2
+            if name.hasSuffix(".pkg") {
+                score = 0 + asciiBoost // 0 or 1
+            } else if name.hasSuffix(".dmg") {
+                score = 10 + asciiBoost // 10 or 11
             } else if name.hasSuffix(".zip") {
-                score = 3
+                score = 20 + asciiBoost
             } else {
                 return nil
             }
