@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.24] — 2026-08-09
+
+### Fixed
+- **静默更新与智余 `PackageSilentInstaller` 对齐**  
+  - `pkgutil --expand-full` 失败时回退 `--expand` + Payload 解压  
+  - `apply.sh`：`ditto --noqtn`、`.preupdate` 挪包、等 PID 退出后替换  
+  - `nohup` 后台调度方式与智余一致  
+  - **仍不**请求管理员密码
+
+### Release
+- GitHub：`v0.3.24` · `SmartQuota-0.3.24.dmg` / `.pkg`
+
+---
+
 ## [Mac 0.3.23] — 2026-08-09
 
 ### Changed

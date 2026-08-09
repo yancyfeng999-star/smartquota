@@ -1,0 +1,2 @@
+afb4a1ccb82896bf59f10dc0755965f5bd36fc3a8af11b9f6115f6d42f9c9e6f  SmartQuota-0.3.24.dmg
+5facb2c6f4c46fbca168f706389250ce701ba7a85f90f0d914381ba5e6e35edc  SmartQuota-0.3.24.pkg
