@@ -202,12 +202,14 @@ cat > "$STAGE/RELEASE_NOTES.md" <<EOF
 - **日期**：${DATE_STR}
 - **标签**：\`${TAG}\`
 
-## 安装包
+## 安装
 
-| 文件 | 怎么用 |
-|------|--------|
-| **${APP_NAME}-${VERSION}.dmg** | 打开后，把 App **拖到 Applications**（推荐，同类 Mac 软件通用） |
-| **${APP_NAME}-${VERSION}.pkg** | 双击，按安装向导装到「应用程序」 |
+| GitHub 资产 | 用法 |
+|-------------|------|
+| **${EN_NAME}-${VERSION}.dmg** | 拖到 Applications |
+| **${EN_NAME}-${VERSION}.pkg** | 安装向导；应用内「检查更新」优先此包 |
+
+已装旧版：设置 → **检查更新**（优先 pkg 静默安装并重启）。
 
 ## 首次打开
 
@@ -221,7 +223,11 @@ EOF
 
 (
   cd "$STAGE"
+  # Local Chinese names + GitHub ASCII names (in-app update prefers SmartQuota-*.pkg)
+  cp -f "${APP_NAME}-${VERSION}.dmg" "${EN_NAME}-${VERSION}.dmg"
+  cp -f "${APP_NAME}-${VERSION}.pkg" "${EN_NAME}-${VERSION}.pkg"
   shasum -a 256 "${APP_NAME}-${VERSION}.dmg" "${APP_NAME}-${VERSION}.pkg" > SHA256SUMS.txt
+  shasum -a 256 "${EN_NAME}-${VERSION}.dmg" "${EN_NAME}-${VERSION}.pkg" > SHA256SUMS-github.txt
 )
 
 # LATEST pointers
@@ -335,8 +341,10 @@ echo "版本 ${VERSION} (build ${BUILD})  ${TAG}"
 echo ""
 echo "  DMG（推荐）：${DMG_PATH}"
 echo "  PKG（向导）：${PKG_PATH}"
+echo "  GitHub ASCII：${STAGE}/${EN_NAME}-${VERSION}.dmg | .pkg"
 echo ""
 echo "  发给别人：发 .dmg 或 .pkg 任一即可"
+echo "  上传 GitHub：优先用 SmartQuota-${VERSION}.{dmg,pkg}"
 echo "  安装：DMG 里拖到 Applications  /  或双击 PKG"
 echo "================================"
 ls -lh "${DMG_PATH}" "${PKG_PATH}"

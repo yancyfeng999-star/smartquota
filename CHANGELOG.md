@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.22] — 2026-08-09
+
+### Changed
+- **工程整理**：打包脚本固定产出 GitHub ASCII 资产 `SmartQuota-x.y.z.{dmg,pkg}` + `SHA256SUMS-github.txt`
+- **测试构建默认装到 `/Applications`**，避免桌面再留一份导致「多个智额」
+- 文档 / 项目状态同步到一键 pkg 更新流程
+
+### Release
+- GitHub：`v0.3.22` · `SmartQuota-0.3.22.dmg` / `.pkg`
+- 已装旧版：设置 → **检查更新**（优先 pkg 静默安装）
+
+---
+
 ## [Mac 0.3.21] — 2026-08-09
 
 ### Changed

@@ -1,18 +1,18 @@
-# 项目状态 · 本阶段完结
+# 项目状态
 
 | 字段 | 值 |
 |------|-----|
 | **日期** | 2026-08-09 |
-| **Mac** | 0.3.20 (build 23) · [GitHub Release v0.3.20](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.20) |
+| **Mac** | **0.3.22** (build 25) · [Release v0.3.22](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.22) |
 | **Windows** | 源码 0.5.0；公开安装包见 [windows-v0.1.0](https://github.com/yancyfeng999-star/smartquota/releases/tag/windows-v0.1.0) |
-| **状态** | **暂时完结** — 功能与文档已交付，可日常使用 |
+| **状态** | 可日常使用；按需热修 |
 
 ## 已完成
 
 - [x] Mac 菜单栏额度监控（核心四会员 + 扩展 catalog）  
 - [x] 额度 UI：5H / 7D / 总额、阈值、续费日  
-- [x] 手动检查更新（GitHub → 下载 dmg → 打开）  
-- [x] dmg/pkg 打包与 Release 分发（ASCII 资产名）  
+- [x] **检查更新 → 优先 pkg 静默安装并重启**（无二次确认）  
+- [x] dmg/pkg 打包与 GitHub Release（ASCII `SmartQuota-*` 资产名）  
 - [x] Windows 托盘 MVP 与 catalog 对齐推进  
 - [x] 开源文档：README / 用户手册 / 分发 / 开发 / 安全 / 变更日志  
 
@@ -22,8 +22,16 @@
 - Windows 0.5.0 新 Setup 上传（需 Windows 机打包）  
 - 应用商店上架  
 
-## 下次开工建议
+## 本机只保留一份 App
 
-1. `git pull` 最新 `main`  
-2. 看 [PRODUCT.md](./PRODUCT.md)「后续可选」  
-3. 发版流程：[docs/DISTRIBUTION.md](./docs/DISTRIBUTION.md)  
+| 用途 | 路径 |
+|------|------|
+| **日常使用（唯一）** | `/Applications/智额.app` |
+| 开发调试 | `./scripts/build-test-app.sh` → 默认覆盖 Applications |
+| 发版安装包 | `releases/Mac/vX.Y.Z/` + GitHub Release（**不要**长期留桌面 `.app`） |
+
+## 下次开工
+
+1. `git pull`  
+2. [PRODUCT.md](./PRODUCT.md)  
+3. 发版：[docs/DISTRIBUTION.md](./docs/DISTRIBUTION.md)  
