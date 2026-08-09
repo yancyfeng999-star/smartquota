@@ -6,7 +6,7 @@
 | **英文名** | SmartQuota |
 | **一句话** | 本机 AI 会员额度，一眼看完 |
 | **平台** | macOS 15+ 菜单栏 · Windows 托盘（Apps 平级） |
-| **Mac 版本** | **0.3.18**（build 21） |
+| **Mac 版本** | **0.3.19**（build 22） |
 | **Windows 版本** | **0.5.0**（源码；Setup 发布包见 Release） |
 | **状态** | **本阶段完结**（2026-08） |
 
@@ -61,7 +61,7 @@
 | **A 本地可测** | ✅ | `build-test-app.sh` → 桌面 `智额.app` |
 | **B 产品化** | ✅ | 多会员、多语言、Keychain、文档与 Mac/Windows 平级 |
 | **C 正式分发** | ✅ | `package-release.sh` → dmg/pkg；GitHub Release；手动检查更新 |
-| **D 本阶段完结** | ✅ | 文档齐全、源码入库、持续小版本热修（现 v0.3.18） |
+| **D 本阶段完结** | ✅ | 文档齐全、源码入库、持续小版本热修（现 v0.3.19） |
 
 ```bash
 cd Apps/Mac

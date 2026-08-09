@@ -42,49 +42,72 @@ releases/Mac/
 
 ---
 
-## 二、上传 GitHub Release（维护者）
+## 二、发版铁律（每次交付用户必须做）
+
+用户通过 **设置 → 检查更新** 拿新版本。更新器比较的是 **GitHub Release 上的版本号**。  
+因此：**有用户可见修复 / 功能变更 → 必须升版本并发布 Release**，否则别人检查更新仍是旧包。
+
+### 发版检查清单
+
+1. **改代码后先升版本**（`Apps/Mac/Sources/App/Info.plist`）  
+   - `CFBundleShortVersionString`：如 `0.3.18` → `0.3.19`  
+   - `CFBundleVersion`：构建号 +1（如 `21` → `22`）  
+2. **CHANGELOG.md**：把变更写进对应版本段（不要长期留在 Unreleased）  
+3. **文档版本指针**：README / PRODUCT / USER_GUIDE / Apps/Mac/README 等里的版本号对齐  
+4. **打包**：`cd Apps/Mac && ./scripts/package-release.sh`  
+5. **上传 GitHub Release**（Tag `vX.Y.Z` + ASCII 名 dmg/pkg）  
+6. **提交仓库**：源码、CHANGELOG、SHA256、LATEST 指针一并 push `main`  
+
+> 不要「只 push 代码不升版本」——已装旧版的用户无法在软件内更新到你的修复。
+
+---
+
+## 三、上传 GitHub Release（维护者）
 
 应用内「检查更新」读的是：
 
 ```text
-https://api.github.com/repos/yancyfeng999-star/smartquota/releases/latest
+https://api.github.com/repos/yancyfeng999-star/smartquota/releases
 ```
+
+（取最新 **Mac** 候选，比较 `vX.Y.Z` 与本机 `CFBundleShortVersionString`。）
 
 ### 要求
 
-1. **Tag**：`v0.3.12`（与版本号一致，前缀 `v`）  
+1. **Tag**：`v0.3.19`（与 Info.plist 版本一致，前缀 `v`）  
 2. **资产名必须 ASCII**（中文文件名在 GitHub 会乱码，更新器可能匹配失败）：
 
 | 上传文件名 | 来源 |
 |------------|------|
-| `SmartQuota-0.3.12.dmg` | 复制自 `智额-0.3.12.dmg` |
-| `SmartQuota-0.3.12.pkg` | 复制自 `智额-0.3.12.pkg` |
-| `SHA256SUMS.txt` | 对上述两个 ASCII 名计算 |
+| `SmartQuota-0.3.19.dmg` | 复制自 `智额-0.3.19.dmg` |
+| `SmartQuota-0.3.19.pkg` | 复制自 `智额-0.3.19.pkg` |
+| `SHA256SUMS.txt` / `SHA256SUMS-github.txt` | 对上述两个 ASCII 名计算 |
 
 ### 示例命令
 
 ```bash
+VER=0.3.19
 STAGE=$(mktemp -d)
-cp releases/Mac/v0.3.12/智额-0.3.12.dmg "$STAGE/SmartQuota-0.3.12.dmg"
-cp releases/Mac/v0.3.12/智额-0.3.12.pkg "$STAGE/SmartQuota-0.3.12.pkg"
+cp "releases/Mac/v${VER}/智额-${VER}.dmg" "$STAGE/SmartQuota-${VER}.dmg"
+cp "releases/Mac/v${VER}/智额-${VER}.pkg" "$STAGE/SmartQuota-${VER}.pkg"
 cd "$STAGE"
-shasum -a 256 SmartQuota-0.3.12.dmg SmartQuota-0.3.12.pkg > SHA256SUMS.txt
+shasum -a 256 "SmartQuota-${VER}.dmg" "SmartQuota-${VER}.pkg" > SHA256SUMS-github.txt
 
-gh release create v0.3.12 \
+gh release create "v${VER}" \
   --repo yancyfeng999-star/smartquota \
-  --title "智额 Mac 0.3.12" \
-  --notes-file /path/to/notes.md \
-  SmartQuota-0.3.12.dmg \
-  SmartQuota-0.3.12.pkg \
-  SHA256SUMS.txt
+  --title "智额 Mac ${VER}" \
+  --notes-file "../releases/Mac/v${VER}/RELEASE_NOTES.md" \
+  "SmartQuota-${VER}.dmg" \
+  "SmartQuota-${VER}.pkg" \
+  SHA256SUMS-github.txt
 ```
 
 最新 Mac 安装包：  
-https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.18
+https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.19
 
 ---
 
-## 三、用户怎么装
+## 四、用户怎么装
 
 ### 推荐：DMG
 
@@ -110,7 +133,7 @@ https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.18
 
 ---
 
-## 四、关于「未识别的开发者」
+## 五、关于「未识别的开发者」（Gatekeeper）
 
 当前默认使用 **临时签名（ad-hoc）**，且通常**未公证（notarize）**。  
 因此其他 Mac 的 Gatekeeper 会警告——**正常**，按下面处理即可。
@@ -137,20 +160,21 @@ SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)" \
 
 ---
 
-## 五、版本号
+## 六、版本号（与第二节铁律一致）
 
 改版本再打包：
 
 `Apps/Mac/Sources/App/Info.plist`
 
-- `CFBundleShortVersionString`：如 `0.3.12`  
-- `CFBundleVersion`：构建序号，每次发版 +1（如 `15`）  
+- `CFBundleShortVersionString`：如 `0.3.19`  
+- `CFBundleVersion`：构建序号，每次发版 +1（如 `22`）  
 
-同步更新：`CHANGELOG.md`、`releases/Mac/LATEST*`、根 `README.md` 下载链接。
+同步更新：`CHANGELOG.md`、`releases/Mac/LATEST*`、根 `README.md` 下载链接。  
+**有用户可见改动就必须升版本并发 GitHub Release**，否则应用内「检查更新」拿不到新包。
 
 ---
 
-## 六、日常调试包 vs 发布包
+## 七、日常调试包 vs 发布包
 
 | | 调试 | 发布 |
 |--|------|------|
@@ -161,7 +185,7 @@ SIGN_IDENTITY="Developer ID Application: 你的名字 (TEAMID)" \
 
 ---
 
-## 七、卸载
+## 八、卸载
 
 ```bash
 pkill -x 智额 2>/dev/null || true
@@ -172,7 +196,7 @@ rm -rf /Applications/智额.app
 
 ---
 
-## 八、Windows 分发
+## 九、Windows 分发
 
 见 [`WINDOWS.md`](./WINDOWS.md)。  
 Setup.exe 在 **Windows** 上 `npm run tauri:build` 产出，上传到同一仓库的 Release（资产名 ASCII，如 `SmartQuota-Setup-0.1.0-x64.exe`）。

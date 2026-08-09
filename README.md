@@ -6,7 +6,7 @@
 |--|--|
 | **中文名** | 智额 |
 | **英文名** | SmartQuota |
-| **macOS** | **0.3.18** (build 21) · 菜单栏 · Swift / Tuist · macOS 15+ |
+| **macOS** | **0.3.19** (build 22) · 菜单栏 · Swift / Tuist · macOS 15+ |
 | **Windows** | **0.5.0** · 系统托盘 · Tauri 2 · Setup.exe · Win 10/11 |
 | **许可证** | [MIT](./LICENSE) |
 | **仓库** | [github.com/yancyfeng999-star/smartquota](https://github.com/yancyfeng999-star/smartquota) |
@@ -22,12 +22,12 @@
 
 ### macOS 最新版
 
-**Release：** [v0.3.18](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.18)
+**Release：** [v0.3.19](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.19)
 
 | 文件 | 用法 |
 |------|------|
-| [SmartQuota-0.3.18.dmg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.18/SmartQuota-0.3.18.dmg) | 打开后把 **智额.app** 拖到 Applications（推荐） |
-| [SmartQuota-0.3.18.pkg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.18/SmartQuota-0.3.18.pkg) | 双击安装向导 |
+| [SmartQuota-0.3.19.dmg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.19/SmartQuota-0.3.19.dmg) | 打开后把 **智额.app** 拖到 Applications（推荐） |
+| [SmartQuota-0.3.19.pkg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.19/SmartQuota-0.3.19.pkg) | 双击安装向导 |
 
 - 系统：**macOS 15.0+**
 - 首次打开若提示「无法验证开发者」：**Control + 点击 → 打开**，或 **系统设置 → 隐私与安全性 → 仍要打开**
@@ -55,11 +55,11 @@
 - **固定窗口 / 排序 / 告警阈值 / 临近重置提醒**  
 - **用户扩展**：`~/.smartquota/extensions`（manifest + 脚本）
 
-### Mac 0.3.18 亮点
+### Mac 0.3.19 亮点
 
-- **彩色品牌 Logo**：AppIcon / 菜单栏为多色 Q 标（非纯色、非 SF Symbol）  
-- **状态栏默认 Logo**：菜单栏默认显示品牌图标；设置可开启「状态栏额度图标」  
-- **检查更新**：读 GitHub Releases → 下载 dmg/pkg → 打开安装器  
+- **修复 ChatGPT「用尽」误报**：积分（加油包）余额为 0 时不再把整张卡标成用尽；7D / GPT-5.3 周额度重置后显示正常  
+- **状态说明**：右上角徽章只看限速额度（5H / 7D / 周桶），积分仅展示数字  
+- **检查更新**：设置 → 检查更新 → 下载 dmg → 拖到 Applications  
 
 ### 隐私
 

@@ -252,13 +252,19 @@ from pathlib import Path
 
 root = Path(os.environ["RELEASES_ROOT"])
 rows = []
-for p in sorted(root.iterdir(), reverse=True):
-    if p.is_dir() and re.match(r"^v\d", p.name):
-        dmgs = list(p.glob("*.dmg"))
-        pkgs = list(p.glob("*.pkg"))
-        d = dmgs[0].name if dmgs else "—"
-        k = pkgs[0].name if pkgs else "—"
-        rows.append(f"| [`{p.name}`](./{p.name}/) | `{d}` | `{k}` |")
+dirs = [p for p in root.iterdir() if p.is_dir() and re.match(r"^v\d", p.name)]
+
+def _ver_key(path: Path):
+    m = re.match(r"^v(\d+)\.(\d+)\.(\d+)", path.name)
+    return tuple(int(x) for x in m.groups()) if m else (0, 0, 0)
+
+for p in sorted(dirs, key=_ver_key, reverse=True):
+    dmgs = list(p.glob("*.dmg"))
+    pkgs = list(p.glob("*.pkg"))
+    # Prefer Chinese local names if both exist
+    d = next((x.name for x in dmgs if x.name.startswith("智额")), dmgs[0].name if dmgs else "—")
+    k = next((x.name for x in pkgs if x.name.startswith("智额")), pkgs[0].name if pkgs else "—")
+    rows.append(f"| [`{p.name}`](./{p.name}/) | `{d}` | `{k}` |")
 
 lines = [
     "# Releases",
