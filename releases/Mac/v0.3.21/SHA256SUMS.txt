@@ -1,0 +1,2 @@
+e0c6869d112ca13dfd12f0aafe1ab6700deec6d917afd823d8cb3e09ffe8c9d3  智额-0.3.21.dmg
+aafc27f925e4ea112f668af5b6da8663d6b756dc60b7c8e87000d3a03cdf2fa1  智额-0.3.21.pkg
