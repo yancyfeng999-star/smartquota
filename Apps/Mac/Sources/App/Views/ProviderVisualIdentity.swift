@@ -328,6 +328,33 @@ extension CursorProvider: ProviderVisualIdentity {
     }
 }
 
+// MARK: - MiMoProvider Visual Identity
+
+extension MiMoProvider: ProviderVisualIdentity {
+    public var symbolIcon: String { "m.circle.fill" }
+
+    public var iconAssetName: String { "MiMoIcon" }
+
+    public func themeColor(for scheme: ColorScheme) -> Color {
+        scheme == .dark
+            ? Color(red: 1.0, green: 0.55, blue: 0.12)
+            : Color(red: 0.95, green: 0.40, blue: 0.05)
+    }
+
+    public func themeGradient(for scheme: ColorScheme) -> LinearGradient {
+        LinearGradient(
+            colors: [
+                themeColor(for: scheme),
+                scheme == .dark
+                    ? Color(red: 0.95, green: 0.30, blue: 0.10)
+                    : Color(red: 0.85, green: 0.25, blue: 0.08)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
 // MARK: - MiniMaxProvider Visual Identity
 
 extension MiniMaxProvider: ProviderVisualIdentity {
@@ -528,6 +555,10 @@ enum ProviderVisualIdentityLookup {
             return scheme == .dark
                 ? Color(red: 0.91, green: 0.27, blue: 0.42)
                 : Color(red: 0.82, green: 0.20, blue: 0.35)
+        case "mimo":
+            return scheme == .dark
+                ? Color(red: 1.0, green: 0.55, blue: 0.12)
+                : Color(red: 0.95, green: 0.40, blue: 0.05)
         case "cursor":
             return scheme == .dark
                 ? Color(red: 0.20, green: 0.78, blue: 0.82)
@@ -603,6 +634,10 @@ enum ProviderVisualIdentityLookup {
             secondaryColor = scheme == .dark
                 ? Color(red: 0.96, green: 0.53, blue: 0.24)
                 : Color(red: 0.86, green: 0.43, blue: 0.14)
+        case "mimo":
+            secondaryColor = scheme == .dark
+                ? Color(red: 0.95, green: 0.30, blue: 0.10)
+                : Color(red: 0.85, green: 0.25, blue: 0.08)
         case "cursor":
             secondaryColor = scheme == .dark
                 ? Color(red: 0.15, green: 0.55, blue: 0.75)
@@ -652,6 +687,7 @@ enum ProviderVisualIdentityLookup {
         case "kimi": return "KimiIcon"
         case "kiro": return "KiroIcon"
         case "minimax": return "MiniMaxIcon"
+        case "mimo": return "MiMoIcon"
         case "cursor": return "CursorIcon"
         case "mistral": return "MistralIcon"
         case "opencode-go": return "OpenCodeIcon"
@@ -675,6 +711,7 @@ enum ProviderVisualIdentityLookup {
         case "kimi": return "Kimi"
         case "kiro": return "Kiro"
         case "minimax": return "MiniMax"
+        case "mimo": return "Xiaomi MiMo"
         case "cursor": return "Cursor"
         case "mistral": return "Mistral"
         case "opencode-go": return "OpenCode Go"
@@ -698,6 +735,7 @@ enum ProviderVisualIdentityLookup {
         case "kimi": return "k.square.fill"
         case "kiro": return "wand.and.stars.inverse"
         case "minimax": return "waveform"
+        case "mimo": return "m.circle.fill"
         case "cursor": return "cursorarrow.rays"
         case "mistral": return "cat.fill"
         case "opencode-go": return "square.stack.3d.up.fill"

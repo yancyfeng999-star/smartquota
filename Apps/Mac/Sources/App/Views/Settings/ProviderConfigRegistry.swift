@@ -34,6 +34,8 @@ enum ProviderConfigRegistry {
                 BedrockConfigCard(monitor: monitor)
             case "alibaba":
                 AlibabaConfigCard(monitor: monitor)
+            case "mimo":
+                MiMoConfigCard(monitor: monitor)
             default:
                 // gemini, cursor, antigravity, ampcode, kiro, mistral, opencode-go, omp, future
                 GenericProbeConfigCard(monitor: monitor, providerId: provider.id)
@@ -44,6 +46,6 @@ enum ProviderConfigRegistry {
     /// Provider ids that have a specialized config form (not only GenericProbe).
     static let specializedConfigIDs: Set<String> = [
         "codex", "kimi", "minimax", "grok",
-        "claude", "copilot", "zai", "bedrock", "alibaba",
+        "claude", "copilot", "zai", "bedrock", "alibaba", "mimo",
     ]
 }

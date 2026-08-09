@@ -234,6 +234,15 @@ public protocol MiniMaxSettingsRepository: ProviderSettingsRepository {
     func hasMinimaxApiKey() -> Bool
 }
 
+/// Xiaomi MiMo Token Plan settings — console cookie source (no pay-as-you-go balance).
+public protocol MiMoSettingsRepository: ProviderSettingsRepository {
+    func mimoCookieSource() -> MiMoCookieSource
+    func setMimoCookieSource(_ source: MiMoCookieSource)
+    func saveMimoManualCookie(_ cookie: String)
+    func getMimoManualCookie() -> String?
+    func deleteMimoManualCookie()
+}
+
 /// Alibaba Coding Plan-specific settings repository, extending base ProviderSettingsRepository.
 /// Stores region, cookie source, manual cookie, and API key for Alibaba Coding Plan quota monitoring.
 public protocol AlibabaSettingsRepository: ProviderSettingsRepository {

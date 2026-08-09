@@ -3,7 +3,7 @@ import Domain
 
 /// UserDefaults-based implementation of ProviderSettingsRepository and its sub-protocols.
 /// Persists provider settings like isEnabled state and provider-specific configuration.
-public final class UserDefaultsProviderSettingsRepository: ZaiSettingsRepository, CopilotSettingsRepository, BedrockSettingsRepository, ClaudeSettingsRepository, CodexSettingsRepository, KimiSettingsRepository, MiniMaxSettingsRepository, AlibabaSettingsRepository, HookSettingsRepository, @unchecked Sendable {
+public final class UserDefaultsProviderSettingsRepository: ZaiSettingsRepository, CopilotSettingsRepository, BedrockSettingsRepository, ClaudeSettingsRepository, CodexSettingsRepository, KimiSettingsRepository, MiniMaxSettingsRepository, AlibabaSettingsRepository, MiMoSettingsRepository, HookSettingsRepository, @unchecked Sendable {
     /// Shared singleton instance
     public static let shared = UserDefaultsProviderSettingsRepository()
 
@@ -308,6 +308,31 @@ public final class UserDefaultsProviderSettingsRepository: ZaiSettingsRepository
         userDefaults.object(forKey: Keys.minimaxiApiKey) != nil
     }
 
+    // MARK: - MiMoSettingsRepository
+
+    public func mimoCookieSource() -> MiMoCookieSource {
+        guard let rawValue = userDefaults.string(forKey: Keys.mimoCookieSource) else {
+            return .auto
+        }
+        return MiMoCookieSource(rawValue: rawValue) ?? .auto
+    }
+
+    public func setMimoCookieSource(_ source: MiMoCookieSource) {
+        userDefaults.set(source.rawValue, forKey: Keys.mimoCookieSource)
+    }
+
+    public func saveMimoManualCookie(_ cookie: String) {
+        userDefaults.set(cookie, forKey: Keys.mimoManualCookie)
+    }
+
+    public func getMimoManualCookie() -> String? {
+        userDefaults.string(forKey: Keys.mimoManualCookie)
+    }
+
+    public func deleteMimoManualCookie() {
+        userDefaults.removeObject(forKey: Keys.mimoManualCookie)
+    }
+
     // MARK: - AlibabaSettingsRepository
 
     public func alibabaRegion() -> AlibabaRegion {
@@ -415,6 +440,9 @@ public final class UserDefaultsProviderSettingsRepository: ZaiSettingsRepository
         static let alibabaCookieSource = "providerConfig.alibabaCookieSource"
         static let alibabaManualCookie = "com.smartquota.credentials.alibaba-manual-cookie"
         static let alibabaApiKey = "com.smartquota.credentials.alibaba-api-key"
+        // MiMo Token Plan
+        static let mimoCookieSource = "providerConfig.mimoCookieSource"
+        static let mimoManualCookie = "com.smartquota.credentials.mimo-manual-cookie"
         // Credentials (kept compatible with old UserDefaultsCredentialRepository keys)
         static let githubToken = "com.smartquota.credentials.github-copilot-token"
         static let githubUsername = "com.smartquota.credentials.github-username"

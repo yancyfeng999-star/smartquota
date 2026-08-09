@@ -17,6 +17,7 @@ public final class JSONSettingsRepository:
     KimiSettingsRepository,
     MiniMaxSettingsRepository,
     AlibabaSettingsRepository,
+    MiMoSettingsRepository,
     HookSettingsRepository,
     @unchecked Sendable
 {
@@ -458,6 +459,7 @@ public final class JSONSettingsRepository:
         static let minimaxApiKey = "minimax-api-key"
         static let alibabaCookie = "alibaba-manual-cookie"
         static let alibabaApiKey = "alibaba-api-key"
+        static let mimoCookie = "mimo-manual-cookie"
     }
 
     /// UserDefaults keys used only for one-time migration into Keychain.
@@ -467,6 +469,7 @@ public final class JSONSettingsRepository:
         static let minimaxApiKey = "com.smartquota.credentials.minimax-api-key"
         static let alibabaCookie = "com.smartquota.credentials.alibaba-manual-cookie"
         static let alibabaApiKey = "com.smartquota.credentials.alibaba-api-key"
+        static let mimoCookie = "com.smartquota.credentials.mimo-manual-cookie"
     }
 
     public func saveGithubToken(_ token: String) {
@@ -541,6 +544,33 @@ public final class JSONSettingsRepository:
         } else {
             store.write(value: nil, key: "bedrock.dailyBudget")
         }
+    }
+
+    // MARK: - MiMoSettingsRepository
+
+    public func mimoCookieSource() -> MiMoCookieSource {
+        guard let rawValue: String = store.read(key: "mimo.cookieSource") else {
+            return .auto
+        }
+        return MiMoCookieSource(rawValue: rawValue) ?? .auto
+    }
+
+    public func setMimoCookieSource(_ source: MiMoCookieSource) {
+        store.write(value: source.rawValue, key: "mimo.cookieSource")
+    }
+
+    public func saveMimoManualCookie(_ cookie: String) {
+        KeychainSecretStore.set(cookie, account: SecretAccount.mimoCookie)
+        credentials.removeObject(forKey: DefaultsCredentialKey.mimoCookie)
+    }
+
+    public func getMimoManualCookie() -> String? {
+        secret(account: SecretAccount.mimoCookie, defaultsKey: DefaultsCredentialKey.mimoCookie)
+    }
+
+    public func deleteMimoManualCookie() {
+        KeychainSecretStore.delete(account: SecretAccount.mimoCookie)
+        credentials.removeObject(forKey: DefaultsCredentialKey.mimoCookie)
     }
 
     // MARK: - AlibabaSettingsRepository

@@ -191,6 +191,18 @@ struct ProviderProbeGuide: Identifiable, Sendable {
             credentialHint: "浏览器登录阿里云控制台，或配置 API Key",
             dashboardURL: URL(string: "https://bailian.console.aliyun.com")
         ),
+        "mimo": ProviderProbeGuide(
+            id: "mimo",
+            title: "Xiaomi MiMo Token Plan 检测",
+            summary: "控制台 Cookie 读取 Token Plan 月度 Credits（不含账户余额）",
+            steps: [
+                "浏览器登录 platform.xiaomimimo.com → Token Plan",
+                "默认自动从 Safari/Chrome 读取 Cookie",
+                "请求 tokenPlan/detail + tokenPlan/usage 展示剩余额度",
+            ],
+            credentialHint: "需要 api-platform_serviceToken 与 userId；不是 tp- 推理 Key",
+            dashboardURL: URL(string: "https://platform.xiaomimimo.com/console/plan-manage")
+        ),
         "ampcode": ProviderProbeGuide(
             id: "ampcode",
             title: "Amp 额度检测",

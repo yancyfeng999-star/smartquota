@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.20] — 2026-08-09
+
+### Added
+- **Xiaomi MiMo Token Plan**：扩展会员（默认关）。用控制台 Cookie 读 `tokenPlan/detail` + `tokenPlan/usage`，展示月度 Credits 剩余；**不读**账户现金余额。设置里可自动浏览器 Cookie 或手动粘贴。
+
+### Release
+- GitHub：`v0.3.20` · `SmartQuota-0.3.20.dmg` / `.pkg`
+- 已装旧版：设置 → **检查更新**
+
+---
+
 ## [Mac 0.3.19] — 2026-08-09
 
 ### Fixed

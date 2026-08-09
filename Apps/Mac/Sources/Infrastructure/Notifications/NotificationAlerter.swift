@@ -195,6 +195,7 @@ public final class NotificationAlerter: QuotaAlerter, @unchecked Sendable {
         case "zai": return "Z.ai"
         case "bedrock": return "AWS Bedrock"
         case "minimax": return "MiniMax"
+        case "mimo": return "Xiaomi MiMo"
         case "alibaba": return "Alibaba"
         case "opencode-go": return "OpenCode Go"
         case "omp": return "Oh My Pi"

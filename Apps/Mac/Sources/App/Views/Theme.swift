@@ -640,6 +640,11 @@ extension AppTheme {
             return scheme == .dark
                 ? Color(red: 1.0, green: 0.47, blue: 0.0)
                 : Color(red: 0.90, green: 0.38, blue: 0.0)
+        case "mimo":
+            // Xiaomi orange
+            return scheme == .dark
+                ? Color(red: 1.0, green: 0.55, blue: 0.12)
+                : Color(red: 0.95, green: 0.40, blue: 0.05)
         case "opencode-go":
             return scheme == .dark
                 ? Color(red: 0.52, green: 0.36, blue: 1.0)
@@ -700,6 +705,10 @@ extension AppTheme {
             secondaryColor = scheme == .dark
                 ? Color(red: 0.85, green: 0.25, blue: 0.0)
                 : Color(red: 0.75, green: 0.20, blue: 0.0)
+        case "mimo":
+            secondaryColor = scheme == .dark
+                ? Color(red: 0.95, green: 0.30, blue: 0.10)
+                : Color(red: 0.85, green: 0.25, blue: 0.08)
         case "opencode-go":
             secondaryColor = scheme == .dark
                 ? Color(red: 0.36, green: 0.20, blue: 0.90)
@@ -735,6 +744,7 @@ extension AppTheme {
         case "bedrock": return "BedrockIcon"
         case "minimax": return "MiniMaxIcon"
         case "alibaba": return "AlibabaIcon"
+        case "mimo": return "MiMoIcon"
         case "opencode-go": return "OpenCodeIcon"
         case "omp": return "OmpIcon"
         case "grok": return "GrokIcon"
@@ -754,6 +764,7 @@ extension AppTheme {
         case "bedrock": return "AWS Bedrock"
         case "minimax": return "MiniMax"
         case "alibaba": return "Alibaba"
+        case "mimo": return "Xiaomi MiMo"
         case "opencode-go": return "OpenCode Go"
         case "omp": return "Oh My Pi"
         case "grok": return "Grok"
@@ -773,6 +784,7 @@ extension AppTheme {
         case "bedrock": return "cloud.fill" // AWS cloud icon
         case "minimax": return "waveform"
         case "alibaba": return "cloud.fill"
+        case "mimo": return "m.circle.fill"
         case "opencode-go": return "square.stack.3d.up.fill"
         case "omp": return "terminal.fill"
         case "grok": return "line.diagonal"

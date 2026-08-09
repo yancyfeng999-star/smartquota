@@ -18,7 +18,7 @@ enum ProviderCatalog {
     static let displayOrder: [String] = [
         "codex", "kimi", "minimax", "grok",
         "claude", "gemini", "copilot", "cursor", "antigravity",
-        "zai", "bedrock", "alibaba",
+        "zai", "bedrock", "alibaba", "mimo",
         "ampcode", "kiro", "mistral", "opencode-go", "omp",
     ]
 
@@ -115,6 +115,15 @@ enum ProviderCatalog {
                 probe: AlibabaUsageProbe(
                     settingsRepository: settingsRepository,
                     cookieProvider: AlibabaBrowserCookieProvider()
+                ),
+                settingsRepository: settingsRepository
+            )
+        )
+        list.append(
+            MiMoProvider(
+                probe: MiMoUsageProbe(
+                    settingsRepository: settingsRepository,
+                    cookieProvider: MiMoBrowserCookieProvider()
                 ),
                 settingsRepository: settingsRepository
             )

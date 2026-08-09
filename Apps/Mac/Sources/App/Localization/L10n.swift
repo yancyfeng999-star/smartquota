@@ -260,6 +260,37 @@ final class L10n {
         "probe.alibaba.step.0": [.zhHans: "区域：国内 / 国际控制台", .en: "Region: 国内 / 国际控制台"],
         "probe.alibaba.step.1": [.zhHans: "Cookie：自动从浏览器读取，或手动粘贴", .en: "Cookie: auto from browser or paste"],
         "probe.alibaba.step.2": [.zhHans: "也可使用 API Key 探测 Coding Plan 额度", .en: "or use API Key 探测 Coding Plan 额度"],
+        "probe.mimo.title": [.zhHans: "Xiaomi MiMo Token Plan 检测", .en: "Xiaomi MiMo Token Plan"],
+        "probe.mimo.summary": [
+            .zhHans: "控制台 Cookie 读取 Token Plan 月度 Credits（不含账户余额）",
+            .en: "Console cookie → Token Plan monthly credits (no cash balance)",
+        ],
+        "probe.mimo.step.0": [
+            .zhHans: "浏览器登录 platform.xiaomimimo.com → Token Plan",
+            .en: "Log in at platform.xiaomimimo.com → Token Plan",
+        ],
+        "probe.mimo.step.1": [
+            .zhHans: "默认自动从 Safari/Chrome 读取 Cookie",
+            .en: "Auto-import cookies from Safari/Chrome",
+        ],
+        "probe.mimo.step.2": [
+            .zhHans: "请求 tokenPlan/detail + usage，展示剩余额度",
+            .en: "Call tokenPlan/detail + usage for remaining credits",
+        ],
+        "probe.mimo.hint": [
+            .zhHans: "需要 api-platform_serviceToken 与 userId；不是 tp- 推理 Key",
+            .en: "Needs api-platform_serviceToken + userId; not the tp- inference key",
+        ],
+        "config.mimo.title": [.zhHans: "Xiaomi MiMo 配置", .en: "Xiaomi MiMo config"],
+        "config.mimo.sub": [.zhHans: "Token Plan 额度（不含余额）", .en: "Token Plan quota (no cash balance)"],
+        "config.mimo.cookie_source": [.zhHans: "Cookie 来源", .en: "COOKIE SOURCE"],
+        "config.mimo.cookie": [.zhHans: "Cookie 字符串", .en: "COOKIE STRING"],
+        "config.mimo.cookie_prompt": [.zhHans: "粘贴 Cookie…", .en: "Paste cookie…"],
+        "config.mimo.cookie_help": [
+            .zhHans: "登录 plan-manage 后，从浏览器开发者工具复制 Cookie。需含 serviceToken 与 userId。",
+            .en: "After login on plan-manage, paste Cookie with serviceToken and userId.",
+        ],
+        "config.mimo.open": [.zhHans: "打开 MiMo Token Plan", .en: "Open MiMo Token Plan"],
         "probe.ampcode.step.0": [.zhHans: "定位本机 amp 命令", .en: "定位local amp 命令"],
         "probe.ampcode.step.1": [.zhHans: "执行 amp usage 解析配额输出", .en: "run amp usage 解析配额输出"],
         "probe.ampcode.step.2": [.zhHans: "映射为剩余额度卡片", .en: "map to remaining quota cards"],
