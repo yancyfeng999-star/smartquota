@@ -26,7 +26,7 @@ struct SectionDataTests {
 
         let data = try SectionData.decode(from: json.data(using: .utf8)!, type: .quotaGrid, providerId: "test")
 
-        guard case .quotas(let quotas) = data else {
+        guard case .quotas(let quotas, _, _) = data else {
             Issue.record("Expected .quotas case")
             return
         }
@@ -55,7 +55,7 @@ struct SectionDataTests {
 
         let data = try SectionData.decode(from: json.data(using: .utf8)!, type: .quotaGrid, providerId: "test")
 
-        guard case .quotas(let quotas) = data else {
+        guard case .quotas(let quotas, _, _) = data else {
             Issue.record("Expected .quotas case")
             return
         }
@@ -79,7 +79,7 @@ struct SectionDataTests {
 
         let data = try SectionData.decode(from: json.data(using: .utf8)!, type: .quotaGrid, providerId: "test")
 
-        guard case .quotas(let quotas) = data else {
+        guard case .quotas(let quotas, _, _) = data else {
             Issue.record("Expected .quotas case")
             return
         }

@@ -111,8 +111,15 @@ public final class ScriptProbe: UsageProbe, @unchecked Sendable {
 
     private func sectionDataToSnapshot(_ data: SectionData) -> UsageSnapshot {
         switch data {
-        case .quotas(let quotas):
-            return UsageSnapshot(providerId: providerId, quotas: quotas, capturedAt: Date())
+        case .quotas(let quotas, let accountEmail, let externalAccountId):
+            return UsageSnapshot(
+                providerId: providerId,
+                quotas: quotas,
+                capturedAt: Date(),
+                accountEmail: accountEmail,
+                accountExternalId: externalAccountId ?? accountEmail,
+                accountIdentitySource: accountEmail != nil ? .email : (externalAccountId != nil ? .external : nil)
+            )
         case .cost(let costUsage):
             return UsageSnapshot(providerId: providerId, quotas: [], capturedAt: Date(), costUsage: costUsage)
         case .daily(let report):
