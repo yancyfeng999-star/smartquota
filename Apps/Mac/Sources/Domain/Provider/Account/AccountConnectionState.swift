@@ -25,3 +25,16 @@ public enum AccountConnectionState: Sendable, Equatable, Codable {
         }
     }
 }
+
+// MARK: - Display Helpers (L10n keys)
+
+extension AccountConnectionState {
+    /// The localization key for the display label of this state.
+    public var l10nKey: String {
+        switch self {
+        case .connected: return "account.connected"
+        case .disconnected: return "account.disconnected"
+        case .pendingConfirmation: return "account.pending"
+        }
+    }
+}

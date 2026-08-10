@@ -21,20 +21,13 @@ struct AccountPickerView: View {
                     AccountPill(
                         account: account,
                         isActive: account.accountId == provider.activeAccount.accountId,
-                        connectionState: connectionState(for: account)
+                        connectionState: account.connectionState
                     ) {
                         onSwitch(account.accountId)
                     }
                 }
             }
         }
-    }
-
-    private func connectionState(for account: ProviderAccount) -> AccountConnectionState {
-        if let status = account.membershipStatus {
-            return status.asConnectionState
-        }
-        return .connected
     }
 }
 
@@ -105,15 +98,7 @@ struct AccountPill: View {
     }
 
     private var accessibilityText: String {
-        let stateLabel: String
-        switch connectionState {
-        case .connected:
-            stateLabel = L10n.shared.t("account.connected")
-        case .disconnected:
-            stateLabel = L10n.shared.t("account.disconnected")
-        case .pendingConfirmation:
-            stateLabel = L10n.shared.t("account.pending")
-        }
+        let stateLabel = L10n.shared.t(connectionState.l10nKey)
         let activeLabel = isActive ? ", \(L10n.shared.t("account.active"))" : ""
         return "\(account.displayName), \(stateLabel)\(activeLabel)"
     }

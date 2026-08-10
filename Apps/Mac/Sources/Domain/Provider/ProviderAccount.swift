@@ -103,6 +103,13 @@ public struct ProviderAccount: Sendable, Equatable, Identifiable {
     /// coordinators set this field explicitly.
     public var membershipStatus: MembershipStatus?
 
+    /// The connection state derived from membership status.
+    ///
+    /// Falls back to `.connected` when no explicit status is set (single-account providers).
+    public var connectionState: AccountConnectionState {
+        membershipStatus?.asConnectionState ?? .connected
+    }
+
     /// The last usage snapshot captured for this account (persists after sign-out).
     public var lastSnapshot: UsageSnapshot?
 

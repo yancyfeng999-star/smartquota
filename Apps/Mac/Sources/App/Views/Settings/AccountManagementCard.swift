@@ -101,7 +101,7 @@ struct AccountManagementCard: View {
 
     private var subtitleText: String {
         let connected = provider.accounts.filter { account in
-            connectionState(for: account) == .connected
+            account.connectionState == .connected
         }.count
         let pending = monitor.pendingConfirmations(for: provider.id).count
         var parts: [String] = []
@@ -117,7 +117,7 @@ struct AccountManagementCard: View {
     // MARK: - Account Row
 
     private func accountRow(_ account: ProviderAccount) -> some View {
-        let state = connectionState(for: account)
+        let state = account.connectionState
         let isActive = account.accountId == provider.activeAccount.accountId
 
         return HStack(spacing: 10) {
@@ -166,7 +166,7 @@ struct AccountManagementCard: View {
                     }
 
                     // State label
-                    Text(stateLabel(for: state))
+                    Text(l10n.t(state.l10nKey))
                         .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
                         .foregroundStyle(stateDotColor(for: state))
                 }
@@ -206,8 +206,8 @@ struct AccountManagementCard: View {
                 .accessibilityLabel("\(l10n.t("account.switch")) \(account.displayName)")
             }
 
-            // Delete button (not for active account)
-            if !isActive {
+            // Delete button (not for active account, must keep at least 1 account)
+            if !isActive && provider.accounts.count > 1 {
                 Button {
                     accountToDeleteId = account.accountId
                     showDeleteConfirm = true
@@ -252,13 +252,6 @@ struct AccountManagementCard: View {
 
     // MARK: - Helpers
 
-    private func connectionState(for account: ProviderAccount) -> AccountConnectionState {
-        if let status = account.membershipStatus {
-            return status.asConnectionState
-        }
-        return .connected
-    }
-
     private func stateDotColor(for state: AccountConnectionState) -> Color {
         switch state {
         case .connected:
@@ -267,17 +260,6 @@ struct AccountManagementCard: View {
             return theme.statusCritical
         case .pendingConfirmation:
             return theme.statusWarning
-        }
-    }
-
-    private func stateLabel(for state: AccountConnectionState) -> String {
-        switch state {
-        case .connected:
-            return l10n.t("account.connected")
-        case .disconnected:
-            return l10n.t("account.disconnected")
-        case .pendingConfirmation:
-            return l10n.t("account.pending")
         }
     }
 }

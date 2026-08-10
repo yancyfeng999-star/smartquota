@@ -14,11 +14,9 @@ struct PendingAccountBanner: View {
     let onIgnore: (String) -> Void
 
     @Environment(\.appTheme) private var theme
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var isDismissed: Bool = false
 
     var body: some View {
-        if isDismissed || pendingAccounts.isEmpty {
+        if pendingAccounts.isEmpty {
             EmptyView()
         } else {
             VStack(alignment: .leading, spacing: 8) {
