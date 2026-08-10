@@ -9,6 +9,7 @@ import Domain
 /// Credentials (tokens, API keys) use UserDefaults for now (Keychain migration later).
 public final class JSONSettingsRepository:
     AppSettingsRepository,
+    MultiAccountSettingsRepository,
     ZaiSettingsRepository,
     CopilotSettingsRepository,
     BedrockSettingsRepository,
@@ -683,6 +684,52 @@ public final class JSONSettingsRepository:
 
     public func hasMinimaxApiKey() -> Bool {
         getMinimaxApiKey() != nil
+    }
+
+    // MARK: - MultiAccountSettingsRepository
+
+    public func accounts(forProvider id: String) -> [ProviderAccountConfig] {
+        // Read as JSON array data (stored as base64 string)
+        guard let base64: String = store.read(key: "providers.\(id).accounts"),
+              let data = Data(base64Encoded: base64),
+              let configs = try? JSONDecoder().decode([ProviderAccountConfig].self, from: data) else {
+            return []
+        }
+        return configs
+    }
+
+    public func addAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accounts(forProvider: id)
+        existing.append(config)
+        saveAccounts(existing, forProvider: id)
+    }
+
+    public func removeAccount(accountId: String, forProvider id: String) {
+        var existing = accounts(forProvider: id)
+        existing.removeAll { $0.accountId == accountId }
+        saveAccounts(existing, forProvider: id)
+    }
+
+    public func updateAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accounts(forProvider: id)
+        guard let index = existing.firstIndex(where: { $0.accountId == config.accountId }) else { return }
+        existing[index] = config
+        saveAccounts(existing, forProvider: id)
+    }
+
+    public func activeAccountId(forProvider id: String) -> String? {
+        store.read(key: "providers.\(id).selectedAccountId")
+    }
+
+    public func setActiveAccountId(_ accountId: String?, forProvider id: String) {
+        store.write(value: accountId, key: "providers.\(id).selectedAccountId")
+    }
+
+    private func saveAccounts(_ accounts: [ProviderAccountConfig], forProvider id: String) {
+        if let data = try? JSONEncoder().encode(accounts) {
+            let base64 = data.base64EncodedString()
+            store.write(value: base64, key: "providers.\(id).accounts")
+        }
     }
 
     /// Returns stored enabled flag if the user has ever set it; nil if never configured.
