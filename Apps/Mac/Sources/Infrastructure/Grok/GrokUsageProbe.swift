@@ -64,7 +64,13 @@ public struct GrokUsageProbe: UsageProbe, @unchecked Sendable {
             }
         }
 
-        return try Self.parseResponse(data, providerId: "grok", accountEmail: credentials.email)
+        return try Self.parseResponse(
+            data,
+            providerId: "grok",
+            accountEmail: credentials.email,
+            accountExternalId: credentials.email,
+            accountIdentitySource: credentials.email != nil ? .email : nil
+        )
     }
 
     // MARK: - Token Refresh
@@ -199,6 +205,8 @@ public struct GrokUsageProbe: UsageProbe, @unchecked Sendable {
         _ data: Data,
         providerId: String,
         accountEmail: String? = nil,
+        accountExternalId: String? = nil,
+        accountIdentitySource: AccountIdentitySource? = nil,
         now: Date = Date()
     ) throws -> UsageSnapshot {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -277,7 +285,9 @@ public struct GrokUsageProbe: UsageProbe, @unchecked Sendable {
             providerId: providerId,
             quotas: quotas,
             capturedAt: now,
-            accountEmail: accountEmail
+            accountEmail: accountEmail,
+            accountExternalId: accountExternalId,
+            accountIdentitySource: accountIdentitySource
         )
     }
 

@@ -125,7 +125,9 @@ public struct AmpCodeUsageProbe: UsageProbe {
             quotas: quotas,
             capturedAt: Date(),
             accountEmail: email,
-            accountTier: nil
+            accountTier: nil,
+            accountExternalId: email,
+            accountIdentitySource: email != nil ? .email : nil
         )
     }
 

@@ -91,6 +91,32 @@ struct GrokUsageProbeParsingTests {
     }
 
     @Test
+    func `passes account external ID and identity source when email present`() throws {
+        let data = Data(Self.sampleResponse.utf8)
+
+        let snapshot = try GrokUsageProbe.parseResponse(
+            data,
+            providerId: "grok",
+            accountEmail: "user@example.com",
+            accountExternalId: "user@example.com",
+            accountIdentitySource: .email
+        )
+
+        #expect(snapshot.accountExternalId == "user@example.com")
+        #expect(snapshot.accountIdentitySource == .email)
+    }
+
+    @Test
+    func `omits identity source when no email`() throws {
+        let data = Data(Self.sampleResponse.utf8)
+
+        let snapshot = try GrokUsageProbe.parseResponse(data, providerId: "grok")
+
+        #expect(snapshot.accountExternalId == nil)
+        #expect(snapshot.accountIdentitySource == nil)
+    }
+
+    @Test
     func `monthly period maps to monthly time limit`() throws {
         let json = """
         {

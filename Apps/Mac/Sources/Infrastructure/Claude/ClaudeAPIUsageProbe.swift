@@ -128,6 +128,7 @@ public struct ClaudeAPIUsageProbe: UsageProbe, @unchecked Sendable {
     private let cache = CredentialCache()
     private let rateLimit = RateLimitState()
     private let snapshotCache: SnapshotCache
+    private let accountInfoResolver: any AccountInfoResolving
 
     /// Fallback retry window applied when the API returns 429 without a
     /// usable `Retry-After` header. Five minutes is conservative enough to
@@ -159,12 +160,14 @@ public struct ClaudeAPIUsageProbe: UsageProbe, @unchecked Sendable {
         credentialLoader: ClaudeCredentialLoader = ClaudeCredentialLoader(),
         networkClient: any NetworkClient = URLSession.shared,
         timeout: TimeInterval = 15,
-        snapshotCacheTTL: TimeInterval = Self.defaultSnapshotCacheTTL
+        snapshotCacheTTL: TimeInterval = Self.defaultSnapshotCacheTTL,
+        accountInfoResolver: any AccountInfoResolving = ClaudeAccountInfoResolver()
     ) {
         self.credentialLoader = credentialLoader
         self.networkClient = networkClient
         self.timeout = timeout
         self.snapshotCache = SnapshotCache(ttl: snapshotCacheTTL)
+        self.accountInfoResolver = accountInfoResolver
     }
 
     public func isAvailable() async -> Bool {
@@ -536,17 +539,21 @@ public struct ClaudeAPIUsageProbe: UsageProbe, @unchecked Sendable {
         // Determine account tier from subscription type
         let accountTier = parseAccountTier(subscriptionType)
 
+        let accountInfo = accountInfoResolver.resolve()
+
         AppLog.probes.info("Claude API: Parsed \(quotas.count) quotas, tier=\(accountTier?.badgeText ?? "unknown")")
 
         return UsageSnapshot(
             providerId: "claude",
             quotas: quotas,
             capturedAt: Date(),
-            accountEmail: nil,
-            accountOrganization: nil,
-            loginMethod: nil,
+            accountEmail: accountInfo?.email,
+            accountOrganization: accountInfo?.organization,
+            loginMethod: accountInfo?.loginMethod,
             accountTier: accountTier,
-            costUsage: costUsage
+            costUsage: costUsage,
+            accountExternalId: accountInfo?.email,
+            accountIdentitySource: accountInfo?.email != nil ? .email : nil
         )
     }
 

@@ -1083,4 +1083,41 @@ struct ClaudeUsageProbeParsingTests {
     private func simulateParse(text: String) throws -> UsageSnapshot {
         try ClaudeUsageProbe.parse(text)
     }
+
+    // MARK: - Account Identity Tests
+
+    @Test
+    func `parse populates accountExternalId from email when resolver provides it`() throws {
+        let resolver = MockAccountInfoResolving()
+        given(resolver).resolve().willReturn(AccountInfo(email: "user@example.com", organization: "Acme"))
+
+        let snapshot = try ClaudeUsageProbe.parse(Self.sampleClaudeOutput, accountInfoResolver: resolver)
+
+        #expect(snapshot.accountEmail == "user@example.com")
+        #expect(snapshot.accountExternalId == "user@example.com")
+        #expect(snapshot.accountIdentitySource == .email)
+    }
+
+    @Test
+    func `parse omits identity source when resolver returns no email`() throws {
+        let resolver = MockAccountInfoResolving()
+        given(resolver).resolve().willReturn(AccountInfo(organization: "Acme"))
+
+        let snapshot = try ClaudeUsageProbe.parse(Self.sampleClaudeOutput, accountInfoResolver: resolver)
+
+        #expect(snapshot.accountEmail == nil)
+        #expect(snapshot.accountExternalId == nil)
+        #expect(snapshot.accountIdentitySource == nil)
+    }
+
+    @Test
+    func `parse omits identity when resolver returns nil`() throws {
+        let resolver = MockAccountInfoResolving()
+        given(resolver).resolve().willReturn(nil)
+
+        let snapshot = try ClaudeUsageProbe.parse(Self.sampleClaudeOutput, accountInfoResolver: resolver)
+
+        #expect(snapshot.accountExternalId == nil)
+        #expect(snapshot.accountIdentitySource == nil)
+    }
 }
