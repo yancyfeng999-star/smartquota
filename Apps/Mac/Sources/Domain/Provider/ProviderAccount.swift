@@ -82,4 +82,30 @@ public struct ProviderAccount: Sendable, Equatable, Identifiable {
     public var initialLetter: String {
         String(displayName.prefix(1)).uppercased()
     }
+
+    // MARK: - Membership
+
+    /// The membership status of this account within the provider.
+    public var membershipStatus: MembershipStatus = .pendingConfirmation
+
+    /// The last usage snapshot captured for this account (persists after sign-out).
+    public var lastSnapshot: UsageSnapshot?
+
+    /// When the last snapshot was captured.
+    public var lastSnapshotTime: Date?
+}
+
+/// Membership status of an account within a provider.
+///
+/// Transitions:
+/// - `.pendingConfirmation` → `.signedIn` (user confirms the account)
+/// - `.signedIn` → `.signedOut` (user signs out)
+/// - `.signedOut` → `.signedIn` (user signs back in)
+public enum MembershipStatus: Sendable, Equatable {
+    /// Discovered during interactive refresh; awaiting user confirmation.
+    case pendingConfirmation
+    /// Actively signed in and participating in monitoring.
+    case signedIn
+    /// Previously signed in; retains last snapshot for historical reference.
+    case signedOut
 }

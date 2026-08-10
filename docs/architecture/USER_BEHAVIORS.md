@@ -650,6 +650,91 @@ Scenario: Opt into beta updates
 
 ---
 
+## Multi-Account Membership
+
+| # | Behavior |
+|---|----------|
+| 55 | First interactive refresh returning an email auto-creates the account as `signedIn` |
+| 56 | Same email with different casing or whitespace does not create a duplicate account |
+| 57 | New email discovered during interactive refresh → produces `pendingConfirmation`, does not auto-add to account list |
+| 58 | Background refresh discovering a new email does not change account count or active account |
+| 59 | Signed-out account retains last snapshot and time, status becomes `signedOut` |
+| 60 | Alert isolation: historical signedOut account's low quota does not trigger alerts; only signedIn account alerts fire |
+
+### BDD Scenarios
+
+**#55 — First interactive refresh auto-creates account**
+```
+Scenario: First refresh establishes account
+  Given Codex is the only provider with no accounts
+  When the user triggers an interactive refresh
+    And the probe returns email "first@example.com"
+  Then the account list has exactly one entry
+    And the account email is "first@example.com"
+    And the account status is signedIn
+```
+
+**#56 — Same email does not create duplicate**
+```
+Scenario: Email normalization prevents duplicates
+  Given account "First@Example.com" already exists
+  When a refresh returns " first@example.com "
+  Then the account list still has exactly one entry
+```
+
+**#57 — New email → pendingConfirmation**
+```
+Scenario: New email requires confirmation
+  Given account A (account-a@example.com) is signed in
+  When an interactive refresh discovers account B (account-b@example.com)
+  Then the account list still has only account A
+    And a pendingConfirmation is produced for account B
+```
+
+**#58 — Background refresh does not auto-add accounts**
+```
+Scenario: Background refresh preserves account list
+  Given account A is signed in
+  When a background refresh returns account B's email
+  Then the account count is unchanged
+    And the active display account is unchanged
+```
+
+**#59 — Signed-out account retains last snapshot**
+```
+Scenario: Account signs out but keeps history
+  Given account A was signed in with 42% remaining
+  When account A signs out
+  Then account A is still in the account list
+    And account A's status is signedOut
+    And account A's lastSnapshot shows 42% remaining
+    And account A's lastSnapshotTime is preserved
+```
+
+**#60 — Alert isolation across accounts**
+```
+Scenario: Signed-out account does not trigger alerts
+  Given account A is signedOut with 10% remaining (historical)
+    And account B is signedIn with 70% remaining (current)
+  When a refresh completes
+  Then no alert fires for account A's historical low quota
+
+Scenario: Signed-in account triggers alerts normally
+  Given account B is signedIn
+  When a refresh returns 5% remaining (critical)
+  Then an alert fires with status degraded from healthy to critical
+```
+
+### Inner TDD Tests (planned)
+- `MultiAccountCoordinatorTests.first refresh auto-creates signedIn account`
+- `MultiAccountCoordinatorTests.same email normalized prevents duplicate`
+- `MultiAccountCoordinatorTests.new email produces pendingConfirmation`
+- `MultiAccountCoordinatorTests.background refresh does not auto-add accounts`
+- `MultiAccountCoordinatorTests.sign-out preserves last snapshot`
+- `MultiAccountCoordinatorTests.alert isolation skips signedOut accounts`
+
+---
+
 ## Coverage Summary
 
 | Feature Area | Behaviors | BDD Scenarios | Inner TDD Coverage |
@@ -668,4 +753,5 @@ Scenario: Opt into beta updates
 | Provider Enable | 46–48 | 4 | Strong (MonitorTests + SettingsTests) |
 | Themes | 49–51 | 2 | Weak (no dedicated theme tests) |
 | Updates | 52–54 | 1 | Moderate (channel tests) |
-| **Total** | **54** | **50** | |
+| Multi-Account Membership | 55–60 | 6 | Planned (MultiAccountCoordinatorTests) |
+| **Total** | **60** | **56** | |
