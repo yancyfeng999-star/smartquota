@@ -43,9 +43,13 @@ struct MiniMaxUsageProbeTests {
         if let apiKey {
             settingsRepository.saveMinimaxApiKey(apiKey)
         }
+        // Use an isolated temp directory to avoid reading ~/.minimax/config.yaml
+        let tempHome = FileManager.default.temporaryDirectory
+            .appendingPathComponent("minimax-test-\(UUID().uuidString)")
         return MiniMaxUsageProbe(
             networkClient: networkClient,
-            settingsRepository: settingsRepository
+            settingsRepository: settingsRepository,
+            homeDirectory: tempHome
         )
     }
 
@@ -93,7 +97,7 @@ struct MiniMaxUsageProbeTests {
 
         // Then
         #expect(snapshot.quotas.count == 1)
-        #expect(snapshot.quotas[0].quotaType == .modelSpecific("minimax-m2"))
+        #expect(snapshot.quotas[0].quotaType == .session)
         #expect(snapshot.providerId == "minimax")
     }
 
@@ -210,6 +214,7 @@ struct MiniMaxUsageProbeTests {
         #expect(snapshot.quotas.count == 1)
         #expect(snapshot.providerId == "minimax")
         // Verify the request was sent to international endpoint (验证请求发送到国际版端点)
-        #expect(capturedRequest?.url?.absoluteString == "https://api.minimax.io/v1/api/openplatform/coding_plan/remains")
+        // The probe tries the modern endpoint first (/v1/token_plan/remains)
+        #expect(capturedRequest?.url?.absoluteString == "https://api.minimax.io/v1/token_plan/remains")
     }
 }

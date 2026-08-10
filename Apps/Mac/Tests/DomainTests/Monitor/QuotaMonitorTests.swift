@@ -815,14 +815,14 @@ struct QuotaMonitorTests {
         let codexProvider = CodexProvider(probe: codexProbe, settingsRepository: settings)
         let monitor = makeMonitor(providers: AIProviders(providers: [claudeProvider, codexProvider]))
 
-        // Selected provider is "claude" by default
+        // Selected provider is "codex" by default
 
         // When
         await monitor.refreshSelected()
 
-        // Then - only Claude refreshed, Codex untouched
-        #expect(claudeProvider.snapshot != nil)
-        #expect(codexProvider.snapshot == nil)
+        // Then - only Codex refreshed, Claude untouched
+        #expect(claudeProvider.snapshot == nil)
+        #expect(codexProvider.snapshot != nil)
     }
 
     @Test
@@ -1364,13 +1364,13 @@ struct QuotaMonitorTests {
         let codex = CodexProvider(probe: MockUsageProbe(), settingsRepository: settings)
         let monitor = makeMonitor(providers: AIProviders(providers: [claude, codex]))
 
-        #expect(monitor.selectedProviderId == "claude")
+        #expect(monitor.selectedProviderId == "codex")
 
         // When
-        monitor.selectProvider(id: "codex")
+        monitor.selectProvider(id: "claude")
 
         // Then
-        #expect(monitor.selectedProviderId == "codex")
+        #expect(monitor.selectedProviderId == "claude")
     }
 
     @Test
@@ -1390,22 +1390,22 @@ struct QuotaMonitorTests {
     }
 
     @Test
-    func `init selects first enabled when default claude is disabled`() {
-        // Given - claude (default) is disabled before init
+    func `init selects first enabled when default codex is disabled`() {
+        // Given - codex (default) is disabled before init
         let settings = makeSettingsRepository()
         let claude = ClaudeProvider(probe: MockUsageProbe(), settingsRepository: settings)
         let codex = CodexProvider(probe: MockUsageProbe(), settingsRepository: settings)
-        claude.isEnabled = false
+        codex.isEnabled = false
 
         // When
         let monitor = makeMonitor(providers: AIProviders(providers: [claude, codex]))
 
-        // Then - automatically selects codex (first enabled)
-        #expect(monitor.selectedProviderId == "codex")
+        // Then - automatically selects claude (first enabled)
+        #expect(monitor.selectedProviderId == "claude")
     }
 
     @Test
-    func `init keeps claude when enabled`() {
+    func `init keeps codex when enabled`() {
         // Given
         let settings = makeSettingsRepository()
         let claude = ClaudeProvider(probe: MockUsageProbe(), settingsRepository: settings)
@@ -1414,8 +1414,8 @@ struct QuotaMonitorTests {
         // When
         let monitor = makeMonitor(providers: AIProviders(providers: [claude, codex]))
 
-        // Then - keeps default claude
-        #expect(monitor.selectedProviderId == "claude")
+        // Then - keeps default codex
+        #expect(monitor.selectedProviderId == "codex")
     }
 
     // MARK: - Refreshing State

@@ -150,11 +150,11 @@ struct JSONSettingsRepositoryProviderTests {
     // MARK: - Codex Settings
 
     @Test
-    func `codexProbeMode defaults to rpc`() {
+    func `codexProbeMode defaults to api`() {
         let (repo, dir) = makeRepository()
         defer { cleanup(dir) }
 
-        #expect(repo.codexProbeMode() == .rpc)
+        #expect(repo.codexProbeMode() == .api)
     }
 
     @Test
@@ -169,11 +169,11 @@ struct JSONSettingsRepositoryProviderTests {
     // MARK: - Kimi Settings
 
     @Test
-    func `kimiProbeMode defaults to cli`() {
+    func `kimiProbeMode defaults to api`() {
         let (repo, dir) = makeRepository()
         defer { cleanup(dir) }
 
-        #expect(repo.kimiProbeMode() == .cli)
+        #expect(repo.kimiProbeMode() == .api)
     }
 
     @Test

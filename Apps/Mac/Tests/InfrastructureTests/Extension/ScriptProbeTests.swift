@@ -240,7 +240,7 @@ struct ScriptProbeTests {
         let command = capturedArgs.last ?? ""
         #expect(command.contains("SMARTQUOTA_API_KEY="))
         #expect(command.contains("SMARTQUOTA_BASE_URL="))
-        #expect(command.contains("./probe.sh"))
+        #expect(command.contains("probe.sh"))
     }
 
     @Test

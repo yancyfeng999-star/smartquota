@@ -95,7 +95,7 @@ struct AIProvidersTests {
         let providers = AIProviders(providers: [claude, codex])
 
         #expect(providers.provider(id: "claude")?.name == "Claude")
-        #expect(providers.provider(id: "codex")?.name == "Codex")
+        #expect(providers.provider(id: "codex")?.name == "ChatGPT")
     }
 
     @Test

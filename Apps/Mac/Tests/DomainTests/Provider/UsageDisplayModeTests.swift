@@ -12,7 +12,7 @@ struct UsageDisplayModeTests {
         let mode = UsageDisplayMode.remaining
 
         // When & Then
-        #expect(mode.displayLabel == "Remaining")
+        #expect(mode.displayLabel == "剩余")
     }
 
     @Test
@@ -21,7 +21,7 @@ struct UsageDisplayModeTests {
         let mode = UsageDisplayMode.used
 
         // When & Then
-        #expect(mode.displayLabel == "Used")
+        #expect(mode.displayLabel == "已用")
     }
 
     // MARK: - Raw Value Persistence

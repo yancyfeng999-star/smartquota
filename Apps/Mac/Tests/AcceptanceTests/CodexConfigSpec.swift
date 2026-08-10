@@ -60,8 +60,8 @@ struct CodexConfigSpec {
                 settingsRepository: settings
             )
 
-            // Default is RPC mode
-            #expect(codex.probeMode == .rpc)
+            // Default is API mode
+            #expect(codex.probeMode == .api)
 
             // When — user switches to API mode
             codex.probeMode = .api
@@ -84,8 +84,8 @@ struct CodexConfigSpec {
             let defaults = UserDefaults(suiteName: suiteName)!
             let settings = UserDefaultsProviderSettingsRepository(userDefaults: defaults)
 
-            // Default is RPC
-            #expect(settings.codexProbeMode() == .rpc)
+            // Default is API
+            #expect(settings.codexProbeMode() == .api)
 
             // When
             settings.setCodexProbeMode(.api)

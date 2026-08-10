@@ -149,7 +149,7 @@ struct NotificationAlerterTests {
 
         // Then
         verify(mockSender).send(
-            title: .matching { $0.contains("Quota Alert") },
+            title: .matching { $0.contains("额度提醒") },
             body: .matching { $0.contains("running low") },
             categoryIdentifier: .value("QUOTA_ALERT")
         ).called(1)
@@ -167,7 +167,7 @@ struct NotificationAlerterTests {
 
         // Then
         verify(mockSender).send(
-            title: .matching { $0.contains("Quota Alert") },
+            title: .matching { $0.contains("额度提醒") },
             body: .matching { $0.contains("critically low") },
             categoryIdentifier: .value("QUOTA_ALERT")
         ).called(1)
@@ -185,7 +185,7 @@ struct NotificationAlerterTests {
 
         // Then
         verify(mockSender).send(
-            title: .matching { $0.contains("Quota Alert") },
+            title: .matching { $0.contains("额度提醒") },
             body: .matching { $0.contains("depleted") },
             categoryIdentifier: .value("QUOTA_ALERT")
         ).called(1)

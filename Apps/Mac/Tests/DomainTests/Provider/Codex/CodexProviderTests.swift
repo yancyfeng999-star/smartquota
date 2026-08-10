@@ -28,7 +28,7 @@ struct CodexProviderTests {
     func `codex provider has correct name`() {
         let settings = makeSettingsRepository()
         let codex = CodexProvider(probe: MockUsageProbe(), settingsRepository: settings)
-        #expect(codex.name == "Codex")
+        #expect(codex.name == "ChatGPT")
     }
 
     @Test
@@ -39,11 +39,11 @@ struct CodexProviderTests {
     }
 
     @Test
-    func `codex provider has dashboard URL pointing to openai`() {
+    func `codex provider has dashboard URL pointing to chatgpt`() {
         let settings = makeSettingsRepository()
         let codex = CodexProvider(probe: MockUsageProbe(), settingsRepository: settings)
         #expect(codex.dashboardURL != nil)
-        #expect(codex.dashboardURL?.host?.contains("openai") == true)
+        #expect(codex.dashboardURL?.host?.contains("chatgpt") == true)
     }
 
     @Test

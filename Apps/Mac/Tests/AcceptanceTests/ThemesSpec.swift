@@ -45,7 +45,7 @@ struct ThemesSpec {
             #expect(claude.id == "claude")
             #expect(claude.name == "Claude")
             #expect(codex.id == "codex")
-            #expect(codex.name == "Codex")
+            #expect(codex.name == "ChatGPT")
             #expect(claude.id != codex.id)
         }
     }

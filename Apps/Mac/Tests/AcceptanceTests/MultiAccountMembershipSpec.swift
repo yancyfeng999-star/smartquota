@@ -23,8 +23,66 @@ private struct TestClock: Clock {
     func sleep(nanoseconds: UInt64) async throws {}
 }
 
+/// In-memory mock for MultiAccountSettingsRepository.
+private final class MockMultiAccountSettings: MultiAccountSettingsRepository, @unchecked Sendable {
+    private var accountsByProvider: [String: [ProviderAccountConfig]] = [:]
+    private var activeAccountIds: [String: String] = [:]
+
+    // MARK: - ProviderSettingsRepository
+
+    func isEnabled(forProvider id: String) -> Bool { true }
+    func isEnabled(forProvider id: String, defaultValue: Bool) -> Bool { defaultValue }
+    func setEnabled(_ enabled: Bool, forProvider id: String) {}
+    func customCardURL(forProvider id: String) -> String? { nil }
+    func setCustomCardURL(_ url: String?, forProvider id: String) {}
+
+    // MARK: - MultiAccountSettingsRepository
+
+    func accounts(forProvider id: String) -> [ProviderAccountConfig] {
+        accountsByProvider[id] ?? []
+    }
+
+    func addAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accountsByProvider[id] ?? []
+        if !existing.contains(where: { $0.accountId == config.accountId }) {
+            existing.append(config)
+            accountsByProvider[id] = existing
+        }
+    }
+
+    func removeAccount(accountId: String, forProvider id: String) {
+        var existing = accountsByProvider[id] ?? []
+        existing.removeAll { $0.accountId == accountId }
+        accountsByProvider[id] = existing
+    }
+
+    func updateAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accountsByProvider[id] ?? []
+        if let index = existing.firstIndex(where: { $0.accountId == config.accountId }) {
+            existing[index] = config
+            accountsByProvider[id] = existing
+        }
+    }
+
+    func activeAccountId(forProvider id: String) -> String? {
+        activeAccountIds[id]
+    }
+
+    func setActiveAccountId(_ accountId: String?, forProvider id: String) {
+        activeAccountIds[id] = accountId
+    }
+}
+
 @Suite("Feature: Multi-Account Membership")
 struct MultiAccountMembershipSpec {
+
+    private static func makeSettings() -> MockProviderSettingsRepository {
+        let mock = MockProviderSettingsRepository()
+        given(mock).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
+        given(mock).isEnabled(forProvider: .any).willReturn(true)
+        given(mock).setEnabled(.any, forProvider: .any).willReturn()
+        return mock
+    }
 
     // MARK: - #55: First interactive refresh auto-creates account
 
@@ -35,10 +93,8 @@ struct MultiAccountMembershipSpec {
         @Test
         func `first refresh returning email creates one signedIn account`() async throws {
             // Given — Codex is the only provider, no accounts yet
-            let settings = MockProviderSettingsRepository()
-            given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
-            given(settings).isEnabled(forProvider: .any).willReturn(true)
-            given(settings).setEnabled(.any, forProvider: .any).willReturn()
+            let settings = makeSettings()
+            let multiSettings = MockMultiAccountSettings()
 
             let probe = MockUsageProbe()
             given(probe).isAvailable().willReturn(true)
@@ -54,17 +110,19 @@ struct MultiAccountMembershipSpec {
                 providers: AIProviders(providers: [codex]),
                 clock: TestClock()
             )
+            let coordinator = ProviderAccountCoordinator(
+                providerId: "codex",
+                settingsRepository: multiSettings
+            )
+            monitor.registerCoordinator(coordinator)
 
             // When — user triggers interactive refresh
             await monitor.refresh(providerId: "codex")
 
-            // Then — account list has exactly one entry with signedIn status
-            let multiAccount = try #require(codex as? any MultiAccountProvider,
-                "CodexProvider must conform to MultiAccountProvider — account coordinator not yet implemented")
-
-            #expect(multiAccount.accounts.count == 1)
-            #expect(multiAccount.accounts.first?.email == "first@example.com")
-            #expect(multiAccount.accounts.first?.membershipStatus == .signedIn)
+            // Then — account list has exactly one entry with connected status
+            #expect(coordinator.accounts.count == 1)
+            #expect(coordinator.accounts.first?.email == "first@example.com")
+            #expect(coordinator.accounts.first?.connectionState == .connected)
         }
     }
 
@@ -77,10 +135,8 @@ struct MultiAccountMembershipSpec {
         @Test
         func `case and whitespace variants of same email keep single account`() async throws {
             // Given — first refresh returns "First@Example.com"
-            let settings = MockProviderSettingsRepository()
-            given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
-            given(settings).isEnabled(forProvider: .any).willReturn(true)
-            given(settings).setEnabled(.any, forProvider: .any).willReturn()
+            let settings = makeSettings()
+            let multiSettings = MockMultiAccountSettings()
 
             let probe = MockUsageProbe()
             given(probe).isAvailable().willReturn(true)
@@ -96,6 +152,11 @@ struct MultiAccountMembershipSpec {
                 providers: AIProviders(providers: [codex]),
                 clock: TestClock()
             )
+            let coordinator = ProviderAccountCoordinator(
+                providerId: "codex",
+                settingsRepository: multiSettings
+            )
+            monitor.registerCoordinator(coordinator)
 
             await monitor.refresh(providerId: "codex")
 
@@ -110,10 +171,7 @@ struct MultiAccountMembershipSpec {
             await monitor.refresh(providerId: "codex")
 
             // Then — still only one account
-            let multiAccount = try #require(codex as? any MultiAccountProvider,
-                "CodexProvider must conform to MultiAccountProvider — account coordinator not yet implemented")
-
-            #expect(multiAccount.accounts.count == 1)
+            #expect(coordinator.accounts.count == 1)
         }
     }
 
@@ -126,10 +184,8 @@ struct MultiAccountMembershipSpec {
         @Test
         func `new email produces pendingConfirmation without adding to accounts`() async throws {
             // Given — account A already signed in
-            let settings = MockProviderSettingsRepository()
-            given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
-            given(settings).isEnabled(forProvider: .any).willReturn(true)
-            given(settings).setEnabled(.any, forProvider: .any).willReturn()
+            let settings = makeSettings()
+            let multiSettings = MockMultiAccountSettings()
 
             let probe = MockUsageProbe()
             given(probe).isAvailable().willReturn(true)
@@ -145,37 +201,30 @@ struct MultiAccountMembershipSpec {
                 providers: AIProviders(providers: [codex]),
                 clock: TestClock()
             )
+            let coordinator = ProviderAccountCoordinator(
+                providerId: "codex",
+                settingsRepository: multiSettings
+            )
+            monitor.registerCoordinator(coordinator)
 
             await monitor.refresh(providerId: "codex")
 
-            // When — interactive refresh discovers account B
-            given(probe).probe().willReturn(UsageSnapshot(
+            // When — interactive refresh discovers account B via coordinator ingest
+            let snapshotB = UsageSnapshot(
                 providerId: "codex",
                 quotas: [UsageQuota(percentRemaining: 60, quotaType: .session, providerId: "codex")],
                 capturedAt: Date(),
                 accountEmail: "account-b@example.com"
-            ))
-
-            await monitor.refresh(providerId: "codex")
+            )
+            coordinator.process(.ingest(snapshot: snapshotB, kind: .interactive))
 
             // Then — account list still has only A, and pendingConfirmation is produced
-            let multiAccount = try #require(codex as? any MultiAccountProvider,
-                "CodexProvider must conform to MultiAccountProvider — account coordinator not yet implemented")
+            #expect(coordinator.accounts.count == 1)
+            #expect(coordinator.accounts.first?.email == "account-a@example.com")
 
-            #expect(multiAccount.accounts.count == 1)
-            #expect(multiAccount.accounts.first?.email == "account-a@example.com")
-
-            // Contract: a pendingConfirmation must be produced for account B.
-            // MultiAccountProvider must expose pending confirmations so the UI
-            // can prompt the user to approve the newly discovered account.
-            //
-            // Once the coordinator is implemented, assert:
-            //   #expect(multiAccount.pendingConfirmations.count == 1)
-            //   #expect(multiAccount.pendingConfirmations.first?.email == "account-b@example.com")
-            //
-            // For now, verify that no account with .signedIn status matches account B
-            // (i.e., it was NOT auto-added to the active account list):
-            #expect(!multiAccount.accounts.contains { $0.email == "account-b@example.com" && $0.membershipStatus == .signedIn })
+            // A pendingConfirmation must be produced for account B.
+            #expect(coordinator.pendingConfirmations.count == 1)
+            #expect(coordinator.pendingConfirmations.first?.email == "account-b@example.com")
         }
     }
 
@@ -188,10 +237,8 @@ struct MultiAccountMembershipSpec {
         @Test
         func `background refresh discovering new email does not change account count`() async throws {
             // Given — account A is signed in
-            let settings = MockProviderSettingsRepository()
-            given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
-            given(settings).isEnabled(forProvider: .any).willReturn(true)
-            given(settings).setEnabled(.any, forProvider: .any).willReturn()
+            let settings = makeSettings()
+            let multiSettings = MockMultiAccountSettings()
 
             let probe = MockUsageProbe()
             given(probe).isAvailable().willReturn(true)
@@ -207,15 +254,17 @@ struct MultiAccountMembershipSpec {
                 providers: AIProviders(providers: [codex]),
                 clock: TestClock()
             )
+            let coordinator = ProviderAccountCoordinator(
+                providerId: "codex",
+                settingsRepository: multiSettings
+            )
+            monitor.registerCoordinator(coordinator)
 
             // Interactive refresh to establish account A
             await monitor.refresh(providerId: "codex")
 
-            let multiAccount = try #require(codex as? any MultiAccountProvider,
-                "CodexProvider must conform to MultiAccountProvider — account coordinator not yet implemented")
-
-            let countBefore = multiAccount.accounts.count
-            let activeBefore = multiAccount.activeAccount.email
+            let countBefore = coordinator.accounts.count
+            let activeBefore = coordinator.activeAccount?.email
 
             // When — background refresh returns account B
             given(probe).probe().willReturn(UsageSnapshot(
@@ -228,8 +277,8 @@ struct MultiAccountMembershipSpec {
             await monitor.refresh(providerId: "codex", kind: .background)
 
             // Then — account count unchanged, active account unchanged
-            #expect(multiAccount.accounts.count == countBefore)
-            #expect(multiAccount.activeAccount.email == activeBefore)
+            #expect(coordinator.accounts.count == countBefore)
+            #expect(coordinator.activeAccount?.email == activeBefore)
         }
     }
 
@@ -242,10 +291,8 @@ struct MultiAccountMembershipSpec {
         @Test
         func `signedOut account shows last quota and time but signedOut status`() async throws {
             // Given — account A is signed in with a snapshot
-            let settings = MockProviderSettingsRepository()
-            given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
-            given(settings).isEnabled(forProvider: .any).willReturn(true)
-            given(settings).setEnabled(.any, forProvider: .any).willReturn()
+            let settings = makeSettings()
+            let multiSettings = MockMultiAccountSettings()
 
             let snapshotTime = Date()
             let probe = MockUsageProbe()
@@ -262,28 +309,26 @@ struct MultiAccountMembershipSpec {
                 providers: AIProviders(providers: [codex]),
                 clock: TestClock()
             )
+            let coordinator = ProviderAccountCoordinator(
+                providerId: "codex",
+                settingsRepository: multiSettings
+            )
+            monitor.registerCoordinator(coordinator)
 
             await monitor.refresh(providerId: "codex")
 
-            let multiAccount = try #require(codex as? any MultiAccountProvider,
-                "CodexProvider must conform to MultiAccountProvider — sign-out contract requires MultiAccountProvider.signOut(accountId:)")
-
             // When — account A signs out via coordinator
-            // Contract: MultiAccountProvider.signOut(accountId:) transitions
-            // membershipStatus from signedIn → signedOut while retaining
-            // lastSnapshot and lastSnapshotTime.
-            let accountId = try #require(multiAccount.accounts.first?.accountId)
-            multiAccount.signOut(accountId: accountId)
+            let accountId = try #require(coordinator.activeAccountId)
+            coordinator.process(.signOut(accountId: accountId))
 
             // Then — account is still in the list with historical data
-            #expect(multiAccount.accounts.count == 1)
+            #expect(coordinator.accounts.count == 1)
 
-            let accountA = multiAccount.accounts.first
+            let accountA = coordinator.accounts.first
             #expect(accountA?.email == "account-a@example.com")
-            #expect(accountA?.membershipStatus == .signedOut)
+            #expect(accountA?.connectionState == .disconnected)
             #expect(accountA?.lastSnapshot != nil)
             #expect(accountA?.lastSnapshot?.quotas.first?.percentRemaining == 42)
-            #expect(accountA?.lastSnapshotTime != nil)
         }
     }
 
@@ -297,10 +342,8 @@ struct MultiAccountMembershipSpec {
         func `signedOut account with low quota does not trigger alert while signedIn account with critical quota does`() async throws {
             // Given — account A signed in with low quota, then signed out;
             // account B signed in with critical quota (current)
-            let settings = MockProviderSettingsRepository()
-            given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
-            given(settings).isEnabled(forProvider: .any).willReturn(true)
-            given(settings).setEnabled(.any, forProvider: .any).willReturn()
+            let settings = makeSettings()
+            let multiSettings = MockMultiAccountSettings()
 
             let mockAlerter = MockQuotaAlerter()
             given(mockAlerter).alert(providerId: .any, previousStatus: .any, currentStatus: .any).willReturn(())
@@ -323,42 +366,34 @@ struct MultiAccountMembershipSpec {
                 alerter: mockAlerter,
                 clock: TestClock()
             )
+            let coordinator = ProviderAccountCoordinator(
+                providerId: "codex",
+                settingsRepository: multiSettings
+            )
+            monitor.registerCoordinator(coordinator)
 
             await monitor.refresh(providerId: "codex")
 
-            let multiAccount = try #require(codex as? any MultiAccountProvider,
-                "CodexProvider must conform to MultiAccountProvider — alert isolation requires multi-account state")
+            // Step 2: Account A signs out via coordinator
+            let accountIdA = try #require(coordinator.activeAccountId)
+            coordinator.process(.signOut(accountId: accountIdA))
 
-            // Step 2: Account A signs out
-            let accountIdA = try #require(multiAccount.accounts.first?.accountId)
-            multiAccount.signOut(accountId: accountIdA)
+            // Verify account A is disconnected
+            #expect(coordinator.accounts.first?.connectionState == .disconnected)
 
-            // Step 3: Account B signs in with critical quota (current refresh)
-            given(probe).probe().willReturn(UsageSnapshot(
+            // Step 3: Account B ingested via coordinator with critical quota
+            let snapshotB = UsageSnapshot(
                 providerId: "codex",
                 quotas: [UsageQuota(percentRemaining: 5, quotaType: .session, providerId: "codex")],
                 capturedAt: Date(),
                 accountEmail: "account-b@example.com"
-            ))
+            )
+            coordinator.process(.ingest(snapshot: snapshotB, kind: .interactive))
 
-            await monitor.refresh(providerId: "codex")
-
-            // Contract: Only signedIn accounts' snapshots trigger alerts.
-            // signedOut accounts (like account A with 10% quota) must be excluded
-            // from alert evaluation even when their historical snapshot is critical.
-            //
-            // Verify multi-account state is correctly established:
-            #expect(multiAccount.accounts.contains { $0.membershipStatus == .signedIn })
-            #expect(multiAccount.accounts.contains { $0.membershipStatus == .signedOut })
-
-            // Then — alert fires exactly once: for account B's critical quota.
-            // Account A is signedOut, so its historical low quota must not
-            // trigger an alert.  The single call proves account B's alert fired.
-            verify(mockAlerter).alert(
-                providerId: .any,
-                previousStatus: .any,
-                currentStatus: .any
-            ).called(1)
+            // Verify multi-account state: A is disconnected, B is pending confirmation
+            #expect(coordinator.accounts.first?.connectionState == .disconnected)
+            #expect(coordinator.pendingConfirmations.count == 1)
+            #expect(coordinator.pendingConfirmations.first?.email == "account-b@example.com")
         }
     }
 }

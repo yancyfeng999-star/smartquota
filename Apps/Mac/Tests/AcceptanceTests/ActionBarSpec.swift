@@ -35,9 +35,9 @@ struct ActionBarSpec {
         }
 
         @Test
-        func `Codex dashboard URL is OpenAI usage`() {
+        func `Codex dashboard URL is ChatGPT`() {
             let codex = CodexProvider(probe: MockUsageProbe(), settingsRepository: Self.makeSettings())
-            #expect(codex.dashboardURL?.absoluteString == "https://platform.openai.com/usage")
+            #expect(codex.dashboardURL?.absoluteString == "https://chatgpt.com/")
         }
 
         @Test
