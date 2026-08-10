@@ -196,25 +196,32 @@ struct ProviderAccountCoordinatorTests {
             #expect(coordinator.accounts.first?.lastSnapshot?.quotas.first?.percentRemaining == 75)
         }
 
-        @Test("Disconnected account stays disconnected on re-ingest")
-        func disconnectedAccountStaysDisconnected() {
+        @Test("Disconnected account reactivates on re-ingest")
+        func disconnectedAccountReactivatesOnReIngest() {
             let settings = MockMultiAccountSettings()
             let coordinator = ProviderAccountCoordinator(
                 providerId: "codex",
                 settingsRepository: settings
             )
 
-            // Create and sign out account
-            let snapshot = UsageSnapshot.test(providerId: "codex", email: "user@example.com")
-            coordinator.process(.ingest(snapshot: snapshot, kind: .interactive))
+            // Create account
+            let snapshot1 = UsageSnapshot.test(providerId: "codex", email: "user@example.com", percentRemaining: 80)
+            coordinator.process(.ingest(snapshot: snapshot1, kind: .interactive))
 
             let accountId = coordinator.accounts.first!.id
-            coordinator.process(.ignore(accountId: accountId)) // This moves to pending then ignore
-            // Actually, let me re-think: the account is already connected, so ignore won't work on it.
-            // We need to test that a disconnected account remains disconnected.
+            #expect(coordinator.accounts.first?.connectionState == .connected)
 
-            // For now, verify the account exists
+            // Sign out the account
+            coordinator.process(.signOut(accountId: accountId))
+            #expect(coordinator.accounts.first?.connectionState == .disconnected)
+
+            // Re-ingest the same email — should reactivate
+            let snapshot2 = UsageSnapshot.test(providerId: "codex", email: "user@example.com", percentRemaining: 60)
+            coordinator.process(.ingest(snapshot: snapshot2, kind: .interactive))
+
             #expect(coordinator.accounts.count == 1)
+            #expect(coordinator.accounts.first?.connectionState == .connected)
+            #expect(coordinator.accounts.first?.lastSnapshot?.quotas.first?.percentRemaining == 60)
         }
     }
 
@@ -366,9 +373,16 @@ struct ProviderAccountCoordinatorTests {
             coordinator.process(.ingest(snapshot: snapshot, kind: .interactive))
 
             let accountId = coordinator.accounts.first!.id
-            // We don't have a signOut method directly, but ignore moves pending to disconnected
-            // For connected accounts, we need to test the state is retained
+            #expect(coordinator.accounts.first?.connectionState == .connected)
+
+            // Sign out the account
+            coordinator.process(.signOut(accountId: accountId))
+
+            // Verify disconnected but retains snapshot
+            #expect(coordinator.accounts.first?.connectionState == .disconnected)
             #expect(coordinator.accounts.first?.lastSnapshot?.quotas.first?.percentRemaining == 42)
+            #expect(coordinator.accounts.first?.lastSnapshotTime == snapshotTime)
+            #expect(coordinator.accounts.first?.email == "user@example.com")
         }
     }
 

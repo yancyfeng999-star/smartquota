@@ -97,6 +97,8 @@ public final class ProviderAccountCoordinator {
             return handleConfirm(accountId: accountId)
         case let .ignore(accountId):
             return handleIgnore(accountId: accountId)
+        case let .signOut(accountId):
+            return handleSignOut(accountId: accountId)
         case let .select(accountId):
             return handleSelect(accountId: accountId)
         case let .delete(accountId):
@@ -135,6 +137,7 @@ public final class ProviderAccountCoordinator {
     }
 
     /// Handles a snapshot for a known account (same identity).
+    /// If the account is disconnected, reactivates it to connected.
     private func handleKnownAccount(
         existing: ProviderAccountState,
         snapshot: UsageSnapshot,
@@ -150,6 +153,11 @@ public final class ProviderAccountCoordinator {
         }
         if let org = snapshot.accountOrganization {
             updated.organization = org
+        }
+
+        // Reactivate disconnected account when it reappears in a refresh
+        if updated.connectionState == .disconnected {
+            updated.connect()
         }
 
         accountStates[updated.id] = updated
@@ -255,6 +263,20 @@ public final class ProviderAccountCoordinator {
         // Store as disconnected account (retains snapshot for history)
         accountStates[ignored.id] = ignored
         return ignored
+    }
+
+    // MARK: - Sign Out Handler
+
+    /// Signs out a connected account, transitioning it to disconnected.
+    /// The account retains its last snapshot for historical reference.
+    private func handleSignOut(accountId: String) -> ProviderAccountState? {
+        guard var account = accountStates[accountId] else {
+            return nil
+        }
+
+        account.disconnect()
+        accountStates[accountId] = account
+        return account
     }
 
     // MARK: - Select Handler

@@ -18,6 +18,11 @@ public enum AccountDiscoveryEvent: Sendable {
     /// - accountId: The account to ignore
     case ignore(accountId: String)
 
+    /// Signs out a connected account, transitioning it to disconnected.
+    /// The account retains its last snapshot for historical reference.
+    /// - accountId: The account to sign out
+    case signOut(accountId: String)
+
     /// User selects an account as the active account for the provider.
     /// - accountId: The account to select as active
     case select(accountId: String)
