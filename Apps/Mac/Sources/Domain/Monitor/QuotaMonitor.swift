@@ -94,6 +94,32 @@ public final class QuotaMonitor {
         return providers.provider(id: providerId)?.snapshot
     }
 
+    /// Returns the account coordinator for a provider, if registered.
+    /// UI layers use this to access pending confirmations and account state.
+    public func accountCoordinator(for providerId: String) -> ProviderAccountCoordinator? {
+        accountCoordinators[providerId]
+    }
+
+    /// Returns accounts awaiting user confirmation for a provider.
+    public func pendingConfirmations(for providerId: String) -> [ProviderAccountState] {
+        accountCoordinators[providerId]?.pendingConfirmations ?? []
+    }
+
+    /// Confirms a pending account, promoting it to connected.
+    public func confirmAccount(_ accountId: String, forProvider providerId: String) {
+        accountCoordinators[providerId]?.process(.confirm(accountId: accountId))
+    }
+
+    /// Ignores a pending account, transitioning it to disconnected.
+    public func ignoreAccount(_ accountId: String, forProvider providerId: String) {
+        accountCoordinators[providerId]?.process(.ignore(accountId: accountId))
+    }
+
+    /// Deletes an account from a provider.
+    public func deleteAccount(_ accountId: String, forProvider providerId: String) {
+        accountCoordinators[providerId]?.process(.delete(accountId: accountId))
+    }
+
     // MARK: - Monitoring Operations
 
     /// Refreshes all enabled providers with limited concurrency (energy / CPU).

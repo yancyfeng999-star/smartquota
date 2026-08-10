@@ -90,11 +90,38 @@ struct QuotaDetectionConfigSection: View {
         } else {
             VStack(spacing: 10) {
                 ForEach(enabledProviders, id: \.id) { provider in
-                    ProviderConfigRegistry.configCard(
-                        for: provider,
-                        monitor: monitor,
-                        extensionConfig: settings.extensionConfig
-                    )
+                    VStack(alignment: .leading, spacing: 4) {
+                        // Account count for multi-account providers
+                        if let multiProvider = provider as? (any MultiAccountProvider),
+                           multiProvider.accounts.count > 1 {
+                            HStack(spacing: 6) {
+                                Image(systemName: "person.2.fill")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(theme.textTertiary)
+
+                                Text(l10n.tf("account.count_fmt", "\(multiProvider.accounts.count)"))
+                                    .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                                    .foregroundStyle(theme.textTertiary)
+
+                                // Show pending count if any
+                                let pendingCount = monitor.pendingConfirmations(for: multiProvider.id).count
+                                if pendingCount > 0 {
+                                    Text("· \(pendingCount) \(l10n.t("account.pending"))")
+                                        .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                                        .foregroundStyle(theme.statusWarning)
+                                }
+
+                                Spacer()
+                            }
+                            .padding(.horizontal, 4)
+                        }
+
+                        ProviderConfigRegistry.configCard(
+                            for: provider,
+                            monitor: monitor,
+                            extensionConfig: settings.extensionConfig
+                        )
+                    }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }

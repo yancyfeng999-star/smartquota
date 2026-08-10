@@ -20,7 +20,8 @@ struct AccountPickerView: View {
                 ForEach(provider.accounts, id: \.id) { account in
                     AccountPill(
                         account: account,
-                        isActive: account.accountId == provider.activeAccount.accountId
+                        isActive: account.accountId == provider.activeAccount.accountId,
+                        connectionState: connectionState(for: account)
                     ) {
                         onSwitch(account.accountId)
                     }
@@ -28,12 +29,20 @@ struct AccountPickerView: View {
             }
         }
     }
+
+    private func connectionState(for account: ProviderAccount) -> AccountConnectionState {
+        if let status = account.membershipStatus {
+            return status.asConnectionState
+        }
+        return .connected
+    }
 }
 
 /// A single account pill in the picker.
 struct AccountPill: View {
     let account: ProviderAccount
     let isActive: Bool
+    let connectionState: AccountConnectionState
     let action: () -> Void
 
     @Environment(\.appTheme) private var theme
@@ -42,8 +51,8 @@ struct AccountPill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                // Avatar circle with initial letter
-                ZStack {
+                // Avatar circle with initial letter and state dot
+                ZStack(alignment: .bottomTrailing) {
                     Circle()
                         .fill(isActive ? theme.accentPrimary : theme.glassBackground)
                         .frame(width: 16, height: 16)
@@ -51,6 +60,16 @@ struct AccountPill: View {
                     Text(account.initialLetter)
                         .font(.system(size: 8, weight: .bold, design: theme.fontDesign))
                         .foregroundStyle(isActive ? .white : theme.textSecondary)
+
+                    // Connection state indicator dot
+                    Circle()
+                        .fill(stateColor)
+                        .frame(width: 6, height: 6)
+                        .overlay(
+                            Circle()
+                                .stroke(Color(NSColor.windowBackgroundColor), lineWidth: 1)
+                        )
+                        .offset(x: 1, y: 1)
                 }
 
                 Text(account.displayName)
@@ -71,5 +90,31 @@ struct AccountPill: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var stateColor: Color {
+        switch connectionState {
+        case .connected:
+            return theme.statusHealthy
+        case .disconnected:
+            return theme.statusCritical
+        case .pendingConfirmation:
+            return theme.statusWarning
+        }
+    }
+
+    private var accessibilityText: String {
+        let stateLabel: String
+        switch connectionState {
+        case .connected:
+            stateLabel = L10n.shared.t("account.connected")
+        case .disconnected:
+            stateLabel = L10n.shared.t("account.disconnected")
+        case .pendingConfirmation:
+            stateLabel = L10n.shared.t("account.pending")
+        }
+        let activeLabel = isActive ? ", \(L10n.shared.t("account.active"))" : ""
+        return "\(account.displayName), \(stateLabel)\(activeLabel)"
     }
 }
