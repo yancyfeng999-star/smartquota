@@ -65,7 +65,14 @@ The key principle is **QuotaMonitor as Single Source of Truth** - all provider s
 │  ├── UsageSnapshot - point-in-time quota data                       │
 │  ├── UsageQuota - single quota with percentage, type, reset time    │
 │  ├── QuotaStatus - healthy/warning/critical/depleted                │
-│  └── QuotaType - session/weekly/modelSpecific/timeLimit             │
+│  ├── QuotaType - session/weekly/modelSpecific/timeLimit             │
+│  │                                                                   │
+│  │ Multi-Account (Sources/Domain/Provider/Account/)                 │
+│  ├── AccountIdentity - email + external ID + source                 │
+│  ├── AccountConnectionState - signedIn/signedOut/failed/pending     │
+│  ├── ProviderAccountState - account + snapshot + connection state   │
+│  ├── ProviderAccountCoordinator - discovery state machine           │
+│  └── MultiAccountSettingsRepository - account CRUD protocol        │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               │ Implements protocols
@@ -88,8 +95,9 @@ The key principle is **QuotaMonitor as Single Source of Truth** - all provider s
 │  Storage (Sources/Infrastructure/Storage/)                          │
 │  ├── AIProviders - implements AIProviderRepository                  │
 │  ├── JSONSettingsStore - thread-safe JSON file I/O                  │
-│  └── JSONSettingsRepository                                         │
-│      └── Implements all settings protocols (ISP single impl)        │
+│  ├── JSONSettingsRepository                                         │
+│  │   └── Implements all settings protocols (ISP single impl)        │
+│  └── AccountSnapshotCache - persists last successful snapshots      │
 │                                                                      │
 │  Adapters (Sources/Infrastructure/Adapters/) - excluded from coverage│
 │  ├── PTYCommandRunner - runs CLI with PTY                           │
@@ -315,6 +323,32 @@ AIProviders.enabled recomputes (filters by isEnabled)
 SwiftUI observes change → provider hidden from menu
 ```
 
+### Multi-Account Discovery Flow
+
+```
+Provider refresh returns snapshot with accountEmail
+        │
+        ▼
+QuotaMonitor calls ProviderAccountCoordinator.ingest()
+        │
+        ▼
+Coordinator normalizes email (trim + lowercase)
+        │
+        ▼
+Check if email matches existing account
+        ├── Yes → Update existing account snapshot
+        └── No → Check if interactive refresh
+              ├── Yes (first account) → Auto-create as connected
+              ├── Yes (subsequent) → Add to pending confirmation
+              └── No (background) → Store as pending, don't modify list
+        │
+        ▼
+Account state persisted to settings.json
+        │
+        ▼
+Snapshot cached to account-snapshots.json (if connected)
+```
+
 ## File Organization
 
 ```
@@ -365,6 +399,15 @@ Sources/
 
 - **Fresh**: < 5 minutes old
 - **Stale**: >= 5 minutes old (triggers refresh)
+
+### Multi-Account Rules
+
+- **Email normalization**: Trim whitespace, lowercase for deduplication
+- **First account**: Auto-created on first interactive refresh
+- **New accounts**: Require user confirmation (interactive) or pending (background)
+- **Historical snapshots**: Retained when account signs out, but excluded from alerts
+- **Only current login refreshes**: Background refresh only updates the active local account
+- **Account isolation**: Keychain keys scoped by `providerId + accountId`
 
 ## Adding New Features
 
