@@ -70,9 +70,9 @@ struct PersistedQuota: Codable {
     let resetsAt: Date?
     let resetText: String?
     let windowDuration: Double?
-    let dollarRemaining: Double?
-    let dollarUsed: Double?
-    let dollarCap: Double?
+    let dollarRemaining: String?
+    let dollarUsed: String?
+    let dollarCap: String?
     let group: String?
     let compactTitle: String?
     let menuBarTitle: String?
@@ -85,9 +85,9 @@ struct PersistedQuota: Codable {
             resetsAt: quota.resetsAt,
             resetText: quota.resetText,
             windowDuration: quota.windowDuration,
-            dollarRemaining: quota.dollarRemaining.flatMap { NSDecimalNumber(decimal: $0).doubleValue },
-            dollarUsed: quota.dollarUsed.flatMap { NSDecimalNumber(decimal: $0).doubleValue },
-            dollarCap: quota.dollarCap.flatMap { NSDecimalNumber(decimal: $0).doubleValue },
+            dollarRemaining: quota.dollarRemaining.flatMap { NSDecimalNumber(decimal: $0).stringValue },
+            dollarUsed: quota.dollarUsed.flatMap { NSDecimalNumber(decimal: $0).stringValue },
+            dollarCap: quota.dollarCap.flatMap { NSDecimalNumber(decimal: $0).stringValue },
             group: quota.group,
             compactTitle: quota.compactTitle,
             menuBarTitle: quota.menuBarTitle
@@ -102,9 +102,9 @@ struct PersistedQuota: Codable {
             resetsAt: resetsAt,
             resetText: resetText,
             windowDuration: windowDuration,
-            dollarRemaining: dollarRemaining.map { Decimal($0) },
-            dollarUsed: dollarUsed.map { Decimal($0) },
-            dollarCap: dollarCap.map { Decimal($0) },
+            dollarRemaining: dollarRemaining.flatMap { Decimal(string: $0) },
+            dollarUsed: dollarUsed.flatMap { Decimal(string: $0) },
+            dollarCap: dollarCap.flatMap { Decimal(string: $0) },
             group: group,
             compactTitle: compactTitle,
             menuBarTitle: menuBarTitle
@@ -200,8 +200,8 @@ enum PersistedAccountIdentitySource: Codable {
 
 struct PersistedCostUsage: Codable {
     let kind: PersistedCostKind
-    let totalCost: Double
-    let budget: Double?
+    let totalCost: String
+    let budget: String?
     let apiDuration: Double
     let wallDuration: Double
     let linesAdded: Int
@@ -219,8 +219,8 @@ struct PersistedCostUsage: Codable {
     static func from(_ usage: CostUsage) -> PersistedCostUsage {
         PersistedCostUsage(
             kind: usage.kind == .apiCost ? .apiCost : .extraUsage,
-            totalCost: NSDecimalNumber(decimal: usage.totalCost).doubleValue,
-            budget: usage.budget.flatMap { NSDecimalNumber(decimal: $0).doubleValue },
+            totalCost: NSDecimalNumber(decimal: usage.totalCost).stringValue,
+            budget: usage.budget.flatMap { NSDecimalNumber(decimal: $0).stringValue },
             apiDuration: usage.apiDuration,
             wallDuration: usage.wallDuration,
             linesAdded: usage.linesAdded,
@@ -234,8 +234,8 @@ struct PersistedCostUsage: Codable {
 
     var asDomain: CostUsage {
         CostUsage(
-            totalCost: Decimal(totalCost),
-            budget: budget.map { Decimal($0) },
+            totalCost: Decimal(string: totalCost) ?? 0,
+            budget: budget.flatMap { Decimal(string: $0) },
             apiDuration: apiDuration,
             wallDuration: wallDuration,
             linesAdded: linesAdded,
@@ -257,7 +257,7 @@ struct PersistedBedrockUsageSummary: Codable {
     let capturedAt: Date
     let periodStart: Date
     let periodEnd: Date
-    let dailyBudget: Double?
+    let dailyBudget: String?
 
     static func from(_ summary: BedrockUsageSummary) -> PersistedBedrockUsageSummary {
         PersistedBedrockUsageSummary(
@@ -266,7 +266,7 @@ struct PersistedBedrockUsageSummary: Codable {
             capturedAt: summary.capturedAt,
             periodStart: summary.periodStart,
             periodEnd: summary.periodEnd,
-            dailyBudget: summary.dailyBudget.flatMap { NSDecimalNumber(decimal: $0).doubleValue }
+            dailyBudget: summary.dailyBudget.flatMap { NSDecimalNumber(decimal: $0).stringValue }
         )
     }
 
@@ -277,7 +277,7 @@ struct PersistedBedrockUsageSummary: Codable {
             capturedAt: capturedAt,
             periodStart: periodStart,
             periodEnd: periodEnd,
-            dailyBudget: dailyBudget.map { Decimal($0) }
+            dailyBudget: dailyBudget.flatMap { Decimal(string: $0) }
         )
     }
 }
@@ -286,8 +286,8 @@ struct PersistedBedrockModelUsage: Codable {
     let modelId: String
     let modelDisplayName: String
     let modelVendor: String
-    let inputPricePer1M: Double
-    let outputPricePer1M: Double
+    let inputPricePer1M: String
+    let outputPricePer1M: String
     let invocations: Int
     let inputTokens: Int
     let outputTokens: Int
@@ -297,8 +297,8 @@ struct PersistedBedrockModelUsage: Codable {
             modelId: usage.model.id,
             modelDisplayName: usage.model.displayName,
             modelVendor: usage.model.vendor,
-            inputPricePer1M: NSDecimalNumber(decimal: usage.model.inputPricePer1M).doubleValue,
-            outputPricePer1M: NSDecimalNumber(decimal: usage.model.outputPricePer1M).doubleValue,
+            inputPricePer1M: NSDecimalNumber(decimal: usage.model.inputPricePer1M).stringValue,
+            outputPricePer1M: NSDecimalNumber(decimal: usage.model.outputPricePer1M).stringValue,
             invocations: usage.invocations,
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens
@@ -311,8 +311,8 @@ struct PersistedBedrockModelUsage: Codable {
                 id: modelId,
                 displayName: modelDisplayName,
                 vendor: modelVendor,
-                inputPricePer1M: Decimal(inputPricePer1M),
-                outputPricePer1M: Decimal(outputPricePer1M)
+                inputPricePer1M: Decimal(string: inputPricePer1M) ?? 0,
+                outputPricePer1M: Decimal(string: outputPricePer1M) ?? 0
             ),
             invocations: invocations,
             inputTokens: inputTokens,
@@ -341,7 +341,7 @@ struct PersistedDailyUsageReport: Codable {
 
 struct PersistedDailyUsageStat: Codable {
     let date: Date
-    let totalCost: Double
+    let totalCost: String
     let totalTokens: Int
     let workingTime: Double
     let sessionCount: Int
@@ -349,12 +349,12 @@ struct PersistedDailyUsageStat: Codable {
     let outputTokens: Int
     let cacheCreationTokens: Int
     let cacheReadTokens: Int
-    let cachedSavings: Double
+    let cachedSavings: String
 
     static func from(_ stat: DailyUsageStat) -> PersistedDailyUsageStat {
         PersistedDailyUsageStat(
             date: stat.date,
-            totalCost: NSDecimalNumber(decimal: stat.totalCost).doubleValue,
+            totalCost: NSDecimalNumber(decimal: stat.totalCost).stringValue,
             totalTokens: stat.totalTokens,
             workingTime: stat.workingTime,
             sessionCount: stat.sessionCount,
@@ -362,14 +362,14 @@ struct PersistedDailyUsageStat: Codable {
             outputTokens: stat.outputTokens,
             cacheCreationTokens: stat.cacheCreationTokens,
             cacheReadTokens: stat.cacheReadTokens,
-            cachedSavings: NSDecimalNumber(decimal: stat.cachedSavings).doubleValue
+            cachedSavings: NSDecimalNumber(decimal: stat.cachedSavings).stringValue
         )
     }
 
     var asDomain: DailyUsageStat {
         DailyUsageStat(
             date: date,
-            totalCost: Decimal(totalCost),
+            totalCost: Decimal(string: totalCost) ?? 0,
             totalTokens: totalTokens,
             workingTime: workingTime,
             sessionCount: sessionCount,
@@ -377,7 +377,7 @@ struct PersistedDailyUsageStat: Codable {
             outputTokens: outputTokens,
             cacheCreationTokens: cacheCreationTokens,
             cacheReadTokens: cacheReadTokens,
-            cachedSavings: Decimal(cachedSavings)
+            cachedSavings: Decimal(string: cachedSavings) ?? 0
         )
     }
 }
