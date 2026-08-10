@@ -736,4 +736,77 @@ public final class JSONSettingsRepository:
     public func explicitEnabled(forProvider id: String) -> Bool? {
         store.read(key: "providers.\(id).isEnabled")
     }
+
+    // MARK: - Account-Level Membership Settings
+
+    /// Account-level plan label for a specific account within a provider.
+    /// Key pattern: `providers.{providerId}.{accountId}.planLabel`
+    public func accountPlanLabel(accountId: String, forProvider id: String) -> String {
+        store.read(key: "providers.\(id).\(accountId).planLabel") ?? ""
+    }
+
+    /// Sets account-level plan label.
+    public func setAccountPlanLabel(_ label: String, accountId: String, forProvider id: String) {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            store.write(value: nil, key: "providers.\(id).\(accountId).planLabel")
+        } else {
+            store.write(value: trimmed, key: "providers.\(id).\(accountId).planLabel")
+        }
+    }
+
+    /// Account-level renewal date for a specific account within a provider.
+    /// Key pattern: `providers.{providerId}.{accountId}.renewalDate`
+    public func accountRenewalDate(accountId: String, forProvider id: String) -> String {
+        store.read(key: "providers.\(id).\(accountId).renewalDate") ?? ""
+    }
+
+    /// Sets account-level renewal date.
+    public func setAccountRenewalDate(_ date: String, accountId: String, forProvider id: String) {
+        let trimmed = date.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            store.write(value: nil, key: "providers.\(id).\(accountId).renewalDate")
+        } else {
+            store.write(value: trimmed, key: "providers.\(id).\(accountId).renewalDate")
+        }
+    }
+
+    // MARK: - Provider Membership Migration
+
+    /// Migrates provider-level planLabel and renewalDate to account-level settings.
+    ///
+    /// - Copies old provider-level values to the first account (if accounts exist)
+    /// - Does NOT overwrite existing account-level values (idempotent)
+    /// - Does NOT create accounts if none exist
+    /// - Keeps old provider-level keys for backward compatibility
+    public func migrateProviderMembershipToAccounts(forProvider id: String) {
+        // Read old provider-level values
+        let oldPlanLabel = planLabel(forProvider: id)
+        let oldRenewalDate = renewalDate(forProvider: id)
+
+        // Only migrate if there are old values to migrate
+        guard !oldPlanLabel.isEmpty || !oldRenewalDate.isEmpty else { return }
+
+        // Get existing accounts
+        let existingAccounts = accounts(forProvider: id)
+
+        // Don't create accounts if none exist
+        guard let firstAccount = existingAccounts.first else { return }
+
+        // Migrate planLabel if account doesn't have one
+        if !oldPlanLabel.isEmpty {
+            let currentAccountPlanLabel = accountPlanLabel(accountId: firstAccount.accountId, forProvider: id)
+            if currentAccountPlanLabel.isEmpty {
+                setAccountPlanLabel(oldPlanLabel, accountId: firstAccount.accountId, forProvider: id)
+            }
+        }
+
+        // Migrate renewalDate if account doesn't have one
+        if !oldRenewalDate.isEmpty {
+            let currentAccountRenewalDate = accountRenewalDate(accountId: firstAccount.accountId, forProvider: id)
+            if currentAccountRenewalDate.isEmpty {
+                setAccountRenewalDate(oldRenewalDate, accountId: firstAccount.accountId, forProvider: id)
+            }
+        }
+    }
 }
