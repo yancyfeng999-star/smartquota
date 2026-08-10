@@ -86,7 +86,11 @@ public struct ProviderAccount: Sendable, Equatable, Identifiable {
     // MARK: - Membership
 
     /// The membership status of this account within the provider.
-    public var membershipStatus: MembershipStatus = .pendingConfirmation
+    ///
+    /// `nil` means the account was created by a single-account provider that
+    /// does not implement `MultiAccountProvider`. Only multi-account
+    /// coordinators set this field explicitly.
+    public var membershipStatus: MembershipStatus?
 
     /// The last usage snapshot captured for this account (persists after sign-out).
     public var lastSnapshot: UsageSnapshot?

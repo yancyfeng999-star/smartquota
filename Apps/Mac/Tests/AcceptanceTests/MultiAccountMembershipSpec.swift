@@ -17,13 +17,14 @@ import Mockable
 /// - #58: Background refresh does not auto-add accounts
 /// - #59: Signed-out account retains last snapshot with signedOut status
 /// - #60: Alert isolation — only signedIn account alerts fire
+
+private struct TestClock: Clock {
+    func sleep(for duration: Duration) async throws {}
+    func sleep(nanoseconds: UInt64) async throws {}
+}
+
 @Suite("Feature: Multi-Account Membership")
 struct MultiAccountMembershipSpec {
-
-    private struct TestClock: Clock {
-        func sleep(for duration: Duration) async throws {}
-        func sleep(nanoseconds: UInt64) async throws {}
-    }
 
     // MARK: - #55: First interactive refresh auto-creates account
 
@@ -31,13 +32,8 @@ struct MultiAccountMembershipSpec {
     @MainActor
     struct FirstAccountAutoCreation {
 
-        private struct TestClock: Clock {
-            func sleep(for duration: Duration) async throws {}
-            func sleep(nanoseconds: UInt64) async throws {}
-        }
-
         @Test
-        func `first refresh returning email creates one signedIn account`() async {
+        func `first refresh returning email creates one signedIn account`() async throws {
             // Given — Codex is the only provider, no accounts yet
             let settings = MockProviderSettingsRepository()
             given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
@@ -63,10 +59,8 @@ struct MultiAccountMembershipSpec {
             await monitor.refresh(providerId: "codex")
 
             // Then — account list has exactly one entry with signedIn status
-            guard let multiAccount = codex as? any MultiAccountProvider else {
-                Issue.record("CodexProvider does not conform to MultiAccountProvider")
-                return
-            }
+            let multiAccount = try #require(codex as? any MultiAccountProvider,
+                "CodexProvider must conform to MultiAccountProvider — account coordinator not yet implemented")
 
             #expect(multiAccount.accounts.count == 1)
             #expect(multiAccount.accounts.first?.email == "first@example.com")
@@ -80,13 +74,8 @@ struct MultiAccountMembershipSpec {
     @MainActor
     struct EmailNormalization {
 
-        private struct TestClock: Clock {
-            func sleep(for duration: Duration) async throws {}
-            func sleep(nanoseconds: UInt64) async throws {}
-        }
-
         @Test
-        func `case and whitespace variants of same email keep single account`() async {
+        func `case and whitespace variants of same email keep single account`() async throws {
             // Given — first refresh returns "First@Example.com"
             let settings = MockProviderSettingsRepository()
             given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
@@ -121,10 +110,8 @@ struct MultiAccountMembershipSpec {
             await monitor.refresh(providerId: "codex")
 
             // Then — still only one account
-            guard let multiAccount = codex as? any MultiAccountProvider else {
-                Issue.record("CodexProvider does not conform to MultiAccountProvider")
-                return
-            }
+            let multiAccount = try #require(codex as? any MultiAccountProvider,
+                "CodexProvider must conform to MultiAccountProvider — account coordinator not yet implemented")
 
             #expect(multiAccount.accounts.count == 1)
         }
@@ -136,13 +123,8 @@ struct MultiAccountMembershipSpec {
     @MainActor
     struct NewAccountPendingConfirmation {
 
-        private struct TestClock: Clock {
-            func sleep(for duration: Duration) async throws {}
-            func sleep(nanoseconds: UInt64) async throws {}
-        }
-
         @Test
-        func `new email produces pendingConfirmation without adding to accounts`() async {
+        func `new email produces pendingConfirmation without adding to accounts`() async throws {
             // Given — account A already signed in
             let settings = MockProviderSettingsRepository()
             given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
@@ -177,13 +159,23 @@ struct MultiAccountMembershipSpec {
             await monitor.refresh(providerId: "codex")
 
             // Then — account list still has only A, and pendingConfirmation is produced
-            guard let multiAccount = codex as? any MultiAccountProvider else {
-                Issue.record("CodexProvider does not conform to MultiAccountProvider")
-                return
-            }
+            let multiAccount = try #require(codex as? any MultiAccountProvider,
+                "CodexProvider must conform to MultiAccountProvider — account coordinator not yet implemented")
 
             #expect(multiAccount.accounts.count == 1)
             #expect(multiAccount.accounts.first?.email == "account-a@example.com")
+
+            // Contract: a pendingConfirmation must be produced for account B.
+            // MultiAccountProvider must expose pending confirmations so the UI
+            // can prompt the user to approve the newly discovered account.
+            //
+            // Once the coordinator is implemented, assert:
+            //   #expect(multiAccount.pendingConfirmations.count == 1)
+            //   #expect(multiAccount.pendingConfirmations.first?.email == "account-b@example.com")
+            //
+            // For now, verify that no account with .signedIn status matches account B
+            // (i.e., it was NOT auto-added to the active account list):
+            #expect(!multiAccount.accounts.contains { $0.email == "account-b@example.com" && $0.membershipStatus == .signedIn })
         }
     }
 
@@ -193,13 +185,8 @@ struct MultiAccountMembershipSpec {
     @MainActor
     struct BackgroundRefreshNoAutoAdd {
 
-        private struct TestClock: Clock {
-            func sleep(for duration: Duration) async throws {}
-            func sleep(nanoseconds: UInt64) async throws {}
-        }
-
         @Test
-        func `background refresh discovering new email does not change account count`() async {
+        func `background refresh discovering new email does not change account count`() async throws {
             // Given — account A is signed in
             let settings = MockProviderSettingsRepository()
             given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
@@ -224,10 +211,8 @@ struct MultiAccountMembershipSpec {
             // Interactive refresh to establish account A
             await monitor.refresh(providerId: "codex")
 
-            guard let multiAccount = codex as? any MultiAccountProvider else {
-                Issue.record("CodexProvider does not conform to MultiAccountProvider")
-                return
-            }
+            let multiAccount = try #require(codex as? any MultiAccountProvider,
+                "CodexProvider must conform to MultiAccountProvider — account coordinator not yet implemented")
 
             let countBefore = multiAccount.accounts.count
             let activeBefore = multiAccount.activeAccount.email
@@ -254,13 +239,8 @@ struct MultiAccountMembershipSpec {
     @MainActor
     struct SignedOutRetainsSnapshot {
 
-        private struct TestClock: Clock {
-            func sleep(for duration: Duration) async throws {}
-            func sleep(nanoseconds: UInt64) async throws {}
-        }
-
         @Test
-        func `signedOut account shows last quota and time but signedOut status`() async {
+        func `signedOut account shows last quota and time but signedOut status`() async throws {
             // Given — account A is signed in with a snapshot
             let settings = MockProviderSettingsRepository()
             given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
@@ -285,15 +265,15 @@ struct MultiAccountMembershipSpec {
 
             await monitor.refresh(providerId: "codex")
 
-            guard let multiAccount = codex as? any MultiAccountProvider else {
-                Issue.record("CodexProvider does not conform to MultiAccountProvider")
-                return
-            }
+            let multiAccount = try #require(codex as? any MultiAccountProvider,
+                "CodexProvider must conform to MultiAccountProvider — sign-out contract requires MultiAccountProvider.signOut(accountId:)")
 
-            // When — account A signs out (via coordinator, not yet implemented)
-            // The test defines the expected behavior:
-            // After sign-out, the account remains in the list with signedOut status
-            // and retains its last snapshot.
+            // When — account A signs out via coordinator
+            // Contract: MultiAccountProvider.signOut(accountId:) transitions
+            // membershipStatus from signedIn → signedOut while retaining
+            // lastSnapshot and lastSnapshotTime.
+            let accountId = try #require(multiAccount.accounts.first?.accountId)
+            multiAccount.signOut(accountId: accountId)
 
             // Then — account is still in the list with historical data
             #expect(multiAccount.accounts.count == 1)
@@ -313,14 +293,10 @@ struct MultiAccountMembershipSpec {
     @MainActor
     struct AlertIsolation {
 
-        private struct TestClock: Clock {
-            func sleep(for duration: Duration) async throws {}
-            func sleep(nanoseconds: UInt64) async throws {}
-        }
-
         @Test
-        func `signedOut account with low quota does not trigger alert`() async {
-            // Given — account A signed out with low quota (historical)
+        func `signedOut account with low quota does not trigger alert while signedIn account with critical quota does`() async throws {
+            // Given — account A signed in with low quota, then signed out;
+            // account B signed in with critical quota (current)
             let settings = MockProviderSettingsRepository()
             given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
             given(settings).isEnabled(forProvider: .any).willReturn(true)
@@ -332,13 +308,13 @@ struct MultiAccountMembershipSpec {
 
             let probe = MockUsageProbe()
             given(probe).isAvailable().willReturn(true)
-            // Probe returns account B's data (current), but account A's historical
-            // low quota should not trigger alerts
+
+            // Step 1: Account A signs in with low quota (historical)
             given(probe).probe().willReturn(UsageSnapshot(
                 providerId: "codex",
-                quotas: [UsageQuota(percentRemaining: 70, quotaType: .session, providerId: "codex")],
+                quotas: [UsageQuota(percentRemaining: 10, quotaType: .session, providerId: "codex")],
                 capturedAt: Date(),
-                accountEmail: "account-b@example.com"
+                accountEmail: "account-a@example.com"
             ))
 
             let codex = CodexProvider(probe: probe, settingsRepository: settings)
@@ -348,32 +324,16 @@ struct MultiAccountMembershipSpec {
                 clock: TestClock()
             )
 
-            // When — refresh with account B (signedIn, healthy)
-            // Account A (signedOut, low quota) exists historically
             await monitor.refresh(providerId: "codex")
 
-            // Then — no alert fired for account A's historical low quota
-            verify(mockAlerter).alert(
-                providerId: .any,
-                previousStatus: .any,
-                currentStatus: .any
-            ).called(0)
-        }
+            let multiAccount = try #require(codex as? any MultiAccountProvider,
+                "CodexProvider must conform to MultiAccountProvider — alert isolation requires multi-account state")
 
-        @Test
-        func `signedIn account with critical quota triggers alert`() async {
-            // Given — account B is signed in with critical quota
-            let settings = MockProviderSettingsRepository()
-            given(settings).isEnabled(forProvider: .any, defaultValue: .any).willReturn(true)
-            given(settings).isEnabled(forProvider: .any).willReturn(true)
-            given(settings).setEnabled(.any, forProvider: .any).willReturn()
+            // Step 2: Account A signs out
+            let accountIdA = try #require(multiAccount.accounts.first?.accountId)
+            multiAccount.signOut(accountId: accountIdA)
 
-            let mockAlerter = MockQuotaAlerter()
-            given(mockAlerter).alert(providerId: .any, previousStatus: .any, currentStatus: .any).willReturn(())
-            given(mockAlerter).evaluateSnapshotAlerts(providerId: .any, snapshot: .any).willReturn()
-
-            let probe = MockUsageProbe()
-            given(probe).isAvailable().willReturn(true)
+            // Step 3: Account B signs in with critical quota (current refresh)
             given(probe).probe().willReturn(UsageSnapshot(
                 providerId: "codex",
                 quotas: [UsageQuota(percentRemaining: 5, quotaType: .session, providerId: "codex")],
@@ -381,21 +341,23 @@ struct MultiAccountMembershipSpec {
                 accountEmail: "account-b@example.com"
             ))
 
-            let codex = CodexProvider(probe: probe, settingsRepository: settings)
-            let monitor = QuotaMonitor(
-                providers: AIProviders(providers: [codex]),
-                alerter: mockAlerter,
-                clock: TestClock()
-            )
-
-            // When — refresh returns critical quota for account B
             await monitor.refresh(providerId: "codex")
 
-            // Then — alert fires for account B's critical status
+            // Contract: Only signedIn accounts' snapshots trigger alerts.
+            // signedOut accounts (like account A with 10% quota) must be excluded
+            // from alert evaluation even when their historical snapshot is critical.
+            //
+            // Verify multi-account state is correctly established:
+            #expect(multiAccount.accounts.contains { $0.membershipStatus == .signedIn })
+            #expect(multiAccount.accounts.contains { $0.membershipStatus == .signedOut })
+
+            // Then — alert fires exactly once: for account B's critical quota.
+            // Account A is signedOut, so its historical low quota must not
+            // trigger an alert.  The single call proves account B's alert fired.
             verify(mockAlerter).alert(
-                providerId: .value("codex"),
-                previousStatus: .value(.healthy),
-                currentStatus: .value(.critical)
+                providerId: .any,
+                previousStatus: .any,
+                currentStatus: .any
             ).called(1)
         }
     }

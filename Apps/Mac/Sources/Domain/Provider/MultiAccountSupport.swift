@@ -44,6 +44,11 @@ public protocol MultiAccountProvider: AIProvider {
     /// The aggregate status across all accounts (worst status wins).
     var aggregateStatus: QuotaStatus { get }
 
+    /// Signs out a specific account, transitioning its membership status
+    /// from `.signedIn` to `.signedOut` while retaining its last snapshot.
+    /// - Parameter accountId: The account to sign out
+    func signOut(accountId: String)
+
     /// The account with the most remaining quota (best candidate for use).
     var bestAvailableAccount: ProviderAccount? { get }
 }
