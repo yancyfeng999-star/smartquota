@@ -164,6 +164,9 @@ public struct BedrockUsageProbe: UsageProbe {
             quotas.append(quota)
         }
 
+        let profileName = settingsRepository.awsProfileName()
+        let externalId = profileName.isEmpty ? nil : profileName
+
         return UsageSnapshot(
             providerId: "bedrock",
             quotas: quotas,
@@ -173,7 +176,9 @@ public struct BedrockUsageProbe: UsageProbe {
             loginMethod: nil,
             accountTier: nil,
             costUsage: nil,
-            bedrockUsage: summary
+            bedrockUsage: summary,
+            accountExternalId: externalId,
+            accountIdentitySource: externalId != nil ? .userDefined : nil
         )
     }
 
