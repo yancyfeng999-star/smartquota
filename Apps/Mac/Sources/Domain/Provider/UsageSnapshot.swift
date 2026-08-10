@@ -17,6 +17,12 @@ public struct UsageSnapshot: Sendable, Equatable {
     public let accountOrganization: String?
     public let loginMethod: String?
 
+    /// Optional external account ID for multi-account tracking
+    public let accountExternalId: String?
+
+    /// The source used to derive the account identity
+    public let accountIdentitySource: AccountIdentitySource?
+
     /// The account tier (e.g., Claude Max, Pro, or custom tier from other providers)
     public let accountTier: AccountTier?
 
@@ -45,7 +51,9 @@ public struct UsageSnapshot: Sendable, Equatable {
         costUsage: CostUsage? = nil,
         bedrockUsage: BedrockUsageSummary? = nil,
         dailyUsageReport: DailyUsageReport? = nil,
-        extensionMetrics: [ExtensionMetric]? = nil
+        extensionMetrics: [ExtensionMetric]? = nil,
+        accountExternalId: String? = nil,
+        accountIdentitySource: AccountIdentitySource? = nil
     ) {
         self.providerId = providerId
         self.quotas = quotas
@@ -58,6 +66,8 @@ public struct UsageSnapshot: Sendable, Equatable {
         self.bedrockUsage = bedrockUsage
         self.dailyUsageReport = dailyUsageReport
         self.extensionMetrics = extensionMetrics
+        self.accountExternalId = accountExternalId
+        self.accountIdentitySource = accountIdentitySource
     }
 
     // MARK: - Domain Queries
@@ -187,6 +197,27 @@ public struct UsageSnapshot: Sendable, Equatable {
     public static func empty(for providerId: String) -> UsageSnapshot {
         UsageSnapshot(providerId: providerId, quotas: [], capturedAt: Date())
     }
+}
+
+/// The source used to derive an account's identity.
+///
+/// This helps track where the account identifier came from,
+/// useful for debugging and understanding identity derivation.
+public enum AccountIdentitySource: Sendable, Equatable {
+    /// Identity derived from the account's email address
+    case email
+
+    /// Identity derived from a CLI profile or session
+    case cliProfile
+
+    /// Identity derived from an API token
+    case apiToken
+
+    /// Identity provided explicitly by the user
+    case userDefined
+
+    /// Identity derived from an external system (e.g., OAuth provider)
+    case external
 }
 
 /// One section of quotas belonging to a single upstream account, produced
