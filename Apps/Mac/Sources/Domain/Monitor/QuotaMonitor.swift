@@ -84,10 +84,12 @@ public final class QuotaMonitor {
     /// coordinator exists. Returns `nil` when the active account is disconnected
     /// (stale snapshot excluded from menu bar).
     public func connectedAccountSnapshot(providerId: String) -> UsageSnapshot? {
-        if let coordinator = accountCoordinators[providerId],
-           let activeAccount = coordinator.activeAccount,
-           activeAccount.connectionState.isActive {
-            return activeAccount.lastSnapshot ?? providers.provider(id: providerId)?.snapshot
+        if let coordinator = accountCoordinators[providerId] {
+            if let activeAccount = coordinator.activeAccount,
+               activeAccount.connectionState.isActive {
+                return activeAccount.lastSnapshot ?? providers.provider(id: providerId)?.snapshot
+            }
+            return nil
         }
         return providers.provider(id: providerId)?.snapshot
     }

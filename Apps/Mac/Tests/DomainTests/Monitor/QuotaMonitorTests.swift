@@ -1959,6 +1959,53 @@ struct QuotaMonitorTests {
         #expect(monitor2.connectedAccountSnapshot(providerId: "codex") == nil)
     }
 
+    @Test("connectedAccountSnapshot returns nil for disconnected account even with stale provider snapshot")
+    func connectedAccountSnapshotNilForDisconnectedWithStaleSnapshot() async {
+        // Mutable probe wrapper to swap behavior while keeping same provider instance
+        final class WrappedProbe: UsageProbe, @unchecked Sendable {
+            var wrappedProbe: any UsageProbe
+            init(_ probe: any UsageProbe) { self.wrappedProbe = probe }
+            func isAvailable() async -> Bool { await wrappedProbe.isAvailable() }
+            func probe() async throws -> UsageSnapshot { try await wrappedProbe.probe() }
+        }
+
+        let successProbe = MockUsageProbe()
+        given(successProbe).isAvailable().willReturn(true)
+        given(successProbe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 70
+        ))
+
+        let authErrorProbe = MockUsageProbe()
+        given(authErrorProbe).isAvailable().willReturn(true)
+        given(authErrorProbe).probe().willThrow(ProbeError.authenticationRequired)
+
+        let settings = makeSettingsRepository()
+        let multiSettings = MockMultiAccountSettings()
+
+        let wrapper = WrappedProbe(successProbe)
+        let provider = CodexProvider(probe: wrapper, settingsRepository: settings)
+        let coordinator = ProviderAccountCoordinator(
+            providerId: "codex",
+            settingsRepository: multiSettings
+        )
+
+        // First refresh: successful → provider.snapshot is set (stale data)
+        let monitor1 = makeMonitor(providers: AIProviders(providers: [provider]))
+        monitor1.registerCoordinator(coordinator)
+        await monitor1.refresh(providerId: "codex")
+        #expect(provider.snapshot != nil) // Stale snapshot exists on provider
+
+        // Auth error on same provider — snapshot is NOT cleared (stale)
+        wrapper.wrappedProbe = authErrorProbe
+        let monitor2 = makeMonitor(providers: AIProviders(providers: [provider]))
+        monitor2.registerCoordinator(coordinator)
+        await monitor2.refresh(providerId: "codex")
+
+        #expect(coordinator.accounts.first?.connectionState == .disconnected)
+        // Must return nil, not the stale provider.snapshot
+        #expect(monitor2.connectedAccountSnapshot(providerId: "codex") == nil)
+    }
+
     @Test("connectedAccountSnapshot falls back to provider snapshot when no coordinator")
     func connectedAccountSnapshotFallback() {
         let settings = makeSettingsRepository()
