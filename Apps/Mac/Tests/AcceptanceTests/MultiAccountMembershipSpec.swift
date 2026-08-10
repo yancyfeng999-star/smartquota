@@ -304,7 +304,7 @@ struct MultiAccountMembershipSpec {
 
             let mockAlerter = MockQuotaAlerter()
             given(mockAlerter).alert(providerId: .any, previousStatus: .any, currentStatus: .any).willReturn(())
-            given(mockAlerter).evaluateSnapshotAlerts(providerId: .any, snapshot: .any).willReturn()
+            given(mockAlerter).evaluateSnapshotAlerts(providerId: .any, accountId: .any, snapshot: .any).willReturn()
 
             let probe = MockUsageProbe()
             given(probe).isAvailable().willReturn(true)

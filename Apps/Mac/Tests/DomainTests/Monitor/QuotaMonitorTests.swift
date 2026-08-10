@@ -4,6 +4,81 @@ import Mockable
 @testable import Domain
 @testable import Infrastructure
 
+// MARK: - Multi-Account Test Mock
+
+/// In-memory mock for MultiAccountSettingsRepository.
+/// Used by tests that create ProviderAccountCoordinator instances.
+private final class MockMultiAccountSettings: ProviderSettingsRepository, MultiAccountSettingsRepository, @unchecked Sendable {
+    private var enabledStates: [String: Bool] = [:]
+
+    func isEnabled(forProvider id: String, defaultValue: Bool) -> Bool {
+        enabledStates[id] ?? defaultValue
+    }
+
+    func isEnabled(forProvider id: String) -> Bool {
+        enabledStates[id] ?? true
+    }
+
+    func setEnabled(_ enabled: Bool, forProvider id: String) {
+        enabledStates[id] = enabled
+    }
+
+    func customCardURL(forProvider id: String) -> String? { nil }
+    func setCustomCardURL(_ url: String?, forProvider id: String) {}
+
+    // MultiAccountSettingsRepository
+    private var accountsByProvider: [String: [ProviderAccountConfig]] = [:]
+    private var activeAccountIds: [String: String] = [:]
+
+    func accounts(forProvider id: String) -> [ProviderAccountConfig] {
+        accountsByProvider[id] ?? []
+    }
+
+    func addAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accountsByProvider[id] ?? []
+        if !existing.contains(where: { $0.accountId == config.accountId }) {
+            existing.append(config)
+            accountsByProvider[id] = existing
+        }
+    }
+
+    func removeAccount(accountId: String, forProvider id: String) {
+        var existing = accountsByProvider[id] ?? []
+        existing.removeAll { $0.accountId == accountId }
+        accountsByProvider[id] = existing
+    }
+
+    func updateAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accountsByProvider[id] ?? []
+        if let index = existing.firstIndex(where: { $0.accountId == config.accountId }) {
+            existing[index] = config
+            accountsByProvider[id] = existing
+        }
+    }
+
+    func activeAccountId(forProvider id: String) -> String? {
+        activeAccountIds[id]
+    }
+
+    func setActiveAccountId(_ accountId: String?, forProvider id: String) {
+        activeAccountIds[id] = accountId
+    }
+}
+
+// MARK: - Test Helpers
+
+private extension UsageSnapshot {
+    /// Creates a test snapshot with account email.
+    static func withAccount(providerId: String, email: String, percentRemaining: Double = 80) -> UsageSnapshot {
+        UsageSnapshot(
+            providerId: providerId,
+            quotas: [UsageQuota(percentRemaining: percentRemaining, quotaType: .session, providerId: providerId)],
+            capturedAt: Date(),
+            accountEmail: email
+        )
+    }
+}
+
 @Suite
 @MainActor
 struct QuotaMonitorTests {
@@ -1381,6 +1456,7 @@ struct QuotaMonitorTests {
         // Given
         let mockAlerter = MockQuotaAlerter()
         given(mockAlerter).alert(providerId: .any, previousStatus: .any, currentStatus: .any).willReturn(())
+        given(mockAlerter).evaluateSnapshotAlerts(providerId: .any, accountId: .any, snapshot: .any).willReturn()
 
         let probe = MockUsageProbe()
         given(probe).isAvailable().willReturn(true)
@@ -1409,6 +1485,7 @@ struct QuotaMonitorTests {
         // Given
         let mockAlerter = MockQuotaAlerter()
         given(mockAlerter).alert(providerId: .any, previousStatus: .any, currentStatus: .any).willReturn(())
+        given(mockAlerter).evaluateSnapshotAlerts(providerId: .any, accountId: .any, snapshot: .any).willReturn()
 
         let probe = MockUsageProbe()
         given(probe).isAvailable().willReturn(true)
@@ -1532,5 +1609,435 @@ struct QuotaMonitorTests {
         // Then - provider is enabled, selection unchanged
         #expect(codex.isEnabled == true)
         #expect(monitor.selectedProviderId == "claude")
+    }
+
+    // MARK: - Coordinator Integration
+
+    /// Helper: creates a monitor with a coordinator for the given provider.
+    private func makeMonitorWithCoordinator(
+        providerId: String,
+        probe: any UsageProbe,
+        settings: MockProviderSettingsRepository? = nil,
+        multiSettings: MockMultiAccountSettings? = nil
+    ) -> (QuotaMonitor, ProviderAccountCoordinator) {
+        let repoSettings = settings ?? makeSettingsRepository()
+        let multiAccountSettings = multiSettings ?? MockMultiAccountSettings()
+        let provider = CodexProvider(probe: probe, settingsRepository: repoSettings)
+        let monitor = makeMonitor(providers: AIProviders(providers: [provider]))
+        let coordinator = ProviderAccountCoordinator(
+            providerId: providerId,
+            settingsRepository: multiAccountSettings
+        )
+        monitor.registerCoordinator(coordinator)
+        return (monitor, coordinator)
+    }
+
+    // Step 1: Successful refresh calls account coordinator
+
+    @Test("Successful refresh ingests snapshot into coordinator")
+    func successfulRefreshIngestsIntoCoordinator() async {
+        let probe = MockUsageProbe()
+        given(probe).isAvailable().willReturn(true)
+        given(probe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 70
+        ))
+
+        let (monitor, coordinator) = makeMonitorWithCoordinator(
+            providerId: "codex", probe: probe
+        )
+
+        await monitor.refresh(providerId: "codex")
+
+        #expect(coordinator.accounts.count == 1)
+        #expect(coordinator.accounts.first?.email == "user@example.com")
+        #expect(coordinator.accounts.first?.lastSnapshot?.quotas.first?.percentRemaining == 70)
+    }
+
+    // Step 2: Auth error marks account as disconnected
+
+    @Test("Auth error marks active account as disconnected")
+    func authErrorMarksAccountDisconnected() async {
+        let successProbe = MockUsageProbe()
+        given(successProbe).isAvailable().willReturn(true)
+        given(successProbe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 70
+        ))
+
+        let authErrorProbe = MockUsageProbe()
+        given(authErrorProbe).isAvailable().willReturn(true)
+        given(authErrorProbe).probe().willThrow(ProbeError.authenticationRequired)
+
+        let settings = makeSettingsRepository()
+        let multiSettings = MockMultiAccountSettings()
+
+        // First refresh succeeds (creates the account)
+        let provider1 = CodexProvider(probe: successProbe, settingsRepository: settings)
+        let monitor1 = makeMonitor(providers: AIProviders(providers: [provider1]))
+        let coordinator = ProviderAccountCoordinator(
+            providerId: "codex",
+            settingsRepository: multiSettings
+        )
+        monitor1.registerCoordinator(coordinator)
+        await monitor1.refresh(providerId: "codex")
+
+        #expect(coordinator.accounts.first?.connectionState == .connected)
+
+        // Second refresh fails with auth error using same coordinator
+        let provider2 = CodexProvider(probe: authErrorProbe, settingsRepository: settings)
+        let monitor2 = makeMonitor(providers: AIProviders(providers: [provider2]))
+        monitor2.registerCoordinator(coordinator)
+
+        await monitor2.refresh(providerId: "codex")
+
+        // Then: account is disconnected
+        #expect(coordinator.accounts.first?.connectionState == .disconnected)
+    }
+
+    @Test("Session expired error also marks account as disconnected")
+    func sessionExpiredMarksDisconnected() async {
+        let successProbe = MockUsageProbe()
+        given(successProbe).isAvailable().willReturn(true)
+        given(successProbe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 70
+        ))
+
+        let expiredProbe = MockUsageProbe()
+        given(expiredProbe).isAvailable().willReturn(true)
+        given(expiredProbe).probe().willThrow(ProbeError.sessionExpired())
+
+        let settings = makeSettingsRepository()
+        let multiSettings = MockMultiAccountSettings()
+
+        // Create account
+        let provider1 = CodexProvider(probe: successProbe, settingsRepository: settings)
+        let monitor1 = makeMonitor(providers: AIProviders(providers: [provider1]))
+        let coordinator = ProviderAccountCoordinator(
+            providerId: "codex",
+            settingsRepository: multiSettings
+        )
+        monitor1.registerCoordinator(coordinator)
+        await monitor1.refresh(providerId: "codex")
+
+        // Session expired
+        let provider2 = CodexProvider(probe: expiredProbe, settingsRepository: settings)
+        let monitor2 = makeMonitor(providers: AIProviders(providers: [provider2]))
+        monitor2.registerCoordinator(coordinator)
+        await monitor2.refresh(providerId: "codex")
+
+        #expect(coordinator.accounts.first?.connectionState == .disconnected)
+    }
+
+    // Step 3: Network error retains snapshot
+
+    @Test("Network error retains last snapshot on account")
+    func networkErrorRetainsSnapshot() async {
+        let successProbe = MockUsageProbe()
+        given(successProbe).isAvailable().willReturn(true)
+        given(successProbe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 70
+        ))
+
+        let timeoutProbe = MockUsageProbe()
+        given(timeoutProbe).isAvailable().willReturn(true)
+        given(timeoutProbe).probe().willThrow(ProbeError.timeout)
+
+        let settings = makeSettingsRepository()
+        let multiSettings = MockMultiAccountSettings()
+
+        // First refresh succeeds
+        let provider1 = CodexProvider(probe: successProbe, settingsRepository: settings)
+        let monitor1 = makeMonitor(providers: AIProviders(providers: [provider1]))
+        let coordinator = ProviderAccountCoordinator(
+            providerId: "codex",
+            settingsRepository: multiSettings
+        )
+        monitor1.registerCoordinator(coordinator)
+        await monitor1.refresh(providerId: "codex")
+
+        let snapshotBefore = coordinator.accounts.first?.lastSnapshot
+
+        // Second refresh fails with network error
+        let provider2 = CodexProvider(probe: timeoutProbe, settingsRepository: settings)
+        let monitor2 = makeMonitor(providers: AIProviders(providers: [provider2]))
+        monitor2.registerCoordinator(coordinator)
+        await monitor2.refresh(providerId: "codex")
+
+        // Snapshot retained, account still connected
+        #expect(coordinator.accounts.first?.lastSnapshot == snapshotBefore)
+        #expect(coordinator.accounts.first?.connectionState == .connected)
+    }
+
+    @Test("Rate limited error retains snapshot")
+    func rateLimitedRetainsSnapshot() async {
+        let successProbe = MockUsageProbe()
+        given(successProbe).isAvailable().willReturn(true)
+        given(successProbe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 70
+        ))
+
+        let rateLimitedProbe = MockUsageProbe()
+        given(rateLimitedProbe).isAvailable().willReturn(true)
+        given(rateLimitedProbe).probe().willThrow(ProbeError.rateLimited(retryAt: Date().addingTimeInterval(300)))
+
+        let settings = makeSettingsRepository()
+        let multiSettings = MockMultiAccountSettings()
+
+        // First refresh succeeds
+        let provider1 = CodexProvider(probe: successProbe, settingsRepository: settings)
+        let monitor1 = makeMonitor(providers: AIProviders(providers: [provider1]))
+        let coordinator = ProviderAccountCoordinator(
+            providerId: "codex",
+            settingsRepository: multiSettings
+        )
+        monitor1.registerCoordinator(coordinator)
+        await monitor1.refresh(providerId: "codex")
+
+        let snapshotBefore = coordinator.accounts.first?.lastSnapshot
+
+        // Rate limited
+        let provider2 = CodexProvider(probe: rateLimitedProbe, settingsRepository: settings)
+        let monitor2 = makeMonitor(providers: AIProviders(providers: [provider2]))
+        monitor2.registerCoordinator(coordinator)
+        await monitor2.refresh(providerId: "codex")
+
+        #expect(coordinator.accounts.first?.lastSnapshot == snapshotBefore)
+        #expect(coordinator.accounts.first?.connectionState == .connected)
+    }
+
+    // Step 4: Historical snapshots don't participate in overallStatus
+
+    @Test("Disconnected account snapshot excluded from overall status")
+    func disconnectedAccountExcludedFromOverallStatus() async {
+        let lowQuotaProbe = MockUsageProbe()
+        given(lowQuotaProbe).isAvailable().willReturn(true)
+        given(lowQuotaProbe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 10
+        ))
+
+        let authErrorProbe = MockUsageProbe()
+        given(authErrorProbe).isAvailable().willReturn(true)
+        given(authErrorProbe).probe().willThrow(ProbeError.authenticationRequired)
+
+        let settings = makeSettingsRepository()
+        let multiSettings = MockMultiAccountSettings()
+
+        // Create account with low quota (would be critical)
+        let provider1 = CodexProvider(probe: lowQuotaProbe, settingsRepository: settings)
+        let monitor1 = makeMonitor(providers: AIProviders(providers: [provider1]))
+        let coordinator = ProviderAccountCoordinator(
+            providerId: "codex",
+            settingsRepository: multiSettings
+        )
+        monitor1.registerCoordinator(coordinator)
+        await monitor1.refresh(providerId: "codex")
+
+        // Status is critical (10%)
+        #expect(monitor1.overallStatus == .critical)
+
+        // Auth error → disconnect
+        let provider2 = CodexProvider(probe: authErrorProbe, settingsRepository: settings)
+        let monitor2 = makeMonitor(providers: AIProviders(providers: [provider2]))
+        monitor2.registerCoordinator(coordinator)
+        await monitor2.refresh(providerId: "codex")
+
+        // Account is disconnected
+        #expect(coordinator.accounts.first?.connectionState == .disconnected)
+
+        // Overall status should be healthy (disconnected account excluded)
+        #expect(monitor2.overallStatus == .healthy)
+    }
+
+    @Test("Connected account snapshot still counts in overall status")
+    func connectedAccountCountsInOverallStatus() async {
+        let probe = MockUsageProbe()
+        given(probe).isAvailable().willReturn(true)
+        given(probe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 15
+        ))
+
+        let (monitor, _) = makeMonitorWithCoordinator(
+            providerId: "codex", probe: probe
+        )
+        await monitor.refresh(providerId: "codex")
+
+        // Connected account's snapshot counts
+        #expect(monitor.overallStatus == .critical)
+    }
+
+    // Step 5: Alert key uses providerId.accountId:kind format
+
+    @Test("Alert key uses providerId.accountId:kind format")
+    func alertKeyUsesAccountFormat() async {
+        let mockAlerter = MockQuotaAlerter()
+        given(mockAlerter).alert(providerId: .any, previousStatus: .any, currentStatus: .any).willReturn(())
+        given(mockAlerter).evaluateSnapshotAlerts(providerId: .any, accountId: .any, snapshot: .any).willReturn()
+
+        let probe = MockUsageProbe()
+        given(probe).isAvailable().willReturn(true)
+        given(probe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 70
+        ))
+
+        let settings = makeSettingsRepository()
+        let multiSettings = MockMultiAccountSettings()
+        let provider = CodexProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            alerter: mockAlerter,
+            clock: TestClock()
+        )
+        let coordinator = ProviderAccountCoordinator(
+            providerId: "codex",
+            settingsRepository: multiSettings
+        )
+        monitor.registerCoordinator(coordinator)
+
+        await monitor.refresh(providerId: "codex")
+
+        // Verify the alerter was called with an accountId derived from the coordinator
+        let activeAccountId = coordinator.activeAccountId
+        #expect(activeAccountId != nil)
+
+        verify(mockAlerter).evaluateSnapshotAlerts(
+            providerId: .value("codex"),
+            accountId: .value(activeAccountId!),
+            snapshot: .any
+        ).called(1)
+    }
+
+    // MARK: - connectedAccountSnapshot
+
+    @Test("connectedAccountSnapshot returns active account snapshot")
+    func connectedAccountSnapshotReturnsActiveSnapshot() async {
+        let probe = MockUsageProbe()
+        given(probe).isAvailable().willReturn(true)
+        given(probe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 65
+        ))
+
+        let (monitor, _) = makeMonitorWithCoordinator(
+            providerId: "codex", probe: probe
+        )
+        await monitor.refresh(providerId: "codex")
+
+        let snapshot = monitor.connectedAccountSnapshot(providerId: "codex")
+        #expect(snapshot?.quotas.first?.percentRemaining == 65)
+    }
+
+    @Test("connectedAccountSnapshot returns nil for disconnected account")
+    func connectedAccountSnapshotNilForDisconnected() async {
+        let successProbe = MockUsageProbe()
+        given(successProbe).isAvailable().willReturn(true)
+        given(successProbe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 70
+        ))
+
+        let authErrorProbe = MockUsageProbe()
+        given(authErrorProbe).isAvailable().willReturn(true)
+        given(authErrorProbe).probe().willThrow(ProbeError.authenticationRequired)
+
+        let settings = makeSettingsRepository()
+        let multiSettings = MockMultiAccountSettings()
+
+        // Create account
+        let provider1 = CodexProvider(probe: successProbe, settingsRepository: settings)
+        let monitor1 = makeMonitor(providers: AIProviders(providers: [provider1]))
+        let coordinator = ProviderAccountCoordinator(
+            providerId: "codex",
+            settingsRepository: multiSettings
+        )
+        monitor1.registerCoordinator(coordinator)
+        await monitor1.refresh(providerId: "codex")
+
+        // Disconnect via auth error
+        let provider2 = CodexProvider(probe: authErrorProbe, settingsRepository: settings)
+        let monitor2 = makeMonitor(providers: AIProviders(providers: [provider2]))
+        monitor2.registerCoordinator(coordinator)
+        await monitor2.refresh(providerId: "codex")
+
+        #expect(coordinator.accounts.first?.connectionState == .disconnected)
+        #expect(monitor2.connectedAccountSnapshot(providerId: "codex") == nil)
+    }
+
+    @Test("connectedAccountSnapshot falls back to provider snapshot when no coordinator")
+    func connectedAccountSnapshotFallback() {
+        let settings = makeSettingsRepository()
+        let provider = CodexProvider(probe: MockUsageProbe(), settingsRepository: settings)
+        let monitor = makeMonitor(providers: AIProviders(providers: [provider]))
+
+        // No coordinator registered, falls back to provider snapshot
+        let snapshot = monitor.connectedAccountSnapshot(providerId: "codex")
+        #expect(snapshot == nil) // No snapshot yet
+    }
+
+    // MARK: - Auth error clears previous status
+
+    @Test("Auth error clears previous status for fresh reconnection alert")
+    func authErrorClearsPreviousStatus() async {
+        let mockAlerter = MockQuotaAlerter()
+        given(mockAlerter).alert(providerId: .any, previousStatus: .any, currentStatus: .any).willReturn(())
+        given(mockAlerter).evaluateSnapshotAlerts(providerId: .any, accountId: .any, snapshot: .any).willReturn()
+
+        let lowQuotaProbe = MockUsageProbe()
+        given(lowQuotaProbe).isAvailable().willReturn(true)
+        given(lowQuotaProbe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 10
+        ))
+
+        let authErrorProbe = MockUsageProbe()
+        given(authErrorProbe).isAvailable().willReturn(true)
+        given(authErrorProbe).probe().willThrow(ProbeError.authenticationRequired)
+
+        let settings = makeSettingsRepository()
+        let multiSettings = MockMultiAccountSettings()
+
+        // First refresh: critical status
+        let provider1 = CodexProvider(probe: lowQuotaProbe, settingsRepository: settings)
+        let monitor1 = QuotaMonitor(
+            providers: AIProviders(providers: [provider1]),
+            alerter: mockAlerter,
+            clock: TestClock()
+        )
+        let coordinator = ProviderAccountCoordinator(
+            providerId: "codex",
+            settingsRepository: multiSettings
+        )
+        monitor1.registerCoordinator(coordinator)
+        await monitor1.refresh(providerId: "codex")
+
+        verify(mockAlerter).alert(
+            providerId: .any, previousStatus: .any, currentStatus: .any
+        ).called(1)
+
+        // Auth error → disconnect, clears previous status
+        let provider2 = CodexProvider(probe: authErrorProbe, settingsRepository: settings)
+        let monitor2 = QuotaMonitor(
+            providers: AIProviders(providers: [provider2]),
+            alerter: mockAlerter,
+            clock: TestClock()
+        )
+        monitor2.registerCoordinator(coordinator)
+        await monitor2.refresh(providerId: "codex")
+
+        // Reconnect with critical status again
+        let reconnectProbe = MockUsageProbe()
+        given(reconnectProbe).isAvailable().willReturn(true)
+        given(reconnectProbe).probe().willReturn(UsageSnapshot.withAccount(
+            providerId: "codex", email: "user@example.com", percentRemaining: 10
+        ))
+
+        let provider3 = CodexProvider(probe: reconnectProbe, settingsRepository: settings)
+        let monitor3 = QuotaMonitor(
+            providers: AIProviders(providers: [provider3]),
+            alerter: mockAlerter,
+            clock: TestClock()
+        )
+        monitor3.registerCoordinator(coordinator)
+        await monitor3.refresh(providerId: "codex")
+
+        // Alert should fire again (fresh status, not suppressed by stale previousStatus)
+        verify(mockAlerter).alert(
+            providerId: .any, previousStatus: .any, currentStatus: .any
+        ).called(2)
     }
 }
