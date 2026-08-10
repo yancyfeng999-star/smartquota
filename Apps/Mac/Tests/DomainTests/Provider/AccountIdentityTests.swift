@@ -86,6 +86,17 @@ struct AccountIdentityTests {
         #expect(disconnected != pending)
     }
 
+    @Test("isActive returns true for connected and pendingConfirmation")
+    func isActiveForActiveStates() {
+        #expect(AccountConnectionState.connected.isActive == true)
+        #expect(AccountConnectionState.pendingConfirmation.isActive == true)
+    }
+
+    @Test("isActive returns false for disconnected")
+    func isActiveForDisconnected() {
+        #expect(AccountConnectionState.disconnected.isActive == false)
+    }
+
     // MARK: - Provider Account State
 
     @Test("Provider account state with identity")
@@ -133,5 +144,38 @@ struct AccountIdentityTests {
 
         #expect(snapshot.accountExternalId == nil)
         #expect(snapshot.accountIdentitySource == nil)
+    }
+
+    // MARK: - ProviderAccount Identity Bridge
+
+    @Test("ProviderAccount.identity produces matching AccountIdentity")
+    func providerAccountIdentityBridge() {
+        let account = ProviderAccount(
+            providerId: "claude",
+            label: "Personal",
+            email: "user@example.com"
+        )
+
+        let identity = account.identity
+
+        #expect(identity.providerId == "claude")
+        #expect(identity.label == "Personal")
+        #expect(identity.normalizedEmail == "user@example.com")
+    }
+
+    @Test("ProviderAccount.identity produces stable ID regardless of email")
+    func providerAccountIdentityStable() {
+        let account1 = ProviderAccount(
+            providerId: "claude",
+            label: "Personal",
+            email: "old@example.com"
+        )
+        let account2 = ProviderAccount(
+            providerId: "claude",
+            label: "Personal",
+            email: "new@example.com"
+        )
+
+        #expect(account1.identity.accountId == account2.identity.accountId)
     }
 }

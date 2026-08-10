@@ -29,7 +29,7 @@ public struct ProviderAccountState: Sendable, Equatable, Identifiable {
 
     // MARK: - Identifiable
 
-    /// The compound ID: `{providerId}.{accountId}`
+    /// The unique identifier, matching `identity.accountId` (format: `{providerId}.{hash}`).
     public var id: String {
         identity.accountId
     }
@@ -66,12 +66,10 @@ public struct ProviderAccountState: Sendable, Equatable, Identifiable {
 
     // MARK: - Display
 
-    /// Best available display name: label first, then email, then account ID
+    /// Best available display name: label first, then email, then account ID.
+    /// Delegates to the same logic used by `ProviderAccount` for consistency.
     public var displayName: String {
-        if !label.isEmpty {
-            return label
-        }
-        return email ?? identity.accountId
+        AccountDisplayName.displayName(label: label, email: email, fallbackId: identity.accountId)
     }
 
     /// The uppercased first character of the display name, for avatar circles.

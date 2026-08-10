@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Represents the stable identity of an account within a provider.
 ///
@@ -65,15 +66,32 @@ public struct AccountIdentity: Sendable, Equatable, Hashable {
 // MARK: - String SHA256 Helper
 
 private extension String {
-    /// Returns the first 16 hex characters of the SHA-256 hash.
+    /// Returns the first `length` hex characters of the SHA-256 hash.
     func sha256Prefix(_ length: Int) -> String {
-        guard let data = self.data(using: .utf8) else { return "" }
-        var hash = [UInt8](repeating: 0, count: 32)
-        data.withUnsafeBytes { buffer in
-            _ = CC_SHA256(buffer.baseAddress, CC_LONG(buffer.count), &hash)
-        }
-        return hash.prefix(length / 2).map { String(format: "%02x", $0) }.joined()
+        let digest = SHA256.hash(data: Data(self.utf8))
+        return digest.prefix(length / 2).map { String(format: "%02x", $0) }.joined()
     }
 }
 
-import CommonCrypto
+// MARK: - Account Identity Source
+
+/// The source used to derive an account's identity.
+///
+/// This helps track where the account identifier came from,
+/// useful for debugging and understanding identity derivation.
+public enum AccountIdentitySource: Sendable, Equatable {
+    /// Identity derived from the account's email address
+    case email
+
+    /// Identity derived from a CLI profile or session
+    case cliProfile
+
+    /// Identity derived from an API token
+    case apiToken
+
+    /// Identity provided explicitly by the user
+    case userDefined
+
+    /// Identity derived from an external system (e.g., OAuth provider)
+    case external
+}

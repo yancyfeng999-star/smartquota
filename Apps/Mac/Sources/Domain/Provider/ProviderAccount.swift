@@ -67,10 +67,7 @@ public struct ProviderAccount: Sendable, Equatable, Identifiable {
 
     /// Best available display name: label first, then email, then account ID
     public var displayName: String {
-        if !label.isEmpty {
-            return label
-        }
-        return email ?? accountId
+        AccountDisplayName.displayName(label: label, email: email, fallbackId: accountId)
     }
 
     /// Whether this is the default (single) account
@@ -81,6 +78,20 @@ public struct ProviderAccount: Sendable, Equatable, Identifiable {
     /// The uppercased first character of the display name, for avatar circles.
     public var initialLetter: String {
         String(displayName.prefix(1)).uppercased()
+    }
+
+    // MARK: - Identity Bridge
+
+    /// Converts this account to its canonical `AccountIdentity`.
+    ///
+    /// Use this to transition consumers from `ProviderAccount.accountId`
+    /// to the stable `AccountIdentity` model incrementally.
+    public var identity: AccountIdentity {
+        AccountIdentity(
+            providerId: providerId,
+            email: email,
+            label: label
+        )
     }
 
     // MARK: - Membership
@@ -105,6 +116,10 @@ public struct ProviderAccount: Sendable, Equatable, Identifiable {
 /// - `.pendingConfirmation` → `.signedIn` (user confirms the account)
 /// - `.signedIn` → `.signedOut` (user signs out)
 /// - `.signedOut` → `.signedIn` (user signs back in)
+///
+/// - Important: Deprecated in favor of `AccountConnectionState`.
+///   Use `connectionState` on `ProviderAccountState` for new code.
+@available(*, deprecated, message: "Use AccountConnectionState instead")
 public enum MembershipStatus: Sendable, Equatable {
     /// Discovered during interactive refresh; awaiting user confirmation.
     case pendingConfirmation
@@ -112,4 +127,24 @@ public enum MembershipStatus: Sendable, Equatable {
     case signedIn
     /// Previously signed in; retains last snapshot for historical reference.
     case signedOut
+
+    /// Converts to the canonical `AccountConnectionState`.
+    public var asConnectionState: AccountConnectionState {
+        switch self {
+        case .pendingConfirmation: return .pendingConfirmation
+        case .signedIn: return .connected
+        case .signedOut: return .disconnected
+        }
+    }
+}
+
+extension AccountConnectionState {
+    /// Converts from the legacy `MembershipStatus`.
+    public init(_ membershipStatus: MembershipStatus) {
+        switch membershipStatus {
+        case .pendingConfirmation: self = .pendingConfirmation
+        case .signedIn: self = .connected
+        case .signedOut: self = .disconnected
+        }
+    }
 }

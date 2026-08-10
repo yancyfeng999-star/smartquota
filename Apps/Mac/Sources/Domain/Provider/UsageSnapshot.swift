@@ -199,27 +199,6 @@ public struct UsageSnapshot: Sendable, Equatable {
     }
 }
 
-/// The source used to derive an account's identity.
-///
-/// This helps track where the account identifier came from,
-/// useful for debugging and understanding identity derivation.
-public enum AccountIdentitySource: Sendable, Equatable {
-    /// Identity derived from the account's email address
-    case email
-
-    /// Identity derived from a CLI profile or session
-    case cliProfile
-
-    /// Identity derived from an API token
-    case apiToken
-
-    /// Identity provided explicitly by the user
-    case userDefined
-
-    /// Identity derived from an external system (e.g., OAuth provider)
-    case external
-}
-
 /// One section of quotas belonging to a single upstream account, produced
 /// by aggregating providers (e.g. Oh My Pi). `title` is nil for the
 /// unnamed bucket of ungrouped quotas.

@@ -4,7 +4,7 @@ import Foundation
 ///
 /// This tracks whether the account is actively connected, disconnected,
 /// or pending user confirmation (e.g., after discovery via CLI).
-public enum AccountConnectionState: Sendable, Equatable {
+public enum AccountConnectionState: Sendable, Equatable, Codable {
     /// The account is actively connected and participating in monitoring.
     case connected
 
