@@ -34,3 +34,40 @@ pub const GENERIC_API_KEY_PREFIX: &str = "provider-key:";
 pub fn provider_key_account(provider_id: &str) -> String {
     format!("{GENERIC_API_KEY_PREFIX}{provider_id}")
 }
+
+/// Per-account key: `{provider_id}:{account_id}:{key_name}`
+///
+/// This isolates secrets by provider + account, so multiple accounts
+/// on the same provider (e.g., two Claude accounts) each have their
+/// own credential entry in Windows Credential Manager.
+pub fn account_secret_key(provider_id: &str, account_id: &str, key_name: &str) -> String {
+    format!("{provider_id}:{account_id}:{key_name}")
+}
+
+/// Set a secret scoped to a specific provider account.
+pub fn set_account_secret(
+    provider_id: &str,
+    account_id: &str,
+    key_name: &str,
+    value: &str,
+) -> Result<(), String> {
+    set_secret(&account_secret_key(provider_id, account_id, key_name), value)
+}
+
+/// Get a secret scoped to a specific provider account.
+pub fn get_account_secret(
+    provider_id: &str,
+    account_id: &str,
+    key_name: &str,
+) -> Option<String> {
+    get_secret(&account_secret_key(provider_id, account_id, key_name))
+}
+
+/// Delete a secret scoped to a specific provider account.
+pub fn delete_account_secret(
+    provider_id: &str,
+    account_id: &str,
+    key_name: &str,
+) -> Result<(), String> {
+    delete_secret(&account_secret_key(provider_id, account_id, key_name))
+}

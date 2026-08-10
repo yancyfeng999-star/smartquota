@@ -402,3 +402,103 @@ body {
 .footer-note {
   margin-top: 4px;
 }
+
+/* Account UI */
+.account-email {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.banner.pending-account {
+  background: rgba(40, 102, 247, 0.1);
+  border: 1px solid rgba(40, 102, 247, 0.3);
+  color: #93b4ff;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.banner.pending-account span {
+  flex: 1;
+  min-width: 120px;
+}
+
+.account-provider-block {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.account-provider-block:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.account-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.account-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.account-info strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.account-actions .btn {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.account-active {
+  color: var(--ok);
+  background: rgba(48, 209, 88, 0.12);
+}
+
+.account-pending {
+  color: var(--warn);
+  background: rgba(255, 159, 10, 0.12);
+}
+
+.account-disconnected {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.btn-ghost:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}

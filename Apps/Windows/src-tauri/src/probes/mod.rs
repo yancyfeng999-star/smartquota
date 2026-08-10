@@ -43,6 +43,10 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
             enabled: false,
             source_mode: "none".into(),
             is_core,
+            account_id: None,
+            account_email: None,
+            account_label: None,
+            account_state: None,
         };
     }
 
@@ -60,6 +64,10 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
                 enabled: true,
                 source_mode: d.mode.clone(),
                 is_core,
+                account_id: None,
+                account_email: None,
+                account_label: None,
+                account_state: None,
             };
         }
     }
@@ -115,6 +123,10 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
                 enabled: true,
                 source_mode,
                 is_core,
+                account_id: None,
+                account_email: None,
+                account_label: None,
+                account_state: None,
             }
         }
         Err(msg) => QuotaCard {
@@ -131,6 +143,10 @@ pub async fn probe_provider(id: &str, settings: &AppSettings) -> QuotaCard {
             enabled: true,
             source_mode,
             is_core,
+            account_id: None,
+            account_email: None,
+            account_label: None,
+            account_state: None,
         },
     }
 }

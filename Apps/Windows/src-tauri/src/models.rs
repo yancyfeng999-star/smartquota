@@ -124,6 +124,19 @@ pub struct QuotaCard {
     /// Whether this is a core (default-on) provider
     #[serde(default)]
     pub is_core: bool,
+    // --- Multi-account identity fields ---
+    /// Account ID within the provider (e.g., "default", or hash-based ID)
+    #[serde(default)]
+    pub account_id: Option<String>,
+    /// Account email if known
+    #[serde(default)]
+    pub account_email: Option<String>,
+    /// Account display label
+    #[serde(default)]
+    pub account_label: Option<String>,
+    /// Connection state: connected | disconnected | pendingConfirmation
+    #[serde(default)]
+    pub account_state: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

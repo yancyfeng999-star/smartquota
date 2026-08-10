@@ -23,6 +23,10 @@ export type QuotaCard = {
   enabled: boolean;
   sourceMode: string;
   isCore?: boolean;
+  accountId?: string | null;
+  accountEmail?: string | null;
+  accountLabel?: string | null;
+  accountState?: string | null;
 };
 
 export type AlertEvent = {
@@ -85,6 +89,34 @@ type PathsInfo = {
   claudeJson?: string;
 };
 
+type AccountIdentity = {
+  providerId: string;
+  normalizedEmail?: string | null;
+  label: string;
+  accountId: string;
+};
+
+type ProviderAccountState = {
+  identity: AccountIdentity;
+  connectionState: string;
+  label: string;
+  email?: string | null;
+  organization?: string | null;
+  lastSnapshotJson?: string | null;
+  lastSnapshotTime?: string | null;
+};
+
+type AccountCoordinator = {
+  providerId: string;
+  accounts: Record<string, ProviderAccountState>;
+  pending: Record<string, ProviderAccountState>;
+  activeAccountId?: string | null;
+};
+
+type MultiAccountState = {
+  coordinators: Record<string, AccountCoordinator>;
+};
+
 const REFRESH_OPTIONS = [
   { secs: 0, key: "refreshOff" as const },
   { secs: 300, key: "refresh5" as const },
@@ -132,6 +164,7 @@ export default function App() {
   const [extList, setExtList] = useState<
     { id: string; name: string; version: string; description?: string; path: string; sections: number }[]
   >([]);
+  const [accountStates, setAccountStates] = useState<MultiAccountState>({ coordinators: {} });
 
   const lang = (settings?.language === "en" ? "en" : "zh-Hans") as Lang;
   const i18n = useMemo(() => t(lang), [lang]);
@@ -215,6 +248,11 @@ export default function App() {
         setExtList(await invoke("list_extensions"));
       } catch {
         setExtList([]);
+      }
+      try {
+        setAccountStates(await invoke<MultiAccountState>("get_account_states"));
+      } catch {
+        setAccountStates({ coordinators: {} });
       }
     } catch (e) {
       setError(String(e));
@@ -323,6 +361,50 @@ export default function App() {
     setSettings(next);
   };
 
+  // Account management helpers
+  const confirmAccount = async (providerId: string, accountId: string) => {
+    const s = await invoke<MultiAccountState>("confirm_account", { providerId, accountId });
+    setAccountStates(s);
+    void refresh();
+  };
+
+  const ignoreAccount = async (providerId: string, accountId: string) => {
+    const s = await invoke<MultiAccountState>("ignore_account", { providerId, accountId });
+    setAccountStates(s);
+  };
+
+  const signOutAccount = async (providerId: string, accountId: string) => {
+    const s = await invoke<MultiAccountState>("sign_out_account", { providerId, accountId });
+    setAccountStates(s);
+    void refresh();
+  };
+
+  const selectAccount = async (providerId: string, accountId: string) => {
+    const s = await invoke<MultiAccountState>("select_account", { providerId, accountId });
+    setAccountStates(s);
+    void refresh();
+  };
+
+  const deleteAccount = async (providerId: string, accountId: string) => {
+    const s = await invoke<MultiAccountState>("delete_account", { providerId, accountId });
+    setAccountStates(s);
+    void refresh();
+  };
+
+  const getCoordinator = (providerId: string): AccountCoordinator | null => {
+    return accountStates.coordinators[providerId] ?? null;
+  };
+
+  const pendingAccounts = (): Array<{ providerId: string; account: ProviderAccountState }> => {
+    const result: Array<{ providerId: string; account: ProviderAccountState }> = [];
+    for (const [pid, coord] of Object.entries(accountStates.coordinators)) {
+      for (const acct of Object.values(coord.pending)) {
+        result.push({ providerId: pid, account: acct });
+      }
+    }
+    return result;
+  };
+
   // Home: only enabled memberships, ordered by settings.providerOrder.
   const visibleCards = (() => {
     const enabled = (data?.cards ?? []).filter((c) => c.enabled);
@@ -371,6 +453,19 @@ export default function App() {
           {msg}
         </div>
       ))}
+      {pendingAccounts().map(({ providerId, account }) => (
+        <div key={account.identity.accountId} className="banner pending-account">
+          <span>
+            {i18n.accountPendingTitle}: {account.email ?? account.label}
+          </span>
+          <button type="button" className="btn" onClick={() => void confirmAccount(providerId, account.identity.accountId)}>
+            {i18n.accountConfirm}
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={() => void ignoreAccount(providerId, account.identity.accountId)}>
+            {i18n.accountIgnore}
+          </button>
+        </div>
+      ))}
 
       {tab === "home" && (
         <main className="cards">
@@ -379,6 +474,9 @@ export default function App() {
               <div className="card-top">
                 <div>
                   <strong>{card.displayName}</strong>
+                  {card.accountEmail ? (
+                    <span className="account-email">{card.accountEmail}</span>
+                  ) : null}
                   {card.isCore ? (
                     <span className="src src-auto">{i18n.core}</span>
                   ) : (
@@ -483,6 +581,67 @@ export default function App() {
                 />
               </label>
             ))}
+          </section>
+
+          <section className="block">
+            <h2>{i18n.accountsTitle}</h2>
+            <p className="hint">{i18n.accountsHint}</p>
+            {providers.map((p) => {
+              const coord = getCoordinator(p.id);
+              const allAccounts = coord
+                ? [...Object.values(coord.accounts), ...Object.values(coord.pending)]
+                : [];
+              return (
+                <div key={p.id} className="account-provider-block">
+                  <h3 className="subh">{p.name}</h3>
+                  {allAccounts.length === 0 ? (
+                    <p className="hint">{i18n.noAccounts}</p>
+                  ) : (
+                    allAccounts.map((acct) => {
+                      const isActive = coord?.activeAccountId === acct.identity.accountId;
+                      const isPending = acct.connectionState === "pendingConfirmation";
+                      const isDisconnected = acct.connectionState === "disconnected";
+                      return (
+                        <div key={acct.identity.accountId} className={`account-row state-${acct.connectionState}`}>
+                          <div className="account-info">
+                            <strong>{acct.label || acct.email || acct.identity.accountId}</strong>
+                            {acct.email && <span className="hint">{acct.email}</span>}
+                            {isActive && <span className="pill account-active">{i18n.accountActive}</span>}
+                            {isPending && <span className="pill account-pending">{i18n.accountPending}</span>}
+                            {isDisconnected && <span className="pill account-disconnected">{i18n.accountDisconnected}</span>}
+                          </div>
+                          <div className="account-actions">
+                            {isPending && (
+                              <>
+                                <button type="button" className="btn" onClick={() => void confirmAccount(p.id, acct.identity.accountId)}>
+                                  {i18n.accountConfirm}
+                                </button>
+                                <button type="button" className="btn btn-ghost" onClick={() => void ignoreAccount(p.id, acct.identity.accountId)}>
+                                  {i18n.accountIgnore}
+                                </button>
+                              </>
+                            )}
+                            {!isPending && !isActive && !isDisconnected && (
+                              <button type="button" className="btn" onClick={() => void selectAccount(p.id, acct.identity.accountId)}>
+                                {i18n.accountSelect}
+                              </button>
+                            )}
+                            {!isPending && !isDisconnected && (
+                              <button type="button" className="btn btn-ghost" onClick={() => void signOutAccount(p.id, acct.identity.accountId)}>
+                                {i18n.accountSignOut}
+                              </button>
+                            )}
+                            <button type="button" className="btn danger" onClick={() => void deleteAccount(p.id, acct.identity.accountId)}>
+                              {i18n.accountDelete}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              );
+            })}
           </section>
 
           <section className="block">
