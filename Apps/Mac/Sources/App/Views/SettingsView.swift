@@ -64,6 +64,7 @@ struct SettingsContentView: View {
                     launchAtLoginCard
                     logsCard
                     updatesCard
+                    securityCard
                     aboutCard
                 }
                 .padding(.horizontal, 16)
@@ -1060,6 +1061,74 @@ struct SettingsContentView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: theme.cardCornerRadius)
                         .stroke(theme.glassBorder, lineWidth: 1)
+                )
+        )
+    }
+
+    // MARK: - Security Card
+
+    private var securityCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ZStack {
+                    Circle()
+                        .fill(theme.accentGradient)
+                        .frame(width: 32, height: 32)
+
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("安全")
+                        .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                        .foregroundStyle(theme.textPrimary)
+
+                    Text("密钥管理与指纹保护")
+                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                        .foregroundStyle(theme.textTertiary)
+                }
+
+                Spacer()
+
+                NavigationLink {
+                    KeyManagementView(
+                        authManager: BiometricAuthManager(authService: LocalAuthenticationService.shared),
+                        secureStore: SecureKeychainStore(authManager: BiometricAuthManager(authService: LocalAuthenticationService.shared))
+                    )
+                } label: {
+                    Text("管理")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.accentPrimary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 8) {
+                Image(systemName: "touchid")
+                    .font(.system(size: 14))
+                    .foregroundStyle(theme.accentPrimary)
+
+                Text("使用指纹或面容保护敏感密钥")
+                    .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                    .foregroundStyle(theme.textSecondary)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(theme.cardGradient)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .stroke(
+                            LinearGradient(
+                                colors: [theme.glassBorder, theme.glassBorder.opacity(0.5)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
                 )
         )
     }

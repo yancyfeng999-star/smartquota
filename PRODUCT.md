@@ -6,7 +6,7 @@
 | **英文名** | SmartQuota |
 | **一句话** | 本机 AI 会员额度，一眼看完 |
 | **平台** | macOS 15+ 菜单栏 · Windows 托盘（Apps 平级） |
-| **Mac 版本** | **0.3.26**（build 29） |
+| **Mac 版本** | **0.3.27**（build 30） |
 | **Windows 版本** | **0.5.0**（源码；Setup 发布包见 Release） |
 | **状态** | **本阶段完结**（2026-08） |
 
@@ -43,6 +43,7 @@
 | 固定窗口 / 排序 | 常驻查看、长按排序 |
 | 告警 | 阈值偏低、临近重置未用完（可关） |
 | 脚本扩展 | `~/.smartquota/extensions/` |
+| 密钥管理 | 指纹/面容保护敏感密钥；Keychain 安全存储 |
 | 分发 | Mac dmg/pkg · Windows Setup.exe · GitHub Release |
 
 ### 不做（当前）

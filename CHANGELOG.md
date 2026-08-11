@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.27] — 2026-08-11
+
+### Added
+- **指纹解锁保护**：支持使用 Touch ID 保护敏感 API 密钥
+- **密钥管理界面**：设置中新增"安全"卡片，可管理密钥和生物识别设置
+- **安全存储增强**：敏感密钥使用 Keychain 访问控制保护，需要用户交互才能访问
+- **密码回退**：生物识别不可用时可使用系统密码验证
+
+### Security
+- 生物识别模板存储在 Secure Enclave 中，永不离开设备
+- 敏感密钥使用 `kSecAttrAccessControl` 保护
+- 新增 `com.apple.security.personal-information.biometric` 权限
+
+### Release
+- GitHub：`v0.3.27` · `SmartQuota-0.3.27.dmg` / `.pkg`
+
+---
+
 ## [Mac 0.3.26] — 2026-08-11
 
 ### Added
