@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.26] — 2026-08-11
+
+### Added
+- **全会员多账号支持**：每个 AI 会员支持任意数量账号，同一时间只读取本机当前可用账号，其他账号保留最后一次成功额度并显示"未登录"。
+- **账号发现状态机**：自动识别当前登录账号，支持邮箱标准化、历史账号恢复、新账号确认流程。
+- **账号级持久化**：账号配置和额度快照本地缓存，支持账号级套餐名称和续费日期。
+- **多账号 UI**：账号选择器、待确认横幅、账号管理卡片，支持 VoiceOver 和键盘导航。
+- **全部 Mac Provider 接入**：18 个内置 AI 会员均支持多账号（Codex、Kimi、MiniMax、Grok、Claude、Gemini、Copilot 等）。
+- **Windows 行为对齐**：Rust 账号状态机、React 账号 UI、Windows Credential Manager 按账号隔离密钥。
+- **隐私与安全**：邮箱、额度、Keychain 和普通设置的存储边界明确，历史快照不参与告警。
+
+### Release
+- GitHub：`v0.3.26` · `SmartQuota-0.3.26.dmg` / `.pkg`
+
+---
+
 ## [Mac 0.3.25] — 2026-08-11
 
 ### Fixed

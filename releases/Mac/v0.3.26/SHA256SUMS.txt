@@ -1,0 +1,8 @@
+# SHA256 checksums for SmartQuota v0.3.26
+# Generated on 2026-08-11
+
+# Note: These are placeholder values. Actual checksums will be generated
+# when the release packages are built on macOS.
+
+# SmartQuota-0.3.26.dmg
+# SmartQuota-0.3.26.pkg
