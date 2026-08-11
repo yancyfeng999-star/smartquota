@@ -67,10 +67,7 @@ public struct ProviderAccount: Sendable, Equatable, Identifiable {
 
     /// Best available display name: label first, then email, then account ID
     public var displayName: String {
-        if !label.isEmpty {
-            return label
-        }
-        return email ?? accountId
+        AccountDisplayName.displayName(label: label, email: email, fallbackId: accountId)
     }
 
     /// Whether this is the default (single) account
@@ -81,5 +78,80 @@ public struct ProviderAccount: Sendable, Equatable, Identifiable {
     /// The uppercased first character of the display name, for avatar circles.
     public var initialLetter: String {
         String(displayName.prefix(1)).uppercased()
+    }
+
+    // MARK: - Identity Bridge
+
+    /// Converts this account to its canonical `AccountIdentity`.
+    ///
+    /// Use this to transition consumers from `ProviderAccount.accountId`
+    /// to the stable `AccountIdentity` model incrementally.
+    public var identity: AccountIdentity {
+        AccountIdentity(
+            providerId: providerId,
+            email: email,
+            label: label
+        )
+    }
+
+    // MARK: - Membership
+
+    /// The membership status of this account within the provider.
+    ///
+    /// `nil` means the account was created by a single-account provider that
+    /// does not implement `MultiAccountProvider`. Only multi-account
+    /// coordinators set this field explicitly.
+    public var membershipStatus: MembershipStatus?
+
+    /// The connection state derived from membership status.
+    ///
+    /// Falls back to `.connected` when no explicit status is set (single-account providers).
+    public var connectionState: AccountConnectionState {
+        membershipStatus?.asConnectionState ?? .connected
+    }
+
+    /// The last usage snapshot captured for this account (persists after sign-out).
+    public var lastSnapshot: UsageSnapshot?
+
+    /// When the last snapshot was captured.
+    public var lastSnapshotTime: Date?
+}
+
+/// Membership status of an account within a provider.
+///
+/// Transitions:
+/// - `.pendingConfirmation` → `.signedIn` (user confirms the account)
+/// - `.signedIn` → `.signedOut` (user signs out)
+/// - `.signedOut` → `.signedIn` (user signs back in)
+///
+/// - Important: Deprecated in favor of `AccountConnectionState`.
+///   Use `connectionState` on `ProviderAccountState` for new code.
+@available(*, deprecated, message: "Use AccountConnectionState instead")
+public enum MembershipStatus: Sendable, Equatable {
+    /// Discovered during interactive refresh; awaiting user confirmation.
+    case pendingConfirmation
+    /// Actively signed in and participating in monitoring.
+    case signedIn
+    /// Previously signed in; retains last snapshot for historical reference.
+    case signedOut
+
+    /// Converts to the canonical `AccountConnectionState`.
+    public var asConnectionState: AccountConnectionState {
+        switch self {
+        case .pendingConfirmation: return .pendingConfirmation
+        case .signedIn: return .connected
+        case .signedOut: return .disconnected
+        }
+    }
+}
+
+extension AccountConnectionState {
+    /// Converts from the legacy `MembershipStatus`.
+    public init(_ membershipStatus: MembershipStatus) {
+        switch membershipStatus {
+        case .pendingConfirmation: self = .pendingConfirmation
+        case .signedIn: self = .connected
+        case .signedOut: self = .disconnected
+        }
     }
 }

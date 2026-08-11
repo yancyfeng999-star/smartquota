@@ -6,6 +6,35 @@ import Foundation
 @Suite("KimiUsageProbe Parsing Tests")
 struct KimiUsageProbeParsingTests {
 
+    @Test
+    func `coding response labels usage ratio as used`() throws {
+        let json = """
+        {
+            "usage": {
+                "limit": "100",
+                "used": "14",
+                "remaining": "86",
+                "resetTime": "2025-06-09T00:00:00Z"
+            },
+            "limits": [{
+                "window": { "duration": 300, "timeUnit": "TIME_UNIT_MINUTE" },
+                "detail": {
+                    "limit": "100",
+                    "used": "14",
+                    "remaining": "86",
+                    "resetTime": "2025-06-09T00:00:00Z"
+                }
+            }]
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try KimiUsageProbe.parseCodingResponse(json, providerId: "kimi")
+
+        #expect(snapshot.quota(for: .weekly)?.percentRemaining == 86)
+        #expect(snapshot.quota(for: .weekly)?.resetText == "used 14/100 weekly")
+        #expect(snapshot.quota(for: .session)?.resetText == "used 14/100 (5h)")
+    }
+
     // MARK: - Full Response Parsing
 
     @Test
@@ -43,14 +72,14 @@ struct KimiUsageProbeParsingTests {
         #expect(weekly != nil)
         #expect(weekly!.percentRemaining > 89.5)
         #expect(weekly!.percentRemaining < 89.6)
-        #expect(weekly!.resetText == "214/2048 requests")
+        #expect(weekly!.resetText == "used 214/2048 requests")
         #expect(weekly!.resetsAt != nil)
 
         // Session (rate limit) quota
         let session = snapshot.quota(for: .session)
         #expect(session != nil)
         #expect(session!.percentRemaining == 30.5)
-        #expect(session!.resetText == "139/200 requests (5h)")
+        #expect(session!.resetText == "used 139/200 requests (5h)")
         #expect(session!.resetsAt != nil)
     }
 
@@ -184,7 +213,7 @@ struct KimiUsageProbeParsingTests {
 
         let weekly = snapshot.quota(for: .weekly)!
         #expect(weekly.percentRemaining == 75.0)
-        #expect(weekly.resetText == "250/1000 requests")
+        #expect(weekly.resetText == "used 250/1000 requests")
     }
 
     @Test
@@ -206,7 +235,7 @@ struct KimiUsageProbeParsingTests {
 
         let weekly = snapshot.quota(for: .weekly)!
         #expect(weekly.percentRemaining == 70.0)
-        #expect(weekly.resetText == "300/1000 requests")
+        #expect(weekly.resetText == "used 300/1000 requests")
     }
 
     @Test
@@ -227,7 +256,7 @@ struct KimiUsageProbeParsingTests {
 
         let weekly = snapshot.quota(for: .weekly)!
         #expect(weekly.percentRemaining == 100.0)
-        #expect(weekly.resetText == "0/2048 requests")
+        #expect(weekly.resetText == "used 0/2048 requests")
     }
 
     // MARK: - Reset Time Parsing
@@ -390,6 +419,6 @@ struct KimiUsageProbeParsingTests {
 
         let session = snapshot.quota(for: .session)!
         #expect(session.percentRemaining == 60.0)
-        #expect(session.resetText == "80/200 requests (5h)")
+        #expect(session.resetText == "used 80/200 requests (5h)")
     }
 }

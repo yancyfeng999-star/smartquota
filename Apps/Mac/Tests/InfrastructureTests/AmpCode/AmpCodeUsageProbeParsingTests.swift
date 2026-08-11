@@ -238,4 +238,28 @@ struct AmpCodeUsageProbeParsingTests {
             try AmpCodeUsageProbe.parse(text)
         }
     }
+
+    // MARK: - Account Identity Tests
+
+    @Test
+    func `populates accountExternalId from email when present`() throws {
+        let snapshot = try AmpCodeUsageProbe.parse(Self.sampleOutput)
+
+        #expect(snapshot.accountEmail == "user@example.com")
+        #expect(snapshot.accountExternalId == "user@example.com")
+        #expect(snapshot.accountIdentitySource == .email)
+    }
+
+    @Test
+    func `omits identity source when no email in output`() throws {
+        let noEmailOutput = """
+        Amp Free: $17.59/$20 remaining (replenishes +$0.83/hour) - https://ampcode.com/settings#amp-free
+        """
+
+        let snapshot = try AmpCodeUsageProbe.parse(noEmailOutput)
+
+        #expect(snapshot.accountEmail == nil)
+        #expect(snapshot.accountExternalId == nil)
+        #expect(snapshot.accountIdentitySource == nil)
+    }
 }

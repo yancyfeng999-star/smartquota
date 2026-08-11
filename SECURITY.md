@@ -35,7 +35,9 @@
 | 路径 | 用途 |
 |------|------|
 | `~/.smartquota/` | 本应用配置、扩展、主题（**勿提交进 git**） |
+| `~/.smartquota/account-snapshots.json` | 账号额度快照缓存（权限 `0600`，原子写入） |
 | Keychain（本 App） | GitHub / MiniMax / 阿里云等密钥 |
+| Keychain（账号级） | `provider:<id>:account:<accountId>:api-key` 格式 |
 | `~/.claude/`、`~/.codex/`、`~/.grok/` 等 | **只读**读取各 CLI 已有登录态（查额度） |
 | 浏览器 Cookie（可选） | 阿里云 / 部分探测在用户开启时读取 |
 | `~/Library/Logs/SmartQuota/` | 本地日志，不上云 |
@@ -51,11 +53,60 @@
 
 ## 你需要知道的信任边界
 
-1. **内置探测代码**会启动本机已安装的 CLI（`claude`、`codex`、`kimi` 等）并解析输出 — 这是功能本身，不是后门。  
-2. **用户自己放入** `~/.smartquota/extensions/` 的脚本会被执行；只安装你信任的扩展。  
-3. **OAuth client_id**（Claude Code / Codex CLI 公开 client id）写死在代码里，用于刷新**用户自己的** token，不是维护者的密钥。  
-4. **AWS SDK** 字符串中可能出现 `169.254.169.254`（实例元数据）— 来自 AWS SDK，本机 Mac 桌面通常不会用到。  
+1. **内置探测代码**会启动本机已安装的 CLI（`claude`、`codex`、`kimi` 等）并解析输出 — 这是功能本身，不是后门。
+2. **用户自己放入** `~/.smartquota/extensions/` 的脚本会被执行；只安装你信任的扩展。
+3. **OAuth client_id**（Claude Code / Codex CLI 公开 client id）写死在代码里，用于刷新**用户自己的** token，不是维护者的密钥。
+4. **AWS SDK** 字符串中可能出现 `169.254.169.254`（实例元数据）— 来自 AWS SDK，本机 Mac 桌面通常不会用到。
 5. 第三方依赖（AWS SDK、SwiftTerm、Mockable、MenuBarExtraAccess、SweetCookieKit）为开源库；升级时请核对其发布渠道。
+
+---
+
+## 多账号隐私边界
+
+### 存储隔离
+
+| 数据类型 | 存储位置 | 是否上传 | 删除时清理 |
+|----------|----------|----------|------------|
+| 邮箱 | `settings.json` | 否 | 删除账号时清理 |
+| 额度快照 | `account-snapshots.json` | 否 | 删除账号时清理 |
+| 账号配置（套餐、续费日） | `settings.json` | 否 | 删除账号时清理 |
+| API Key / Token | Keychain（账号级） | 否 | 删除账号时清理 |
+| OAuth 凭证 | 各工具自己的文件 | 否 | 智额不复制，无需清理 |
+
+### 不等于托管多份 OAuth
+
+智额**不**复制或托管 OAuth 登录凭证：
+
+- OAuth、CLI、浏览器登录型会员只读取本机当前登录态
+- 不创建 OAuth 文件副本
+- 切换账号需在外部工具中操作
+- 智额只记录检测到的邮箱或账号 ID
+
+### 只有当前本机账号会刷新
+
+- 后台刷新只更新当前本机登录的账号
+- 其他账号保留最后一次成功快照
+- 快照包含更新时间，用户可判断是否过期
+
+### 历史快照不参与告警
+
+- 未登录账号的快照仅作历史参考
+- 过期快照不触发额度告警
+- 只有 `signedIn` + `fresh` 的快照参与告警计算
+
+### 账号删除流程
+
+删除账号时，智额会清理：
+
+1. `settings.json` 中的账号配置
+2. `account-snapshots.json` 中的快照缓存
+3. Keychain 中的账号级密钥（如有）
+
+**不会**清理：
+
+- 外部工具的登录态
+- 其他账号的数据
+- 应用全局设置
 
 ## 如何自查
 

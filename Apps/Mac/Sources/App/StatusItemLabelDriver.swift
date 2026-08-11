@@ -164,21 +164,25 @@ final class StatusItemLabelDriver {
     /// Bridges a momentarily-missing menu-bar label. The configured quota window
     /// can briefly vanish from a snapshot (cold start before the first success, a
     /// parse gap), which would otherwise collapse the menu bar to a lone icon. As
-    /// long as the menu-bar provider is enabled and still holds a snapshot, keep
-    /// the last value we showed instead of blanking the number. Returns nil when
-    /// we have nothing to fall back to, so the normal "no data yet" icon shows.
+    /// long as the menu-bar provider is enabled and still holds a connected account
+    /// snapshot, keep the last value we showed instead of blanking the number.
+    /// Returns nil when we have nothing to fall back to, so the normal "no data
+    /// yet" icon shows.
     private func lastKnownLabel(whenFreshIsMissing freshLabel: MenuBarLabel?) -> MenuBarLabel? {
         guard freshLabel == nil, let previous = lastContent?.label else { return nil }
-        let providerHasSnapshot = monitor.enabledProviders.contains {
-            $0.id == settings.menuBarPercentageProviderId && $0.snapshot != nil
-        }
+        let providerHasSnapshot = monitor.connectedAccountSnapshot(
+            providerId: settings.menuBarPercentageProviderId
+        ) != nil
         return providerHasSnapshot ? previous : nil
     }
 
     /// Status of the selected provider, considering the burn-rate setting.
     /// Mirrors the dropdown's status logic for the icon-only fallback.
+    /// Uses connected account snapshot to avoid stale data from disconnected accounts.
     private var effectiveSelectedProviderStatus: QuotaStatus {
-        guard let snapshot = monitor.selectedProvider?.snapshot else { return .healthy }
+        guard let snapshot = monitor.connectedAccountSnapshot(
+            providerId: monitor.selectedProviderId
+        ) else { return .healthy }
         if settings.burnRateWarningEnabled {
             return snapshot.paceAwareOverallStatus(burnRateThreshold: settings.burnRateThreshold)
         }

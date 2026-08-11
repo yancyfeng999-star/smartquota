@@ -273,12 +273,16 @@ public struct OmpUsageProbe: UsageProbe {
             throw ProbeError.noData
         }
 
+        let email = Self.singleDistinctEmail(in: payload)
+
         return UsageSnapshot(
             providerId: providerId,
             quotas: quotas,
             capturedAt: Date(),
-            accountEmail: Self.singleDistinctEmail(in: payload),
-            extensionMetrics: accountRows.isEmpty ? nil : accountRows
+            accountEmail: email,
+            extensionMetrics: accountRows.isEmpty ? nil : accountRows,
+            accountExternalId: email,
+            accountIdentitySource: email != nil ? .email : nil
         )
     }
 

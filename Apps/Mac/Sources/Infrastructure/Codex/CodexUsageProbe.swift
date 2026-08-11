@@ -42,9 +42,11 @@ public struct CodexRateLimitWindow: Sendable, Equatable {
 /// Infrastructure adapter that probes the Codex CLI to fetch usage quotas.
 public struct CodexUsageProbe: UsageProbe {
     private let client: CodexRPCClient
+    private let credentialLoader: CodexCredentialLoader
 
-    public init(client: CodexRPCClient? = nil) {
+    public init(client: CodexRPCClient? = nil, credentialLoader: CodexCredentialLoader = CodexCredentialLoader()) {
         self.client = client ?? DefaultCodexRPCClient()
+        self.credentialLoader = credentialLoader
     }
 
     public func isAvailable() async -> Bool {
@@ -56,7 +58,8 @@ public struct CodexUsageProbe: UsageProbe {
         defer { client.shutdown() }
 
         let limits = try await client.fetchRateLimits()
-        let snapshot = try Self.mapRateLimitsToSnapshot(limits)
+        let credentials = credentialLoader.loadCredentials()
+        let snapshot = try Self.mapRateLimitsToSnapshot(limits, credentials: credentials, credentialLoader: credentialLoader)
 
         AppLog.probes.info("Codex probe success: \(snapshot.quotas.count) quotas found")
         for quota in snapshot.quotas {
@@ -66,7 +69,11 @@ public struct CodexUsageProbe: UsageProbe {
     }
 
     /// Maps RPC rate limits response to a UsageSnapshot (internal for testing).
-    internal static func mapRateLimitsToSnapshot(_ limits: CodexRateLimitsResponse) throws -> UsageSnapshot {
+    internal static func mapRateLimitsToSnapshot(
+        _ limits: CodexRateLimitsResponse,
+        credentials: CodexCredentialResult? = nil,
+        credentialLoader: CodexCredentialLoader? = nil
+    ) throws -> UsageSnapshot {
         var quotas: [UsageQuota] = []
 
         if let primary = limits.primary {
@@ -92,10 +99,14 @@ public struct CodexUsageProbe: UsageProbe {
             throw ProbeError.parseFailed("No rate limits found")
         }
 
+        let identity = credentials.flatMap { credentialLoader?.resolveAccountIdentity($0) }
+
         return UsageSnapshot(
             providerId: "codex",
             quotas: quotas,
-            capturedAt: Date()
+            capturedAt: Date(),
+            accountExternalId: identity?.externalId,
+            accountIdentitySource: identity?.source
         )
     }
 

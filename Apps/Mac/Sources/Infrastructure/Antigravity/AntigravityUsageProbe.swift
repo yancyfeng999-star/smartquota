@@ -337,7 +337,9 @@ public struct AntigravityUsageProbe: UsageProbe {
             quotas: quotas,
             capturedAt: Date(),
             accountEmail: response.userStatus?.email,
-            accountTier: accountTier
+            accountTier: accountTier,
+            accountExternalId: response.userStatus?.email,
+            accountIdentitySource: response.userStatus?.email != nil ? .email : nil
         )
     }
 

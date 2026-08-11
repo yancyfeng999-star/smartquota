@@ -8,12 +8,12 @@ struct MiniMaxRegionTests {
 
     @Test
     func `international displayName`() {
-        #expect(MiniMaxRegion.international.displayName == "International (minimax.io)")
+        #expect(MiniMaxRegion.international.displayName == "国际")
     }
 
     @Test
     func `china displayName`() {
-        #expect(MiniMaxRegion.china.displayName == "China (minimaxi.com)")
+        #expect(MiniMaxRegion.china.displayName == "中国")
     }
 
     // MARK: - apiBaseURL

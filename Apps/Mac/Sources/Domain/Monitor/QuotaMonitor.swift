@@ -35,6 +35,10 @@ public final class QuotaMonitor {
     /// tests; the app injects a real provider via the convenience init.
     private let powerStateProvider: (any PowerStateProvider)?
 
+    /// Per-provider account coordinators for multi-account support.
+    /// Providers without a coordinator are treated as single-account.
+    private var accountCoordinators: [String: ProviderAccountCoordinator] = [:]
+
     /// Previous status for change detection
     private var previousStatuses: [String: QuotaStatus] = [:]
 
@@ -63,6 +67,57 @@ public final class QuotaMonitor {
         self.clock = clock
         self.powerStateProvider = powerStateProvider
         selectFirstEnabledIfNeeded()
+    }
+
+    // MARK: - Account Coordinator
+
+    /// Registers a per-provider account coordinator.
+    /// When registered, refreshes route snapshots through the coordinator
+    /// and disconnected accounts' snapshots are excluded from overall status.
+    public func registerCoordinator(_ coordinator: ProviderAccountCoordinator) {
+        accountCoordinators[coordinator.providerId] = coordinator
+    }
+
+    /// Returns the snapshot for the active connected account, if a coordinator
+    /// is registered and the active account is in an active state (connected or
+    /// pending confirmation). Falls back to the provider's own snapshot when no
+    /// coordinator exists. Returns `nil` when the active account is disconnected
+    /// (stale snapshot excluded from menu bar).
+    public func connectedAccountSnapshot(providerId: String) -> UsageSnapshot? {
+        if let coordinator = accountCoordinators[providerId] {
+            if let activeAccount = coordinator.activeAccount,
+               activeAccount.connectionState.isActive {
+                return activeAccount.lastSnapshot ?? providers.provider(id: providerId)?.snapshot
+            }
+            return nil
+        }
+        return providers.provider(id: providerId)?.snapshot
+    }
+
+    /// Returns the account coordinator for a provider, if registered.
+    /// UI layers use this to access pending confirmations and account state.
+    public func accountCoordinator(for providerId: String) -> ProviderAccountCoordinator? {
+        accountCoordinators[providerId]
+    }
+
+    /// Returns accounts awaiting user confirmation for a provider.
+    public func pendingConfirmations(for providerId: String) -> [ProviderAccountState] {
+        accountCoordinators[providerId]?.pendingConfirmations ?? []
+    }
+
+    /// Confirms a pending account, promoting it to connected.
+    public func confirmAccount(_ accountId: String, forProvider providerId: String) {
+        accountCoordinators[providerId]?.process(.confirm(accountId: accountId))
+    }
+
+    /// Ignores a pending account, transitioning it to disconnected.
+    public func ignoreAccount(_ accountId: String, forProvider providerId: String) {
+        accountCoordinators[providerId]?.process(.ignore(accountId: accountId))
+    }
+
+    /// Deletes an account from a provider.
+    public func deleteAccount(_ accountId: String, forProvider providerId: String) {
+        accountCoordinators[providerId]?.process(.delete(accountId: accountId))
     }
 
     // MARK: - Monitoring Operations
@@ -95,12 +150,48 @@ public final class QuotaMonitor {
             return
         }
 
+        let result: Result<UsageSnapshot, Error>
         do {
             let snapshot = try await provider.refresh(kind)
-            await handleSnapshotUpdate(provider: provider, snapshot: snapshot)
+            result = .success(snapshot)
         } catch {
-            // Provider stores error in lastError - no need for external observer
+            result = .failure(error)
         }
+
+        // Route through coordinator when registered
+        if let coordinator = accountCoordinators[provider.id] {
+            switch result {
+            case let .success(snapshot):
+                coordinator.process(.ingest(snapshot: snapshot, kind: kind))
+            case let .failure(error):
+                if isAuthError(error) {
+                    // Mark active account as disconnected
+                    if let activeId = coordinator.activeAccountId {
+                        coordinator.process(.signOut(accountId: activeId))
+                    }
+                    // Clear stale status so reconnection starts fresh
+                    previousStatuses.removeValue(forKey: provider.id)
+                }
+            }
+        }
+
+        // Handle snapshot update and alerts (only on success)
+        if case let .success(snapshot) = result {
+            await handleSnapshotUpdate(provider: provider, snapshot: snapshot)
+        }
+    }
+
+    /// Classifies probe errors as authentication failures.
+    private func isAuthError(_ error: Error) -> Bool {
+        if let probeError = error as? ProbeError {
+            switch probeError {
+            case .authenticationRequired, .sessionExpired:
+                return true
+            default:
+                return false
+            }
+        }
+        return false
     }
 
     /// Handles snapshot update and alerts user if status changed
@@ -120,7 +211,23 @@ public final class QuotaMonitor {
         }
 
         // Per-window thresholds + near-reset underuse nudges
-        await alerter?.evaluateSnapshotAlerts(providerId: provider.id, snapshot: snapshot)
+        let accountId = deriveAccountId(providerId: provider.id, snapshot: snapshot)
+        await alerter?.evaluateSnapshotAlerts(
+            providerId: provider.id,
+            accountId: accountId,
+            snapshot: snapshot
+        )
+    }
+
+    /// Derives the account ID for alert key generation.
+    /// Uses the coordinator's active account ID when available,
+    /// otherwise falls back to the provider ID.
+    private func deriveAccountId(providerId: String, snapshot: UsageSnapshot) -> String {
+        if let coordinator = accountCoordinators[providerId],
+           let activeId = coordinator.activeAccountId {
+            return activeId
+        }
+        return providerId
     }
 
     /// Refreshes a single provider by its ID.
@@ -340,9 +447,19 @@ public final class QuotaMonitor {
         }
     }
 
-    /// Returns the overall status across enabled providers (worst status wins)
+    /// Returns the overall status across enabled providers (worst status wins).
+    /// Excludes providers whose active account is disconnected (stale snapshot).
     public var overallStatus: QuotaStatus {
         providers.enabled
+            .filter { provider in
+                guard let coordinator = accountCoordinators[provider.id] else {
+                    return true // No coordinator: always include
+                }
+                guard let active = coordinator.activeAccount else {
+                    return true // No active account: include provider's own snapshot
+                }
+                return active.connectionState.isActive
+            }
             .compactMap(\.snapshot?.overallStatus)
             .max() ?? .healthy
     }

@@ -377,7 +377,9 @@ public final class ClaudeUsageProbe: UsageProbe, @unchecked Sendable {
             accountOrganization: accountInfo?.organization,
             loginMethod: accountInfo?.loginMethod,
             accountTier: accountTier,
-            costUsage: extraUsage
+            costUsage: extraUsage,
+            accountExternalId: accountInfo?.email,
+            accountIdentitySource: accountInfo?.email != nil ? .email : nil
         )
     }
 

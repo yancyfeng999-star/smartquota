@@ -15,9 +15,13 @@ public protocol QuotaAlerter: Sendable {
 
     /// Called after each successful refresh so implementations can fire
     /// threshold / near-reset alerts (with their own debouncing).
-    func evaluateSnapshotAlerts(providerId: String, snapshot: UsageSnapshot) async
+    /// - Parameters:
+    ///   - providerId: The provider that was refreshed
+    ///   - accountId: The account identifier for alert key (`providerId.accountId:kind`)
+    ///   - snapshot: The usage snapshot from the refresh
+    func evaluateSnapshotAlerts(providerId: String, accountId: String, snapshot: UsageSnapshot) async
 }
 
 public extension QuotaAlerter {
-    func evaluateSnapshotAlerts(providerId: String, snapshot: UsageSnapshot) async {}
+    func evaluateSnapshotAlerts(providerId: String, accountId: String, snapshot: UsageSnapshot) async {}
 }

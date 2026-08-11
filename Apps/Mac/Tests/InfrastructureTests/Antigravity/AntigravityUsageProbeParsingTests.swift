@@ -298,4 +298,43 @@ struct AntigravityUsageProbeParsingTests {
             try AntigravityUsageProbe.parseUserStatusResponse(data, providerId: "antigravity")
         }
     }
+
+    // MARK: - Account Identity Tests
+
+    @Test
+    func `populates accountExternalId from email when present`() throws {
+        let data = Data(Self.sampleUserStatusResponse.utf8)
+
+        let snapshot = try AntigravityUsageProbe.parseUserStatusResponse(data, providerId: "antigravity")
+
+        #expect(snapshot.accountEmail == "user@example.com")
+        #expect(snapshot.accountExternalId == "user@example.com")
+        #expect(snapshot.accountIdentitySource == .email)
+    }
+
+    @Test
+    func `omits identity source when no email in response`() throws {
+        let noEmailResponse = """
+        {
+          "userStatus": {
+            "cascadeModelConfigData": {
+              "clientModelConfigs": [
+                {
+                  "label": "Claude Sonnet",
+                  "modelOrAlias": { "model": "claude-sonnet-4" },
+                  "quotaInfo": { "remainingFraction": 0.75 }
+                }
+              ]
+            }
+          }
+        }
+        """
+        let data = Data(noEmailResponse.utf8)
+
+        let snapshot = try AntigravityUsageProbe.parseUserStatusResponse(data, providerId: "antigravity")
+
+        #expect(snapshot.accountEmail == nil)
+        #expect(snapshot.accountExternalId == nil)
+        #expect(snapshot.accountIdentitySource == nil)
+    }
 }

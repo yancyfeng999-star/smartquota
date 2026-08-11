@@ -201,6 +201,10 @@ mod tests {
             enabled: true,
             source_mode: "auto".into(),
             is_core: true,
+            account_id: None,
+            account_email: None,
+            account_label: None,
+            account_state: None,
         }
     }
 

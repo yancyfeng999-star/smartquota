@@ -76,7 +76,7 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             }
         }
 
-        return try parseUsageResponse(data: data, httpResponse: httpResponse)
+        return try parseUsageResponse(data: data, httpResponse: httpResponse, credentials: credentials)
     }
 
     // MARK: - Token Refresh
@@ -146,6 +146,7 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             updatedCredentials.refreshToken = newRefreshToken
         }
         if let idToken = responseDict["id_token"] as? String {
+            updatedCredentials.idToken = idToken
             var fullData = updatedCredentials.fullData
             if var tokens = fullData["tokens"] as? [String: Any] {
                 tokens["id_token"] = idToken
@@ -207,7 +208,7 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
 
     // MARK: - Response Parsing
 
-    private func parseUsageResponse(data: Data, httpResponse: HTTPURLResponse) throws -> UsageSnapshot {
+    private func parseUsageResponse(data: Data, httpResponse: HTTPURLResponse, credentials: CodexCredentialResult) throws -> UsageSnapshot {
         // Log raw response for debugging
         if let rawString = String(data: data, encoding: .utf8) {
             AppLog.probes.debug("Codex API: Raw response: \(rawString.prefix(500))")
@@ -312,6 +313,8 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
 
         AppLog.probes.info("Codex API: Parsed \(quotas.count) quotas, tier=\(accountTier?.badgeText ?? "unknown")")
 
+        let identity = credentialLoader.resolveAccountIdentity(credentials)
+
         return UsageSnapshot(
             providerId: "codex",
             quotas: quotas,
@@ -320,7 +323,9 @@ public struct CodexAPIUsageProbe: UsageProbe, @unchecked Sendable {
             accountOrganization: nil,
             loginMethod: nil,
             accountTier: accountTier,
-            costUsage: costUsage
+            costUsage: costUsage,
+            accountExternalId: identity?.externalId,
+            accountIdentitySource: identity?.source
         )
     }
 

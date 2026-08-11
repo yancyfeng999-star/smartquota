@@ -254,7 +254,9 @@ public struct CopilotUsageProbe: UsageProbe {
             providerId: "copilot",
             quotas: [quota],
             capturedAt: Date(),
-            accountEmail: username
+            accountEmail: username,
+            accountExternalId: username,
+            accountIdentitySource: .userDefined
         )
     }
 }

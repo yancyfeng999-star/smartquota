@@ -68,16 +68,17 @@ struct ProviderSelectionSpec {
                 clock: TestClock()
             )
 
-            #expect(monitor.selectedProviderId == "claude")
-
-            // When — user clicks Codex pill
-            monitor.selectProvider(id: "codex")
-            await monitor.refresh(providerId: "codex")
-
-            // Then — Codex is selected and its quota data is refreshed
+            // Default is now "codex"
             #expect(monitor.selectedProviderId == "codex")
-            #expect(codex.snapshot != nil)
-            #expect(codex.snapshot?.quotas.first?.percentRemaining == 40)
+
+            // When — user clicks Claude pill
+            monitor.selectProvider(id: "claude")
+            await monitor.refresh(providerId: "claude")
+
+            // Then — Claude is selected and its quota data is refreshed
+            #expect(monitor.selectedProviderId == "claude")
+            #expect(claude.snapshot != nil)
+            #expect(claude.snapshot?.quotas.first?.percentRemaining == 70)
         }
     }
 
@@ -153,7 +154,7 @@ struct ProviderSelectionSpec {
 
         @Test
         func `disabling Claude auto-switches selection to Codex`() {
-            // Given — Claude is selected
+            // Given — Codex is selected by default
             let settings = Self.makeSettings()
             let claude = ClaudeProvider(probe: MockUsageProbe(), settingsRepository: settings)
             let codex = CodexProvider(probe: MockUsageProbe(), settingsRepository: settings)
@@ -161,6 +162,8 @@ struct ProviderSelectionSpec {
                 providers: AIProviders(providers: [claude, codex]),
                 clock: TestClock()
             )
+            // Switch to claude first to test the disable behavior
+            monitor.selectProvider(id: "claude")
             #expect(monitor.selectedProviderId == "claude")
 
             // When — user disables Claude

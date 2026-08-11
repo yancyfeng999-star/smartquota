@@ -4,7 +4,7 @@ import Foundation
 /// Maps JSON output from probe scripts into existing domain models.
 public enum SectionData: Sendable, Equatable {
     /// Quota grid data — reuses existing UsageQuota model
-    case quotas([UsageQuota])
+    case quotas([UsageQuota], accountEmail: String? = nil, externalAccountId: String? = nil)
     /// Cost usage data — reuses existing CostUsage model
     case cost(CostUsage)
     /// Daily usage comparison — reuses existing DailyUsageReport model
@@ -13,6 +13,18 @@ public enum SectionData: Sendable, Equatable {
     case metrics([ExtensionMetric])
     /// Status banner — simple text + level
     case status(StatusInfo)
+
+    /// Account email from probe output (if provided by extension)
+    public var accountEmail: String? {
+        if case .quotas(_, let email, _) = self { return email }
+        return nil
+    }
+
+    /// External account ID from probe output (if provided by extension)
+    public var externalAccountId: String? {
+        if case .quotas(_, _, let externalId) = self { return externalId }
+        return nil
+    }
 
     /// Decodes probe script JSON output into the appropriate SectionData case.
     public static func decode(from data: Data, type: SectionType, providerId: String) throws -> SectionData {
@@ -26,7 +38,7 @@ public enum SectionData: Sendable, Equatable {
                 throw SectionDataError.missingKey("quotas")
             }
             let quotas = rawQuotas.map { $0.toUsageQuota(providerId: providerId) }
-            return .quotas(quotas)
+            return .quotas(quotas, accountEmail: raw.accountEmail, externalAccountId: raw.externalAccountId)
 
         case .costUsage:
             let raw = try decoder.decode(RawCostOutput.self, from: data)
@@ -79,6 +91,8 @@ public enum SectionDataError: Error, LocalizedError {
 
 private struct RawQuotaOutput: Codable {
     let quotas: [RawQuota]?
+    let accountEmail: String?
+    let externalAccountId: String?
 }
 
 private struct RawQuota: Codable {

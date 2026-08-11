@@ -9,6 +9,7 @@ import Domain
 /// Credentials (tokens, API keys) use UserDefaults for now (Keychain migration later).
 public final class JSONSettingsRepository:
     AppSettingsRepository,
+    MultiAccountSettingsRepository,
     ZaiSettingsRepository,
     CopilotSettingsRepository,
     BedrockSettingsRepository,
@@ -685,8 +686,127 @@ public final class JSONSettingsRepository:
         getMinimaxApiKey() != nil
     }
 
+    // MARK: - MultiAccountSettingsRepository
+
+    public func accounts(forProvider id: String) -> [ProviderAccountConfig] {
+        // Read as JSON array data (stored as base64 string)
+        guard let base64: String = store.read(key: "providers.\(id).accounts"),
+              let data = Data(base64Encoded: base64),
+              let configs = try? JSONDecoder().decode([ProviderAccountConfig].self, from: data) else {
+            return []
+        }
+        return configs
+    }
+
+    public func addAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accounts(forProvider: id)
+        existing.append(config)
+        saveAccounts(existing, forProvider: id)
+    }
+
+    public func removeAccount(accountId: String, forProvider id: String) {
+        var existing = accounts(forProvider: id)
+        existing.removeAll { $0.accountId == accountId }
+        saveAccounts(existing, forProvider: id)
+    }
+
+    public func updateAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accounts(forProvider: id)
+        guard let index = existing.firstIndex(where: { $0.accountId == config.accountId }) else { return }
+        existing[index] = config
+        saveAccounts(existing, forProvider: id)
+    }
+
+    public func activeAccountId(forProvider id: String) -> String? {
+        store.read(key: "providers.\(id).selectedAccountId")
+    }
+
+    public func setActiveAccountId(_ accountId: String?, forProvider id: String) {
+        store.write(value: accountId, key: "providers.\(id).selectedAccountId")
+    }
+
+    private func saveAccounts(_ accounts: [ProviderAccountConfig], forProvider id: String) {
+        if let data = try? JSONEncoder().encode(accounts) {
+            let base64 = data.base64EncodedString()
+            store.write(value: base64, key: "providers.\(id).accounts")
+        }
+    }
+
     /// Returns stored enabled flag if the user has ever set it; nil if never configured.
     public func explicitEnabled(forProvider id: String) -> Bool? {
         store.read(key: "providers.\(id).isEnabled")
+    }
+
+    // MARK: - Account-Level Membership Settings
+
+    /// Account-level plan label for a specific account within a provider.
+    /// Key pattern: `providers.{providerId}.{accountId}.planLabel`
+    public func accountPlanLabel(accountId: String, forProvider id: String) -> String {
+        store.read(key: "providers.\(id).\(accountId).planLabel") ?? ""
+    }
+
+    /// Sets account-level plan label.
+    public func setAccountPlanLabel(_ label: String, accountId: String, forProvider id: String) {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            store.write(value: nil, key: "providers.\(id).\(accountId).planLabel")
+        } else {
+            store.write(value: trimmed, key: "providers.\(id).\(accountId).planLabel")
+        }
+    }
+
+    /// Account-level renewal date for a specific account within a provider.
+    /// Key pattern: `providers.{providerId}.{accountId}.renewalDate`
+    public func accountRenewalDate(accountId: String, forProvider id: String) -> String {
+        store.read(key: "providers.\(id).\(accountId).renewalDate") ?? ""
+    }
+
+    /// Sets account-level renewal date.
+    public func setAccountRenewalDate(_ date: String, accountId: String, forProvider id: String) {
+        let trimmed = date.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            store.write(value: nil, key: "providers.\(id).\(accountId).renewalDate")
+        } else {
+            store.write(value: trimmed, key: "providers.\(id).\(accountId).renewalDate")
+        }
+    }
+
+    // MARK: - Provider Membership Migration
+
+    /// Migrates provider-level planLabel and renewalDate to account-level settings.
+    ///
+    /// - Copies old provider-level values to the first account (if accounts exist)
+    /// - Does NOT overwrite existing account-level values (idempotent)
+    /// - Does NOT create accounts if none exist
+    /// - Keeps old provider-level keys for backward compatibility
+    public func migrateProviderMembershipToAccounts(forProvider id: String) {
+        // Read old provider-level values
+        let oldPlanLabel = planLabel(forProvider: id)
+        let oldRenewalDate = renewalDate(forProvider: id)
+
+        // Only migrate if there are old values to migrate
+        guard !oldPlanLabel.isEmpty || !oldRenewalDate.isEmpty else { return }
+
+        // Get existing accounts
+        let existingAccounts = accounts(forProvider: id)
+
+        // Don't create accounts if none exist
+        guard let firstAccount = existingAccounts.first else { return }
+
+        // Migrate planLabel if account doesn't have one
+        if !oldPlanLabel.isEmpty {
+            let currentAccountPlanLabel = accountPlanLabel(accountId: firstAccount.accountId, forProvider: id)
+            if currentAccountPlanLabel.isEmpty {
+                setAccountPlanLabel(oldPlanLabel, accountId: firstAccount.accountId, forProvider: id)
+            }
+        }
+
+        // Migrate renewalDate if account doesn't have one
+        if !oldRenewalDate.isEmpty {
+            let currentAccountRenewalDate = accountRenewalDate(accountId: firstAccount.accountId, forProvider: id)
+            if currentAccountRenewalDate.isEmpty {
+                setAccountRenewalDate(oldRenewalDate, accountId: firstAccount.accountId, forProvider: id)
+            }
+        }
     }
 }

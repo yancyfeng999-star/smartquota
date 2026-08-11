@@ -288,17 +288,38 @@ struct MenuContentView: View {
             if membershipProviders.isEmpty {
                 emptyMembershipsCard
             } else {
-                ReorderableMembershipList(
-                    providers: membershipProviders,
-                    selectedId: selectedProviderId,
-                    onSelect: { id in
-                        selectedProviderId = id
-                        Task { await refresh(providerId: id) }
-                    },
-                    onReorder: { newOrder in
-                        settings.membershipOrder = newOrder
+                VStack(spacing: 8) {
+                    // Pending account banners for multi-account providers
+                    ForEach(membershipProviders, id: \.id) { provider in
+                        if let multiProvider = provider as? (any MultiAccountProvider) {
+                            let pending = monitor.pendingConfirmations(for: multiProvider.id)
+                            if !pending.isEmpty {
+                                PendingAccountBanner(
+                                    providerId: multiProvider.id,
+                                    pendingAccounts: pending,
+                                    onConfirm: { accountId in
+                                        monitor.confirmAccount(accountId, forProvider: multiProvider.id)
+                                    },
+                                    onIgnore: { accountId in
+                                        monitor.ignoreAccount(accountId, forProvider: multiProvider.id)
+                                    }
+                                )
+                            }
+                        }
                     }
-                )
+
+                    ReorderableMembershipList(
+                        providers: membershipProviders,
+                        selectedId: selectedProviderId,
+                        onSelect: { id in
+                            selectedProviderId = id
+                            Task { await refresh(providerId: id) }
+                        },
+                        onReorder: { newOrder in
+                            settings.membershipOrder = newOrder
+                        }
+                    )
+                }
             }
         }
     }
@@ -591,6 +612,15 @@ struct MenuContentView: View {
             }
         } else if let provider = selectedProvider, let snapshot = provider.snapshot {
             VStack(spacing: 12) {
+                // Account picker for multi-account providers
+                if let multiProvider = provider as? (any MultiAccountProvider),
+                   multiProvider.accounts.count > 1 {
+                    AccountPickerView(provider: multiProvider) { accountId in
+                        multiProvider.switchAccount(to: accountId)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
                 if let displayName = snapshot.accountEmail ?? snapshot.accountOrganization {
                     accountCard(displayName: displayName, snapshot: snapshot)
                 }
@@ -640,9 +670,25 @@ struct MenuContentView: View {
         HStack(spacing: 8) {
             ProviderIconView(providerId: provider.id, size: 20, showGlow: false)
 
-            Text(provider.name)
-                .font(.system(size: 13, weight: .semibold, design: theme.fontDesign))
-                .foregroundStyle(theme.textPrimary)
+            HStack(spacing: 6) {
+                Text(provider.name)
+                    .font(.system(size: 13, weight: .semibold, design: theme.fontDesign))
+                    .foregroundStyle(theme.textPrimary)
+
+                // Account count badge for multi-account providers
+                if let multiProvider = provider as? (any MultiAccountProvider),
+                   multiProvider.accounts.count > 1 {
+                    Text(L10n.shared.tf("account.count_fmt", "\(multiProvider.accounts.count)"))
+                        .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                        .foregroundStyle(theme.textTertiary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(theme.glassBackground)
+                        )
+                }
+            }
 
             Spacer()
 

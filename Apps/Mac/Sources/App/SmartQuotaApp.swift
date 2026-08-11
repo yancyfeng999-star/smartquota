@@ -95,6 +95,17 @@ struct SmartQuotaApp: App {
         self.monitor = monitor
         AppLog.monitor.info("QuotaMonitor initialized")
 
+        // Register per-provider account coordinators for multi-account support.
+        // Each coordinator tracks account state and routes refresh snapshots.
+        for provider in repository.all {
+            let coordinator = ProviderAccountCoordinator(
+                providerId: provider.id,
+                settingsRepository: settingsRepository
+            )
+            monitor.registerCoordinator(coordinator)
+        }
+        AppLog.monitor.info("Account coordinators registered for \(repository.all.count) providers")
+
         let sessionMonitor = SessionMonitor()
         self.sessionMonitor = sessionMonitor
 

@@ -107,21 +107,29 @@ public final class ExtensionProvider: AIProvider {
         var costUsage: CostUsage?
         var dailyReport: DailyUsageReport?
         var metrics: [ExtensionMetric] = []
+        var accountEmail: String?
+        var externalAccountId: String?
 
         for s in snapshots {
             allQuotas.append(contentsOf: s.quotas)
             if let cost = s.costUsage { costUsage = cost }
             if let daily = s.dailyUsageReport { dailyReport = daily }
             if let m = s.extensionMetrics { metrics.append(contentsOf: m) }
+            // Use first available account identity
+            if accountEmail == nil, let email = s.accountEmail { accountEmail = email }
+            if externalAccountId == nil, let extId = s.accountExternalId { externalAccountId = extId }
         }
 
         return UsageSnapshot(
             providerId: id,
             quotas: allQuotas,
             capturedAt: Date(),
+            accountEmail: accountEmail,
             costUsage: costUsage,
             dailyUsageReport: dailyReport,
-            extensionMetrics: metrics.isEmpty ? nil : metrics
+            extensionMetrics: metrics.isEmpty ? nil : metrics,
+            accountExternalId: externalAccountId ?? accountEmail,
+            accountIdentitySource: accountEmail != nil ? .email : (externalAccountId != nil ? .external : nil)
         )
     }
 }

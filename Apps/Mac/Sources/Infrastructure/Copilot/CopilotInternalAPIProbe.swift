@@ -141,7 +141,9 @@ public struct CopilotInternalAPIProbe: UsageProbe {
                 providerId: "copilot",
                 quotas: [quota],
                 capturedAt: Date(),
-                accountEmail: plan
+                accountEmail: plan,
+                accountExternalId: plan,
+                accountIdentitySource: .userDefined
             )
         }
 
@@ -159,7 +161,9 @@ public struct CopilotInternalAPIProbe: UsageProbe {
                 providerId: "copilot",
                 quotas: [quota],
                 capturedAt: Date(),
-                accountEmail: plan
+                accountEmail: plan,
+                accountExternalId: plan,
+                accountIdentitySource: .userDefined
             )
         }
 
@@ -186,7 +190,9 @@ public struct CopilotInternalAPIProbe: UsageProbe {
             providerId: "copilot",
             quotas: [quota],
             capturedAt: Date(),
-            accountEmail: plan
+            accountEmail: plan,
+            accountExternalId: plan,
+            accountIdentitySource: .userDefined
         )
     }
 }

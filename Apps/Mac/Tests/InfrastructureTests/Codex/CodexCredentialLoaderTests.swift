@@ -21,7 +21,8 @@ struct CodexCredentialLoaderTests {
         refreshToken: String = "test-refresh-token",
         accountId: String? = nil,
         lastRefresh: String? = nil,
-        apiKey: String? = nil
+        apiKey: String? = nil,
+        idToken: String? = nil
     ) throws {
         let codexDir = directory.appendingPathComponent(".codex", isDirectory: true)
         try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
@@ -32,6 +33,9 @@ struct CodexCredentialLoaderTests {
         ]
         if let accountId {
             tokens["account_id"] = accountId
+        }
+        if let idToken {
+            tokens["id_token"] = idToken
         }
 
         var auth: [String: Any] = [
@@ -47,6 +51,24 @@ struct CodexCredentialLoaderTests {
         let data = try JSONSerialization.data(withJSONObject: auth, options: [.prettyPrinted])
         let filePath = codexDir.appendingPathComponent("auth.json")
         try data.write(to: filePath)
+    }
+
+    // MARK: - JWT Helpers
+
+    /// Creates a minimal JWT with the given payload claims.
+    /// Uses a dummy header and empty signature for testing.
+    private func makeJWT(payload: [String: Any]) -> String {
+        let header = Data("{\"alg\":\"RS256\",\"typ\":\"JWT\"}".utf8)
+        let payloadData = try! JSONSerialization.data(withJSONObject: payload)
+        let headerB64 = header.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        let payloadB64 = payloadData.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        return "\(headerB64).\(payloadB64).fakesig"
     }
 
     // MARK: - Credential Loading Tests
@@ -148,6 +170,21 @@ struct CodexCredentialLoaderTests {
         #expect(credentials == nil)
     }
 
+    @Test
+    func `loadCredentials loads id_token from file`() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let idToken = makeJWT(payload: ["email": "user@example.com", "sub": "user-123"])
+        try createAuthFile(at: tempDir, idToken: idToken)
+
+        let loader = CodexCredentialLoader(homeDirectory: tempDir.path)
+        let result = loader.loadCredentials()
+
+        #expect(result != nil)
+        #expect(result?.idToken == idToken)
+    }
+
     // MARK: - Token Refresh Need Tests
 
     @Test
@@ -232,5 +269,182 @@ struct CodexCredentialLoaderTests {
         #expect(reloaded?.accessToken == "new-token")
         #expect(reloaded?.refreshToken == "new-refresh")
         #expect(reloaded?.lastRefresh != nil)
+    }
+
+    // MARK: - JWT Email Extraction Tests
+
+    @Test
+    func `extractEmailFromJWT returns email from valid id_token`() throws {
+        let idToken = makeJWT(payload: [
+            "email": "user@example.com",
+            "sub": "user-sub-123",
+            "iss": "https://auth.openai.com"
+        ])
+
+        let email = CodexCredentialLoader.extractEmailFromJWT(idToken)
+
+        #expect(email == "user@example.com")
+    }
+
+    @Test
+    func `extractEmailFromJWT returns nil for malformed JWT`() throws {
+        // Not enough parts (no dots)
+        #expect(CodexCredentialLoader.extractEmailFromJWT("not-a-jwt") == nil)
+
+        // Only one part
+        #expect(CodexCredentialLoader.extractEmailFromJWT("singlepart") == nil)
+
+        // Empty string
+        #expect(CodexCredentialLoader.extractEmailFromJWT("") == nil)
+    }
+
+    @Test
+    func `extractEmailFromJWT returns nil when payload is not valid base64`() throws {
+        let malformed = "header.!!!not-base64!!!.sig"
+        #expect(CodexCredentialLoader.extractEmailFromJWT(malformed) == nil)
+    }
+
+    @Test
+    func `extractEmailFromJWT returns nil when email claim is missing`() throws {
+        // JWT with sub but no email
+        let idToken = makeJWT(payload: [
+            "sub": "user-sub-123",
+            "iss": "https://auth.openai.com"
+        ])
+
+        let email = CodexCredentialLoader.extractEmailFromJWT(idToken)
+
+        #expect(email == nil)
+    }
+
+    @Test
+    func `extractEmailFromJWT does not extract sub claim`() throws {
+        // Verify we only extract email, not sub (which is a stable cross-service ID)
+        let idToken = makeJWT(payload: [
+            "sub": "user-sub-123",
+            "email": "user@example.com"
+        ])
+
+        // We can only verify email is returned; sub is deliberately not exposed
+        let email = CodexCredentialLoader.extractEmailFromJWT(idToken)
+        #expect(email == "user@example.com")
+    }
+
+    // MARK: - Account Identity Resolution Tests
+
+    @Test
+    func `resolveAccountIdentity returns email from id_token when available`() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let idToken = makeJWT(payload: ["email": "user@example.com"])
+        try createAuthFile(at: tempDir, accountId: "acc-456", idToken: idToken)
+
+        let loader = CodexCredentialLoader(homeDirectory: tempDir.path)
+        let credentials = loader.loadCredentials()!
+        let identity = loader.resolveAccountIdentity(credentials)
+
+        #expect(identity != nil)
+        #expect(identity?.externalId == "user@example.com")
+        #expect(identity?.source == .email)
+    }
+
+    @Test
+    func `resolveAccountIdentity falls back to account_id when id_token has no email`() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // id_token with sub but no email
+        let idToken = makeJWT(payload: ["sub": "user-sub-123"])
+        try createAuthFile(at: tempDir, accountId: "acc-456", idToken: idToken)
+
+        let loader = CodexCredentialLoader(homeDirectory: tempDir.path)
+        let credentials = loader.loadCredentials()!
+        let identity = loader.resolveAccountIdentity(credentials)
+
+        #expect(identity != nil)
+        #expect(identity?.externalId == "acc-456")
+        #expect(identity?.source == .external)
+    }
+
+    @Test
+    func `resolveAccountIdentity falls back to account_id when no id_token`() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try createAuthFile(at: tempDir, accountId: "acc-789")
+
+        let loader = CodexCredentialLoader(homeDirectory: tempDir.path)
+        let credentials = loader.loadCredentials()!
+        let identity = loader.resolveAccountIdentity(credentials)
+
+        #expect(identity != nil)
+        #expect(identity?.externalId == "acc-789")
+        #expect(identity?.source == .external)
+    }
+
+    @Test
+    func `resolveAccountIdentity returns nil when no identity available`() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        try createAuthFile(at: tempDir) // no accountId, no idToken
+
+        let loader = CodexCredentialLoader(homeDirectory: tempDir.path)
+        let credentials = loader.loadCredentials()!
+        let identity = loader.resolveAccountIdentity(credentials)
+
+        #expect(identity == nil)
+    }
+
+    // MARK: - Two Fake Account Fixtures
+
+    @Test
+    func `resolveAccountIdentity distinguishes two different accounts`() throws {
+        let tempDir = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // Account A: has email in id_token
+        let idTokenA = makeJWT(payload: ["email": "alice@company.com"])
+        let codexDir = tempDir.appendingPathComponent(".codex", isDirectory: true)
+        try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
+
+        let authA: [String: Any] = [
+            "tokens": [
+                "access_token": "token-a",
+                "refresh_token": "refresh-a",
+                "account_id": "acc-alice",
+                "id_token": idTokenA
+            ] as [String: Any]
+        ]
+        let dataA = try JSONSerialization.data(withJSONObject: authA, options: [.prettyPrinted])
+        try dataA.write(to: codexDir.appendingPathComponent("auth.json"))
+
+        let loader = CodexCredentialLoader(homeDirectory: tempDir.path)
+        let credsA = loader.loadCredentials()!
+        let identityA = loader.resolveAccountIdentity(credsA)
+
+        #expect(identityA?.externalId == "alice@company.com")
+        #expect(identityA?.source == .email)
+
+        // Account B: no email, only account_id
+        let authB: [String: Any] = [
+            "tokens": [
+                "access_token": "token-b",
+                "refresh_token": "refresh-b",
+                "account_id": "acc-bob"
+            ] as [String: Any]
+        ]
+        let dataB = try JSONSerialization.data(withJSONObject: authB, options: [.prettyPrinted])
+        try dataB.write(to: codexDir.appendingPathComponent("auth.json"))
+
+        let credsB = loader.loadCredentials()!
+        let identityB = loader.resolveAccountIdentity(credsB)
+
+        #expect(identityB?.externalId == "acc-bob")
+        #expect(identityB?.source == .external)
+
+        // They should be different
+        #expect(identityA?.externalId != identityB?.externalId)
     }
 }

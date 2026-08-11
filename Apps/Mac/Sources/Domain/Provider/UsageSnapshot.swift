@@ -17,6 +17,12 @@ public struct UsageSnapshot: Sendable, Equatable {
     public let accountOrganization: String?
     public let loginMethod: String?
 
+    /// Optional external account ID for multi-account tracking
+    public let accountExternalId: String?
+
+    /// The source used to derive the account identity
+    public let accountIdentitySource: AccountIdentitySource?
+
     /// The account tier (e.g., Claude Max, Pro, or custom tier from other providers)
     public let accountTier: AccountTier?
 
@@ -45,7 +51,9 @@ public struct UsageSnapshot: Sendable, Equatable {
         costUsage: CostUsage? = nil,
         bedrockUsage: BedrockUsageSummary? = nil,
         dailyUsageReport: DailyUsageReport? = nil,
-        extensionMetrics: [ExtensionMetric]? = nil
+        extensionMetrics: [ExtensionMetric]? = nil,
+        accountExternalId: String? = nil,
+        accountIdentitySource: AccountIdentitySource? = nil
     ) {
         self.providerId = providerId
         self.quotas = quotas
@@ -58,6 +66,8 @@ public struct UsageSnapshot: Sendable, Equatable {
         self.bedrockUsage = bedrockUsage
         self.dailyUsageReport = dailyUsageReport
         self.extensionMetrics = extensionMetrics
+        self.accountExternalId = accountExternalId
+        self.accountIdentitySource = accountIdentitySource
     }
 
     // MARK: - Domain Queries

@@ -170,7 +170,7 @@ public struct KimiUsageProbe: UsageProbe {
             quotaType: .timeLimit("Monthly"),
             providerId: providerId,
             resetsAt: parseISO8601(total.resetTime),
-            resetText: "\(nums.used)/\(nums.limit) 总额",
+            resetText: "used \(nums.used)/\(nums.limit) 总额",
             compactTitle: "总额"
         )
     }
@@ -203,7 +203,7 @@ public struct KimiUsageProbe: UsageProbe {
                 quotaType: .weekly,
                 providerId: providerId,
                 resetsAt: parseISO8601(usage.resetTime),
-                resetText: "\(nums.used)/\(nums.limit) weekly"
+                resetText: "used \(nums.used)/\(nums.limit) weekly"
             ))
         }
 
@@ -222,7 +222,7 @@ public struct KimiUsageProbe: UsageProbe {
                 quotaType: .session,
                 providerId: providerId,
                 resetsAt: parseISO8601(rateLimit.detail.resetTime),
-                resetText: "\(nums.used)/\(nums.limit) (5h)",
+                resetText: "used \(nums.used)/\(nums.limit) (5h)",
                 windowDuration: windowSeconds(duration: rateLimit.window.duration, unit: rateLimit.window.timeUnit)
             ))
         }
@@ -239,7 +239,7 @@ public struct KimiUsageProbe: UsageProbe {
                 quotaType: .timeLimit("Monthly"),
                 providerId: providerId,
                 resetsAt: parseISO8601(total.resetTime),
-                resetText: "\(nums.used)/\(nums.limit) total"
+                resetText: "used \(nums.used)/\(nums.limit) total"
             ))
         }
 
@@ -333,7 +333,7 @@ public struct KimiUsageProbe: UsageProbe {
             quotaType: .weekly,
             providerId: providerId,
             resetsAt: parseISO8601(coding.detail.resetTime),
-            resetText: "\(weekly.used)/\(weekly.limit) requests"
+            resetText: "used \(weekly.used)/\(weekly.limit) requests"
         ))
 
         let fiveHourRate = coding.limits?.first(where: {
@@ -354,7 +354,7 @@ public struct KimiUsageProbe: UsageProbe {
                 quotaType: .session,
                 providerId: providerId,
                 resetsAt: parseISO8601(rateLimit.detail.resetTime),
-                resetText: "\(rate.used)/\(rate.limit) requests (5h)",
+                resetText: "used \(rate.used)/\(rate.limit) requests (5h)",
                 windowDuration: windowSeconds(duration: rateLimit.window.duration, unit: rateLimit.window.timeUnit)
             ))
         }

@@ -107,7 +107,7 @@ public final class NotificationAlerter: QuotaAlerter, @unchecked Sendable {
         }
     }
 
-    public func evaluateSnapshotAlerts(providerId: String, snapshot: UsageSnapshot) async {
+    public func evaluateSnapshotAlerts(providerId: String, accountId: String, snapshot: UsageSnapshot) async {
         let config = await thresholdReader()
         guard config.enabled else { return }
 
@@ -127,7 +127,8 @@ public final class NotificationAlerter: QuotaAlerter, @unchecked Sendable {
 
         let name = providerDisplayName(for: providerId)
         for evaluation in evaluations {
-            let key = "\(providerId):\(evaluation.kind.rawValue)"
+            // Alert key uses `providerId.accountId:kind` format for per-account debouncing
+            let key = "\(providerId).\(accountId):\(evaluation.kind.rawValue)"
             guard await thresholdState.shouldFire(key: key) else { continue }
 
             let (title, body) = thresholdCopy(name: name, evaluation: evaluation)

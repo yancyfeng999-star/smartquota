@@ -1,3 +1,5 @@
+mod account_cache;
+mod accounts;
 mod alerts;
 mod catalog;
 mod detect;
@@ -14,6 +16,7 @@ use chrono::Local;
 use detect::DetectItem;
 use models::{session_weekly_from_meters, status_from_meters, ProbeTestResult, QuotaCard, SnapshotPayload};
 use settings::AppSettings;
+use accounts::{AccountDiscoveryEvent, MultiAccountState};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -54,6 +57,10 @@ async fn get_usage_snapshot() -> SnapshotPayload {
                         enabled: true,
                         source_mode: "auto".into(),
                         is_core: false,
+                        account_id: None,
+                        account_email: None,
+                        account_label: None,
+                        account_state: None,
                     });
                 }
                 Err(msg) => {
@@ -69,6 +76,10 @@ async fn get_usage_snapshot() -> SnapshotPayload {
                         enabled: true,
                         source_mode: "auto".into(),
                         is_core: false,
+                        account_id: None,
+                        account_email: None,
+                        account_label: None,
+                        account_state: None,
                     });
                 }
             }
@@ -329,6 +340,97 @@ fn open_external_url(url: String) -> Result<(), String> {
     }
 }
 
+// ---- Account Tauri commands ----
+
+#[tauri::command]
+fn get_account_states() -> MultiAccountState {
+    MultiAccountState::load()
+}
+
+#[tauri::command]
+fn get_pending_accounts(provider_id: String) -> Vec<accounts::ProviderAccountState> {
+    let state = MultiAccountState::load();
+    state
+        .coordinator(&provider_id)
+        .map(|c| c.pending_accounts().into_iter().cloned().collect())
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn confirm_account(provider_id: String, account_id: String) -> Result<MultiAccountState, String> {
+    let mut state = MultiAccountState::load();
+    let coord = state.coordinator_mut(&provider_id);
+    coord.process(AccountDiscoveryEvent::Confirm {
+        account_id: account_id.clone(),
+    });
+    state.save()?;
+    Ok(state)
+}
+
+#[tauri::command]
+fn ignore_account(provider_id: String, account_id: String) -> Result<MultiAccountState, String> {
+    let mut state = MultiAccountState::load();
+    let coord = state.coordinator_mut(&provider_id);
+    coord.process(AccountDiscoveryEvent::Ignore {
+        account_id: account_id.clone(),
+    });
+    state.save()?;
+    Ok(state)
+}
+
+#[tauri::command]
+fn sign_out_account(provider_id: String, account_id: String) -> Result<MultiAccountState, String> {
+    let mut state = MultiAccountState::load();
+    let coord = state.coordinator_mut(&provider_id);
+    coord.process(AccountDiscoveryEvent::SignOut {
+        account_id: account_id.clone(),
+    });
+    state.save()?;
+    Ok(state)
+}
+
+#[tauri::command]
+fn select_account(provider_id: String, account_id: String) -> Result<MultiAccountState, String> {
+    let mut state = MultiAccountState::load();
+    let coord = state.coordinator_mut(&provider_id);
+    coord.process(AccountDiscoveryEvent::Select {
+        account_id: account_id.clone(),
+    });
+    state.save()?;
+    Ok(state)
+}
+
+#[tauri::command]
+fn delete_account(provider_id: String, account_id: String) -> Result<MultiAccountState, String> {
+    let mut state = MultiAccountState::load();
+    let coord = state.coordinator_mut(&provider_id);
+    coord.process(AccountDiscoveryEvent::Delete {
+        account_id: account_id.clone(),
+    });
+    // Also clean up cache and secrets
+    let cache = account_cache::AccountSnapshotCache::new();
+    cache.delete(&account_id);
+    let _ = secrets::delete_account_secret(&provider_id, &account_id, "api_key");
+    state.save()?;
+    Ok(state)
+}
+
+#[tauri::command]
+fn ingest_account_snapshot(
+    provider_id: String,
+    email: Option<String>,
+    is_interactive: bool,
+) -> Result<MultiAccountState, String> {
+    let mut state = MultiAccountState::load();
+    let coord = state.coordinator_mut(&provider_id);
+    coord.process(AccountDiscoveryEvent::Ingest {
+        email,
+        is_interactive,
+    });
+    state.save()?;
+    Ok(state)
+}
+
 fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -380,6 +482,14 @@ pub fn run() {
             open_extensions_folder,
             check_for_update,
             open_external_url,
+            get_account_states,
+            get_pending_accounts,
+            confirm_account,
+            ignore_account,
+            sign_out_account,
+            select_account,
+            delete_account,
+            ingest_account_snapshot,
         ])
         .setup(|app| {
             let quit = MenuItem::with_id(app, "quit", "退出智额", true, None::<&str>)?;

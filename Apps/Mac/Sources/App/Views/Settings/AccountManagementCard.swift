@@ -13,12 +13,32 @@ struct AccountManagementCard: View {
     @Environment(\.appTheme) private var theme
     @State private var isExpanded = false
     @State private var showAddSheet = false
+    @State private var accountToDeleteId: String?
+    @State private var showDeleteConfirm = false
+
+    private var l10n: L10n { L10n.shared }
 
     var body: some View {
         SettingsExpandableCard(isExpanded: $isExpanded) {
             header
         } content: {
             VStack(spacing: 8) {
+                // Pending confirmation accounts
+                let pending = monitor.pendingConfirmations(for: provider.id)
+                if !pending.isEmpty {
+                    PendingAccountBanner(
+                        providerId: provider.id,
+                        pendingAccounts: pending,
+                        onConfirm: { accountId in
+                            monitor.confirmAccount(accountId, forProvider: provider.id)
+                        },
+                        onIgnore: { accountId in
+                            monitor.ignoreAccount(accountId, forProvider: provider.id)
+                        }
+                    )
+                }
+
+                // Connected / disconnected accounts
                 ForEach(provider.accounts, id: \.id) { account in
                     accountRow(account)
                 }
@@ -26,6 +46,25 @@ struct AccountManagementCard: View {
                 addAccountButton
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(isPresented: $showAddSheet) {
+            AddAccountSheet(provider: provider, monitor: monitor)
+        }
+        .alert(
+            l10n.t("account.delete_title"),
+            isPresented: $showDeleteConfirm
+        ) {
+            Button(l10n.t("account.delete"), role: .destructive) {
+                if let accountId = accountToDeleteId {
+                    monitor.deleteAccount(accountId, forProvider: provider.id)
+                    accountToDeleteId = nil
+                }
+            }
+            Button(l10n.t("common.cancel"), role: .cancel) {
+                accountToDeleteId = nil
+            }
+        } message: {
+            Text(l10n.t("account.delete_message"))
         }
     }
 
@@ -44,11 +83,11 @@ struct AccountManagementCard: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Accounts")
+                Text(l10n.tf("account.count_fmt", "\(provider.accounts.count)"))
                     .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
                     .foregroundStyle(theme.textPrimary)
 
-                Text("\(provider.accounts.count) account\(provider.accounts.count == 1 ? "" : "s") configured")
+                Text(subtitleText)
                     .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
                     .foregroundStyle(theme.textTertiary)
             }
@@ -60,15 +99,33 @@ struct AccountManagementCard: View {
         }
     }
 
+    private var subtitleText: String {
+        let connected = provider.accounts.filter { account in
+            account.connectionState == .connected
+        }.count
+        let pending = monitor.pendingConfirmations(for: provider.id).count
+        var parts: [String] = []
+        if connected > 0 {
+            parts.append("\(connected) \(l10n.t("account.connected"))")
+        }
+        if pending > 0 {
+            parts.append("\(pending) \(l10n.t("account.pending"))")
+        }
+        return parts.isEmpty ? l10n.t("account.no_accounts") : parts.joined(separator: " · ")
+    }
+
     // MARK: - Account Row
 
     private func accountRow(_ account: ProviderAccount) -> some View {
-        HStack(spacing: 10) {
-            // Avatar
-            ZStack {
+        let state = account.connectionState
+        let isActive = account.accountId == provider.activeAccount.accountId
+
+        return HStack(spacing: 10) {
+            // Avatar with state indicator
+            ZStack(alignment: .bottomTrailing) {
                 Circle()
                     .fill(
-                        account.accountId == provider.activeAccount.accountId
+                        isActive
                             ? theme.accentPrimary
                             : theme.glassBackground
                     )
@@ -77,10 +134,20 @@ struct AccountManagementCard: View {
                 Text(account.initialLetter)
                     .font(.system(size: 10, weight: .bold, design: theme.fontDesign))
                     .foregroundStyle(
-                        account.accountId == provider.activeAccount.accountId
+                        isActive
                             ? .white
                             : theme.textSecondary
                     )
+
+                // State indicator dot
+                Circle()
+                    .fill(stateDotColor(for: state))
+                    .frame(width: 8, height: 8)
+                    .overlay(
+                        Circle()
+                            .stroke(theme.cardGradient, lineWidth: 1.5)
+                    )
+                    .offset(x: 2, y: 2)
             }
 
             // Account info
@@ -90,11 +157,18 @@ struct AccountManagementCard: View {
                     .foregroundStyle(theme.textPrimary)
                     .lineLimit(1)
 
-                if let email = account.email {
-                    Text(email)
-                        .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
-                        .foregroundStyle(theme.textTertiary)
-                        .lineLimit(1)
+                HStack(spacing: 4) {
+                    if let email = account.email {
+                        Text(email)
+                            .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
+                            .foregroundStyle(theme.textTertiary)
+                            .lineLimit(1)
+                    }
+
+                    // State label
+                    Text(l10n.t(state.l10nKey))
+                        .font(.system(size: 9, weight: .semibold, design: theme.fontDesign))
+                        .foregroundStyle(stateDotColor(for: state))
                 }
             }
 
@@ -108,17 +182,17 @@ struct AccountManagementCard: View {
                     .frame(width: 8, height: 8)
             }
 
-            // Active indicator
-            if account.accountId == provider.activeAccount.accountId {
+            // Active indicator or switch button
+            if isActive {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 14))
                     .foregroundStyle(theme.statusHealthy)
-            } else {
-                // Switch button
+                    .accessibilityLabel(l10n.t("account.active"))
+            } else if state == .connected {
                 Button {
                     provider.switchAccount(to: account.accountId)
                 } label: {
-                    Text("Switch")
+                    Text(l10n.t("account.switch"))
                         .font(.system(size: 9, weight: .medium, design: theme.fontDesign))
                         .foregroundStyle(theme.accentPrimary)
                         .padding(.horizontal, 8)
@@ -129,6 +203,23 @@ struct AccountManagementCard: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("\(l10n.t("account.switch")) \(account.displayName)")
+            }
+
+            // Delete button (not for active account, must keep at least 1 account)
+            if !isActive && provider.accounts.count > 1 {
+                Button {
+                    accountToDeleteId = account.accountId
+                    showDeleteConfirm = true
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(theme.textTertiary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(l10n.t("account.delete")) \(account.displayName)")
             }
         }
         .padding(.vertical, 4)
@@ -144,7 +235,7 @@ struct AccountManagementCard: View {
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 12, weight: .semibold))
 
-                Text("Add Account")
+                Text(l10n.t("account.add"))
                     .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
             }
             .foregroundStyle(theme.accentPrimary)
@@ -156,5 +247,19 @@ struct AccountManagementCard: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(l10n.t("account.add"))
+    }
+
+    // MARK: - Helpers
+
+    private func stateDotColor(for state: AccountConnectionState) -> Color {
+        switch state {
+        case .connected:
+            return theme.statusHealthy
+        case .disconnected:
+            return theme.statusCritical
+        case .pendingConfirmation:
+            return theme.statusWarning
+        }
     }
 }

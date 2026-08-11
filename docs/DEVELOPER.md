@@ -80,31 +80,103 @@ Infrastructure
 
 ## 4. 添加一个内置会员
 
-1. **Domain**  
-   - `Sources/Domain/Provider/<Name>/<Name>Provider.swift` 实现 `AIProvider`  
+1. **Domain**
+   - `Sources/Domain/Provider/<Name>/<Name>Provider.swift` 实现 `AIProvider`
 
-2. **Infrastructure**  
-   - `Sources/Infrastructure/<Name>/<Name>UsageProbe.swift` 实现 `UsageProbe`  
-   - 凭证只读本机文件 / 环境变量 / Keychain（经 repository）  
+2. **Infrastructure**
+   - `Sources/Infrastructure/<Name>/<Name>UsageProbe.swift` 实现 `UsageProbe`
+   - 凭证只读本机文件 / 环境变量 / Keychain（经 repository）
 
-3. **注册**  
-   - `ProviderCatalog.makeAllProviders` 增加实例  
-   - `displayOrder`；`defaultPlanLabels` 在开源树中保持 **空字典**（勿写入个人套餐名）  
-   - 若需专用设置表单：写 `XxxConfigCard`，并在 `ProviderConfigRegistry` 增加 `case`  
-   - 否则走 `GenericProbeConfigCard` + `ProviderProbeGuide`  
+3. **注册**
+   - `ProviderCatalog.makeAllProviders` 增加实例
+   - `displayOrder`；`defaultPlanLabels` 在开源树中保持 **空字典**（勿写入个人套餐名）
+   - 若需专用设置表单：写 `XxxConfigCard`，并在 `ProviderConfigRegistry` 增加 `case`
+   - 否则走 `GenericProbeConfigCard` + `ProviderProbeGuide`
 
-4. **文案**  
-   - `L10n` 增加 `probe.<id>.title/summary/step.*`  
-   - 配置表单字符串用 `L10n.shared.t("config....")`  
+4. **文案**
+   - `L10n` 增加 `probe.<id>.title/summary/step.*`
+   - 配置表单字符串用 `L10n.shared.t("config....")`
 
-5. **图标**（可选）  
-   - `Assets.xcassets` + `ProviderVisualIdentity`  
+5. **图标**（可选）
+   - `Assets.xcassets` + `ProviderVisualIdentity`
 
-6. **测试**  
-   - Probe 解析单测放 `Tests/InfrastructureTests`  
-   - Domain 行为放 `Tests/DomainTests`  
+6. **测试**
+   - Probe 解析单测放 `Tests/InfrastructureTests`
+   - Domain 行为放 `Tests/DomainTests`
 
 默认启用策略：非核心会员若 settings 中 **从未写过** `isEnabled`，启动时置为 `false`（见 `ProviderCatalog.applyExpandedProviderDefaults`）。
+
+---
+
+## 4.1 多账号接入
+
+每个 Provider 可选择接入多账号支持。接入方式取决于身份识别能力：
+
+### 自动身份识别（推荐）
+
+适用于能从 CLI/API 返回邮箱或账号 ID 的 Provider：
+
+1. 在 Probe 中解析 `accountEmail` 或 `externalAccountId`
+2. 在 `UsageSnapshot` 中填充身份字段
+3. `ProviderAccountCoordinator` 自动处理账号发现和匹配
+
+**示例：** Codex 从 JWT `id_token` 解析邮箱，Claude 从 `~/.claude.json` 读取。
+
+### 手动密钥型
+
+适用于需要用户手动输入 API Key 的 Provider：
+
+1. 实现 `MultiAccountSettingsRepository` 的账号级密钥存储
+2. Keychain 键格式：`provider:<id>:account:<accountId>:api-key`
+3. 用户添加账号时填写邮箱和密钥
+4. 验证成功后保存
+
+**示例：** MiniMax API Key、Copilot PAT。
+
+### Profile/路径型
+
+适用于使用配置文件或 Profile 的 Provider：
+
+1. 保存 Profile 名称或配置路径（非敏感）
+2. 如果数据源无邮箱，要求用户填写
+3. 使用 Profile 名作为身份标识
+
+**示例：** AWS Bedrock Profile、Z.ai 配置路径。
+
+### 接入清单
+
+| 步骤 | 说明 |
+|------|------|
+| 1. 实现身份解析 | 在 Probe 或 CredentialLoader 中提取邮箱/ID |
+| 2. 填充 UsageSnapshot | 设置 `accountEmail`、`accountExternalId` |
+| 3. 选择接入方式 | 自动身份 / 手动密钥 / Profile |
+| 4. 测试 | 添加账号发现、邮箱匹配、删除清理测试 |
+| 5. 更新文档 | 在 Provider 接入矩阵中记录 |
+
+详见 `docs/superpowers/plans/2026-08-10-multi-account-memberships.md`。
+
+### Provider 接入矩阵
+
+| Provider | 添加方式 | 自动身份 | 无法识别时 |
+|----------|----------|----------|------------|
+| Codex | 切换 CLI 登录后检测 | JWT `id_token` 邮箱 | 用户确认邮箱 |
+| Kimi | CLI/浏览器切换或手动 Key | 尝试接口身份 | 手动邮箱 |
+| MiniMax | 手动添加 API Key | 接口可返回则使用 | 必填邮箱 |
+| Grok | 切换 Grok 登录后检测 | 认证文件已有邮箱 | 手动邮箱 |
+| Claude | 切换 Claude Code 登录 | `~/.claude.json` 邮箱 | 手动邮箱 |
+| Gemini | 切换 Gemini CLI 登录 | OAuth 身份若可得 | 手动邮箱 |
+| Copilot | 手动 PAT + GitHub 用户名 | GitHub 用户名 | 用户填写邮箱 |
+| Cursor | 切换 Cursor 客户端账号 | JWT `userId` | 首次关联邮箱 |
+| Antigravity | 切换客户端账号 | `userStatus.email` | 手动邮箱 |
+| Z.ai | 手动 Key/配置路径 | 接口可返回则使用 | 手动邮箱 |
+| Bedrock | 选择 AWS Profile | Profile/AWS Account ID | Profile 作为身份 |
+| Alibaba | 切换浏览器或手动 Key/Cookie | 账号接口若可得 | 手动邮箱 |
+| MiMo | 切换浏览器或手动 Cookie | Cookie 中 `userId` | 首次关联邮箱 |
+| AmpCode | 切换 CLI 登录 | `Signed in as` 邮箱 | 手动邮箱 |
+| Kiro | 切换 CLI 登录 | 当前输出若可得 | 手动邮箱 |
+| Mistral | 独立日志目录 | 无稳定邮箱 | 手动绑定目录 |
+| OpenCode Go | 独立数据库/当前登录 | 数据库身份若可得 | 手动绑定 |
+| OMP | 保留现有多账号分组 | 输出中的 email/accountId | 不重复建立子账号 |
 
 ---
 
@@ -145,10 +217,20 @@ manifest + 探测脚本，由 `ExtensionRegistry` 加载进 `QuotaMonitor`。示
 | 数据 | 存储 |
 |------|------|
 | 主题、语言、开关、探测模式、套餐/续费 | `~/.smartquota/settings.json` |
+| 账号配置（邮箱、备注、套餐、续费日） | `~/.smartquota/settings.json`（`providers.<id>.accounts`） |
+| 账号额度快照 | `~/.smartquota/account-snapshots.json`（权限 `0600`） |
 | GitHub Token、MiniMax Key、阿里云 Cookie/Key | Keychain（`KeychainSecretStore`） |
+| 账号级密钥 | Keychain（`provider:<id>:account:<accountId>:api-key`） |
 | Codex/Grok/Kimi 等 OAuth | 各工具自己的 `~/.xxx/auth.json` 等 |
 
 **禁止**把真实密钥提交进仓库。
+
+### 多账号存储边界
+
+- **邮箱**：仅保存在 `settings.json`，不上传
+- **额度快照**：保存在 `account-snapshots.json`，原子写入，损坏时安全降级
+- **Keychain 密钥**：按 `providerId + accountId` 隔离，删除账号时同步清理
+- **普通设置**：套餐、续费日等改为账号级配置，保存在 `settings.json`
 
 ---
 
