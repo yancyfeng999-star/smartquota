@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.25] — 2026-08-11
+
+### Fixed
+- **会员额度显示模式**：Kimi 的 `已用/总额` 不再被误当成「剩余/总额」，会员汇总卡现在会跟随全局「剩余 / 已用 / 节奏」设置同步更新数值和进度条。
+- **多账号额度卡**：兼容旧缓存中没有语义标记的比例数据，并保留明确「剩余」数量型额度的换算。
+
+### Release
+- GitHub：`v0.3.25` · `SmartQuota-0.3.25.dmg` / `.pkg`
+
+---
+
 ## [Mac 0.3.24] — 2026-08-09
 
 ### Fixed
