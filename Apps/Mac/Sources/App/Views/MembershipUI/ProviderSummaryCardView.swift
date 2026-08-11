@@ -158,15 +158,16 @@ struct ProviderSummaryCardView: View {
         )
     }
 
-    /// Progress bar with label left + value (remaining/total) right above the bar.
+    /// Progress bar with label left + mode-aware value right above the bar.
     private func quotaColumn(_ item: SummaryQuotaItem) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let displayMode = settings.usageDisplayMode
+        return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(item.title)
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 2)
-                Text(item.displayValue)
+                Text(item.displayValue(mode: displayMode))
                     .font(.system(size: 12, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     // Same style as 5h / 7d / 总额 — no accent/highlight color
@@ -179,7 +180,7 @@ struct ProviderSummaryCardView: View {
                 ZStack(alignment: .leading) {
                     Capsule(style: .continuous)
                         .fill(MembershipPalette.surfaceTrack)
-                    if let value = item.percentRemaining {
+                    if let value = item.progressPercent(mode: displayMode) {
                         Capsule(style: .continuous)
                             .fill(MembershipPalette.progressColor(percentRemaining: value).opacity(0.88))
                             .frame(width: proxy.size.width * CGFloat(max(0, min(100, value)) / 100))
@@ -421,78 +422,52 @@ struct ProviderSummaryCardView: View {
 private struct SummaryQuotaItem: Identifiable {
     let id: String
     let title: String
+    let quota: UsageQuota?
     let percentRemaining: Double?
-    /// Free-form value (e.g. video "2/3", percent "55/100")
-    let valueText: String?
     let resetText: String
     let isEstimated: Bool
     let highlight: Bool
     let resetUrgency: QuotaAlertPolicy.ResetUrgency
     let resetsAt: Date?
 
-    /// Right-side value: always prefer remaining/total when known.
-    var displayValue: String {
-        if let valueText, !valueText.isEmpty { return valueText }
+    /// Right-side value for the selected global display mode.
+    func displayValue(mode: UsageDisplayMode) -> String {
+        if let quota {
+            return quota.summaryDisplay(mode: mode).valueText
+        }
         if let value = percentRemaining {
-            let rem = Int(value.rounded())
-            return "\(rem)/100"
+            let displayed = mode == .used ? 100 - value : value
+            return "\(Int(displayed.rounded()))/100"
         }
         return "—"
+    }
+
+    /// Progress position for the selected global display mode.
+    func progressPercent(mode: UsageDisplayMode) -> Double? {
+        if let quota {
+            return quota.summaryDisplay(mode: mode).progressPercent
+        }
+        guard let value = percentRemaining else { return nil }
+        return mode == .used ? 100 - value : value
     }
 
     init(from quota: UsageQuota, title: String, highlight: Bool = false) {
         self.id = quota.quotaType.quotaKey + title
         self.title = title
+        self.quota = quota
+        self.percentRemaining = quota.percentRemaining
         self.highlight = highlight
         self.resetsAt = quota.resetsAt
         self.resetUrgency = QuotaAlertPolicy.resetUrgency(resetsAt: quota.resetsAt)
-        // Count-based (video): show remaining/total as main value
-        if let rem = Self.countRemaining(from: quota.resetText) {
-            self.valueText = rem
-            self.percentRemaining = quota.percentRemaining
-        } else if let dollars = quota.dollarRemaining {
-            // 积分：余额数字，进度条不按 100% 满条（避免看起来比别的“更满/更蓝”）
-            let v = NSDecimalNumber(decimal: dollars).doubleValue
-            if abs(v.rounded() - v) < 0.05 {
-                self.valueText = String(format: "%.0f", v)
-            } else {
-                self.valueText = String(format: "%.1f", v)
-            }
-            // No percentage bar fill for balance-only meters
-            self.percentRemaining = nil
-        } else {
-            // 百分比额度：剩余/总额（100）
-            let rem = Int(quota.percentRemaining.rounded())
-            self.valueText = "\(rem)/100"
-            self.percentRemaining = quota.percentRemaining
-        }
         self.resetText = Self.formatReset(quota)
         self.isEstimated = false
-    }
-
-    /// Parse “剩余 2/3” style counts for video pools.
-    private static func countRemaining(from resetText: String?) -> String? {
-        guard let resetText else { return nil }
-        let pattern = #"(\d+)\s*/\s*(\d+)"#
-        guard let re = try? NSRegularExpression(pattern: pattern),
-              let match = re.firstMatch(in: resetText, range: NSRange(resetText.startIndex..., in: resetText)),
-              match.numberOfRanges >= 3,
-              let r1 = Range(match.range(at: 1), in: resetText),
-              let r2 = Range(match.range(at: 2), in: resetText)
-        else { return nil }
-        // Prefer remaining/total when text says 剩余 a/b
-        return "\(resetText[r1])/\(resetText[r2])"
     }
 
     init(title: String, percentRemaining: Double?, resetText: String, isEstimated: Bool) {
         self.id = title + (isEstimated ? "-est" : "")
         self.title = title
+        self.quota = nil
         self.percentRemaining = percentRemaining
-        if let p = percentRemaining {
-            self.valueText = "\(Int(p.rounded()))/100"
-        } else {
-            self.valueText = nil
-        }
         self.resetText = resetText
         self.isEstimated = isEstimated
         self.highlight = false
@@ -545,8 +520,8 @@ private struct SummaryQuotaItem: Identifiable {
                 .replacingOccurrences(of: "时间未知", with: "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
                 .trimmingCharacters(in: CharacterSet(charactersIn: " ·"))
-            // Pure counts already shown as value
-            if Self.countRemaining(from: cleaned) != nil {
+            // Pure counts are already shown as the main value.
+            if quota.summaryDisplay(mode: .remaining).isCountBased {
                 return "—"
             }
             // Relative phrases like "2d 3h" / "明天 10:57"
