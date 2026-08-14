@@ -41,8 +41,8 @@ struct DiagnosticsServiceTests {
         let service = DiagnosticsService(
             checker: StubCompatibilityChecker(report: env.readyReport()),
             context: env.context(
-                inspections: [
-                    "claude": .healthy(),
+                probes: [
+                    "claude": .success(providerId: "claude"),
                 ]
             )
         )
@@ -77,7 +77,7 @@ struct DiagnosticsServiceTests {
         )
         let service = DiagnosticsService(
             checker: StubCompatibilityChecker(report: report),
-            context: env.context(inspections: [:])
+            context: env.context(probes: [:])
         )
         let results = await service.runAll()
 
@@ -145,43 +145,43 @@ struct DiagnosticsServiceTests {
         let service = DiagnosticsService(
             checker: StubCompatibilityChecker(report: report),
             context: env.context(
-                inspections: [
-                    "claude": DiagnosticProviderInspection(
+                probes: [
+                    "claude": DiagnosticProbeOutcome(
                         enabled: true,
-                        credential: .available,
-                        network: .reachable,
-                        endpoint: .skipped,
-                        cache: .missing
+                        reachable: true,
+                        credentialAvailable: true
                     ),
-                    "copilot": DiagnosticProviderInspection(
+                    "copilot": DiagnosticProbeOutcome(
                         enabled: true,
-                        credential: .missingKey,
-                        network: .reachable,
-                        endpoint: .skipped,
-                        cache: .missing,
+                        error: .authenticationRequired,
+                        reachable: true,
+                        credentialAvailable: false,
                         detailHint: "key path /Users/tester/.copilot/token sk-secretTOKEN99"
                     ),
-                    "codex": DiagnosticProviderInspection(
+                    "codex": DiagnosticProbeOutcome(
                         enabled: true,
-                        credential: .notLoggedIn,
-                        network: .reachable,
-                        endpoint: .skipped,
-                        cache: .missing,
+                        error: .authenticationRequired,
+                        reachable: true,
+                        credentialAvailable: false,
                         detailHint: "jane.doe@example.com /Users/tester/.codex/auth.json"
                     ),
-                    "kimi": DiagnosticProviderInspection(
+                    "kimi": DiagnosticProbeOutcome(
                         enabled: true,
-                        credential: .available,
-                        network: .unreachable,
-                        endpoint: .skipped,
-                        cache: .fresh
+                        snapshot: UsageSnapshot(providerId: "kimi", quotas: [], capturedAt: Date()),
+                        error: .timeout,
+                        reachable: false,
+                        credentialAvailable: true
                     ),
-                    "grok": DiagnosticProviderInspection(
+                    "grok": DiagnosticProbeOutcome(
                         enabled: true,
-                        credential: .available,
-                        network: .reachable,
-                        endpoint: .serviceRejected,
-                        cache: .expired
+                        snapshot: UsageSnapshot(
+                            providerId: "grok",
+                            quotas: [],
+                            capturedAt: Date.distantPast
+                        ),
+                        error: .rateLimited(retryAt: Date()),
+                        reachable: true,
+                        credentialAvailable: true
                     ),
                 ]
             )
@@ -236,7 +236,7 @@ struct DiagnosticsServiceTests {
         let service = DiagnosticsService(
             checker: StubCompatibilityChecker(report: env.readyReport()),
             context: env.context(
-                inspections: [:],
+                probes: [:],
                 integrity: .corrupt,
                 configPath: env.settingsURL.path
             )
@@ -255,14 +255,13 @@ struct DiagnosticsServiceTests {
         let env = try makeEnv()
         defer { env.cleanup() }
 
-        let box = InspectionBox(
+        let box = ProbeBox(
             value: [
-                "claude": DiagnosticProviderInspection(
+                "claude": DiagnosticProbeOutcome(
                     enabled: true,
-                    credential: .available,
-                    network: .unreachable,
-                    endpoint: .skipped,
-                    cache: .missing
+                    error: .timeout,
+                    reachable: false,
+                    credentialAvailable: true
                 ),
             ]
         )
@@ -283,12 +282,58 @@ struct DiagnosticsServiceTests {
         let network = try #require(result(first, kind: .networkReachability, providerId: "claude"))
         #expect(network.code == DiagnosticCode.networkFail)
 
-        box.value["claude"] = .healthy()
+        box.value["claude"] = .success(providerId: "claude")
         let retried = await service.retry(network)
         #expect(retried.id == network.id)
         #expect(retried.kind == .networkReachability)
         #expect(retried.severity == .ok)
         #expect(retried.code.isEmpty)
+        #expect(box.probed == ["claude", "claude"])
+    }
+
+    @Test
+    func `run classifies endpoint from a fresh probe not leftover cache`() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        let leftover = UsageSnapshot(
+            providerId: "grok",
+            quotas: [],
+            capturedAt: Date.distantPast
+        )
+        let box = ProbeBox(
+            value: [
+                "grok": DiagnosticProbeOutcome(
+                    enabled: true,
+                    snapshot: leftover,
+                    error: .parseFailed("raw-response {\"access_token\":\"xyz\"}"),
+                    reachable: true,
+                    credentialAvailable: true,
+                    detailHint: "jane.doe@example.com leftover"
+                ),
+            ]
+        )
+        let report = env.readyReport(providers: [
+            "grok": ProviderCompatibility(
+                providerId: "grok",
+                enabled: true,
+                cliName: nil,
+                cliInstalled: true,
+                suggestedAction: .none
+            ),
+        ])
+        let service = DiagnosticsService(
+            checker: StubCompatibilityChecker(report: report),
+            context: env.context(box: box)
+        )
+        let results = await service.run(providerId: "grok")
+        let endpoint = try #require(result(results, kind: .providerEndpoint, providerId: "grok"))
+        let cache = try #require(result(results, kind: .cacheFreshness, providerId: "grok"))
+        #expect(box.probed == ["grok"])
+        #expect(endpoint.code == DiagnosticCode.serviceRejected)
+        #expect(cache.code == DiagnosticCode.cacheExpired)
+        #expect(!endpoint.detail.contains("access_token"))
+        #expect(!endpoint.detail.contains("raw-response"))
     }
 
     @Test
@@ -315,14 +360,13 @@ struct DiagnosticsServiceTests {
         let service = DiagnosticsService(
             checker: StubCompatibilityChecker(report: report),
             context: env.context(
-                inspections: [
-                    "claude": .healthy(),
-                    "codex": DiagnosticProviderInspection(
+                probes: [
+                    "claude": .success(providerId: "claude"),
+                    "codex": DiagnosticProbeOutcome(
                         enabled: true,
-                        credential: .notLoggedIn,
-                        network: .reachable,
-                        endpoint: .skipped,
-                        cache: .missing
+                        error: .authenticationRequired,
+                        reachable: true,
+                        credentialAvailable: false
                     ),
                 ]
             )
@@ -350,13 +394,17 @@ struct DiagnosticsServiceTests {
         let service = DiagnosticsService(
             checker: StubCompatibilityChecker(report: report),
             context: env.context(
-                inspections: [
-                    "copilot": DiagnosticProviderInspection(
+                probes: [
+                    "copilot": DiagnosticProbeOutcome(
                         enabled: true,
-                        credential: .missingKey,
-                        network: .reachable,
-                        endpoint: .serviceRejected,
-                        cache: .expired,
+                        snapshot: UsageSnapshot(
+                            providerId: "copilot",
+                            quotas: [],
+                            capturedAt: Date.distantPast
+                        ),
+                        error: .authenticationRequired,
+                        reachable: false,
+                        credentialAvailable: false,
                         detailHint: """
                         email=jane.doe@example.com token=sk-secretTOKEN99 \
                         Cookie: session=abc path=/Users/tester/.copilot/raw.json \
@@ -379,7 +427,7 @@ struct DiagnosticsServiceTests {
         #expect(!summary.contains("session=abc"))
         #expect(!summary.contains("/Users/tester"))
         #expect(summary.contains(DiagnosticCode.missingKey))
-        #expect(summary.contains(DiagnosticCode.serviceRejected))
+        #expect(summary.contains(DiagnosticCode.networkFail))
         #expect(summary.contains(DiagnosticCode.cacheExpired))
     }
 
@@ -419,7 +467,7 @@ struct DiagnosticsServiceTests {
         }
 
         func context(
-            inspections: [String: DiagnosticProviderInspection],
+            probes: [String: DiagnosticProbeOutcome],
             integrity: DiagnosticConfigIntegrity = .ok,
             configPath: String? = nil
         ) -> DiagnosticSessionContext {
@@ -430,11 +478,11 @@ struct DiagnosticsServiceTests {
                 now: { now },
                 configPath: configPath ?? settingsURL.path,
                 configIntegrity: { integrity },
-                inspect: { id in inspections[id] }
+                probe: { id in probes[id] }
             )
         }
 
-        func context(box: InspectionBox) -> DiagnosticSessionContext {
+        func context(box: ProbeBox) -> DiagnosticSessionContext {
             DiagnosticSessionContext(
                 appVersion: "0.3.28",
                 osVersion: "macOS 15.4",
@@ -442,7 +490,7 @@ struct DiagnosticsServiceTests {
                 now: { now },
                 configPath: settingsURL.path,
                 configIntegrity: { .ok },
-                inspect: { id in box.value[id] }
+                probe: { id in await box.probe(id) }
             )
         }
     }
@@ -460,9 +508,16 @@ struct StubCompatibilityChecker: CompatibilityChecking, Sendable {
     func check() async -> CompatibilityReport { report }
 }
 
-final class InspectionBox: @unchecked Sendable {
-    var value: [String: DiagnosticProviderInspection]
-    init(value: [String: DiagnosticProviderInspection]) {
+final class ProbeBox: @unchecked Sendable {
+    var value: [String: DiagnosticProbeOutcome]
+    private(set) var probed: [String] = []
+
+    init(value: [String: DiagnosticProbeOutcome]) {
         self.value = value
+    }
+
+    func probe(_ providerId: String) async -> DiagnosticProbeOutcome? {
+        probed.append(providerId)
+        return value[providerId]
     }
 }

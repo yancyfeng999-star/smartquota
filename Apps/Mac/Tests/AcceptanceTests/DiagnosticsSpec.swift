@@ -21,13 +21,13 @@ struct DiagnosticsSpec {
             providers: [
                 "kimi": .cliInstalled("kimi"),
             ],
-            inspections: [
-                "kimi": DiagnosticProviderInspection(
+            probes: [
+                "kimi": DiagnosticProbeOutcome(
                     enabled: true,
-                    credential: .available,
-                    network: .unreachable,
-                    endpoint: .skipped,
-                    cache: .fresh
+                    snapshot: UsageSnapshot(providerId: "kimi", quotas: [], capturedAt: Date()),
+                    error: .timeout,
+                    reachable: false,
+                    credentialAvailable: true
                 ),
             ]
         ).runAll()
@@ -49,13 +49,12 @@ struct DiagnosticsSpec {
                     suggestedAction: .installOrSignInCLI
                 ),
             ],
-            inspections: [
-                "claude": DiagnosticProviderInspection(
+            probes: [
+                "claude": DiagnosticProbeOutcome(
                     enabled: true,
-                    credential: .available,
-                    network: .reachable,
-                    endpoint: .skipped,
-                    cache: .missing
+                    error: .cliNotFound("claude"),
+                    reachable: true,
+                    credentialAvailable: true
                 ),
             ]
         ).runAll()
@@ -75,13 +74,12 @@ struct DiagnosticsSpec {
                     suggestedAction: .none
                 ),
             ],
-            inspections: [
-                "copilot": DiagnosticProviderInspection(
+            probes: [
+                "copilot": DiagnosticProbeOutcome(
                     enabled: true,
-                    credential: .missingKey,
-                    network: .reachable,
-                    endpoint: .skipped,
-                    cache: .missing,
+                    error: .authenticationRequired,
+                    reachable: true,
+                    credentialAvailable: false,
                     detailHint: "/Users/tester/.copilot/token"
                 ),
             ]
@@ -97,13 +95,12 @@ struct DiagnosticsSpec {
             providers: [
                 "codex": .cliInstalled("codex"),
             ],
-            inspections: [
-                "codex": DiagnosticProviderInspection(
+            probes: [
+                "codex": DiagnosticProbeOutcome(
                     enabled: true,
-                    credential: .notLoggedIn,
-                    network: .reachable,
-                    endpoint: .skipped,
-                    cache: .missing
+                    error: .authenticationRequired,
+                    reachable: true,
+                    credentialAvailable: false
                 ),
             ]
         ).runAll()
@@ -114,7 +111,7 @@ struct DiagnosticsSpec {
         let denied = await env.service(
             notifications: .denied,
             providers: [:],
-            inspections: [:]
+            probes: [:]
         ).runAll()
         let notice = try #require(denied.first { $0.kind == .notificationPermission })
         #expect(notice.code == DiagnosticCode.notificationsDenied)
@@ -140,13 +137,17 @@ struct DiagnosticsSpec {
                     suggestedAction: .none
                 ),
             ],
-            inspections: [
-                "grok": DiagnosticProviderInspection(
+            probes: [
+                "grok": DiagnosticProbeOutcome(
                     enabled: true,
-                    credential: .available,
-                    network: .reachable,
-                    endpoint: .serviceRejected,
-                    cache: .expired
+                    snapshot: UsageSnapshot(
+                        providerId: "grok",
+                        quotas: [],
+                        capturedAt: Date.distantPast
+                    ),
+                    error: .rateLimited(retryAt: Date()),
+                    reachable: true,
+                    credentialAvailable: true
                 ),
             ]
         ).runAll()
@@ -176,13 +177,17 @@ struct DiagnosticsSpec {
                     suggestedAction: .none
                 ),
             ],
-            inspections: [
-                "copilot": DiagnosticProviderInspection(
+            probes: [
+                "copilot": DiagnosticProbeOutcome(
                     enabled: true,
-                    credential: .missingKey,
-                    network: .unreachable,
-                    endpoint: .skipped,
-                    cache: .expired,
+                    snapshot: UsageSnapshot(
+                        providerId: "copilot",
+                        quotas: [],
+                        capturedAt: Date.distantPast
+                    ),
+                    error: .authenticationRequired,
+                    reachable: false,
+                    credentialAvailable: false,
                     detailHint: "jane.doe@example.com sk-secretTOKEN99 Cookie: sid=1 /Users/tester/.copilot"
                 ),
             ]
@@ -220,7 +225,7 @@ private enum DiagnosticsHarness {
         func service(
             notifications: CompatibilityNotificationStatus,
             providers: [String: ProviderCompatibility],
-            inspections: [String: DiagnosticProviderInspection]
+            probes: [String: DiagnosticProbeOutcome]
         ) -> DiagnosticsService {
             let report = CompatibilityReport.make(
                 minimumOSSatisfied: true,
@@ -240,7 +245,7 @@ private enum DiagnosticsHarness {
                     now: { Date(timeIntervalSince1970: 1_700_000_000) },
                     configPath: settingsURL.path,
                     configIntegrity: { .ok },
-                    inspect: { inspections[$0] }
+                    probe: { probes[$0] }
                 )
             )
         }

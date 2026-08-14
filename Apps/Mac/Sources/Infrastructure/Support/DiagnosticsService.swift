@@ -9,7 +9,7 @@ public struct DiagnosticSessionContext: Sendable {
     public var now: @Sendable () -> Date
     public var configPath: String
     public var configIntegrity: @Sendable () -> DiagnosticConfigIntegrity
-    public var inspect: @Sendable (String) async -> DiagnosticProviderInspection?
+    public var probe: @Sendable (String) async -> DiagnosticProbeOutcome?
 
     public init(
         appVersion: String,
@@ -18,7 +18,7 @@ public struct DiagnosticSessionContext: Sendable {
         now: @escaping @Sendable () -> Date = { Date() },
         configPath: String,
         configIntegrity: @escaping @Sendable () -> DiagnosticConfigIntegrity,
-        inspect: @escaping @Sendable (String) async -> DiagnosticProviderInspection?
+        probe: @escaping @Sendable (String) async -> DiagnosticProbeOutcome?
     ) {
         self.appVersion = appVersion
         self.osVersion = osVersion
@@ -26,7 +26,7 @@ public struct DiagnosticSessionContext: Sendable {
         self.now = now
         self.configPath = configPath
         self.configIntegrity = configIntegrity
-        self.inspect = inspect
+        self.probe = probe
     }
 }
 
@@ -237,8 +237,7 @@ public final class DiagnosticsService: DiagnosticsServicing, Sendable {
         now: Date
     ) async -> [DiagnosticResult] {
         let check = report.providerChecks[providerId]
-        let inspection = await context.inspect(providerId)
-        let enabled = check?.enabled ?? inspection?.enabled ?? false
+        let enabled = check?.enabled ?? false
         var results: [DiagnosticResult] = [
             providerEnabledResult(providerId: providerId, enabled: enabled, now: now),
         ]
@@ -248,7 +247,8 @@ public final class DiagnosticsService: DiagnosticsServicing, Sendable {
             results.append(cliResult(check: check, cliName: cliName, now: now))
         }
 
-        guard let inspection else { return results }
+        guard let outcome = await context.probe(providerId) else { return results }
+        let inspection = DiagnosticClassification.inspection(providerId: providerId, outcome: outcome)
 
         results.append(credentialResult(providerId: providerId, inspection: inspection, now: now))
         results.append(networkResult(providerId: providerId, inspection: inspection, now: now))
@@ -549,8 +549,8 @@ extension DiagnosticSessionContext {
             now: { Date() },
             configPath: store.fileURL.path,
             configIntegrity: { configIntegrity(of: store) },
-            inspect: { providerId in
-                await DiagnosticLiveInspector.inspect(providerId: providerId, monitor: monitor)
+            probe: { providerId in
+                await DiagnosticLiveInspector.probe(providerId: providerId, monitor: monitor)
             }
         )
         let service = DiagnosticsService(
@@ -563,39 +563,49 @@ extension DiagnosticSessionContext {
 
 enum DiagnosticLiveInspector {
     @MainActor
-    static func inspect(
+    static func probe(
         providerId: String,
         monitor: QuotaMonitor
-    ) async -> DiagnosticProviderInspection? {
+    ) async -> DiagnosticProbeOutcome? {
         guard let provider = monitor.provider(for: providerId) else {
-            return DiagnosticProviderInspection(
+            return DiagnosticProbeOutcome(
                 enabled: false,
-                credential: .missingKey,
-                network: .reachable,
-                endpoint: .skipped,
-                cache: .missing
+                reachable: true,
+                credentialAvailable: false
             )
         }
-        let available = await provider.isAvailable()
-        let reachable = await DiagnosticReachability.isSatisfied()
-        let snapshot = provider.snapshot
-        let error = provider.lastError
-        let network = DiagnosticClassification.network(lastError: error, reachable: reachable)
-        var endpoint = DiagnosticClassification.endpoint(lastError: error, snapshot: snapshot)
-        let credential = DiagnosticClassification.credential(
-            providerId: providerId,
-            available: available,
-            lastError: error
-        )
-        if network == .unreachable || credential != .available {
-            endpoint = .skipped
+        var snapshot: UsageSnapshot?
+        var probeError: ProbeError?
+        do {
+            snapshot = try await provider.refresh(.interactive)
+        } catch let error as ProbeError {
+            probeError = error
+            snapshot = provider.snapshot
+        } catch {
+            probeError = .executionFailed(DiagnosticPrivacy.sanitize(error.localizedDescription))
+            snapshot = provider.snapshot
         }
-        return DiagnosticProviderInspection(
+        let reachable: Bool
+        if probeError == nil, snapshot != nil {
+            reachable = true
+        } else {
+            reachable = await DiagnosticReachability.isSatisfied()
+        }
+        let credentialAvailable: Bool
+        switch probeError {
+        case .authenticationRequired, .sessionExpired:
+            credentialAvailable = false
+        case nil:
+            credentialAvailable = true
+        default:
+            credentialAvailable = true
+        }
+        return DiagnosticProbeOutcome(
             enabled: provider.isEnabled,
-            credential: credential,
-            network: network,
-            endpoint: endpoint,
-            cache: DiagnosticClassification.cache(snapshot: snapshot)
+            snapshot: snapshot,
+            error: probeError,
+            reachable: reachable,
+            credentialAvailable: credentialAvailable
         )
     }
 }

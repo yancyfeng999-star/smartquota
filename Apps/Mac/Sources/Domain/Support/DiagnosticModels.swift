@@ -79,6 +79,51 @@ public enum DiagnosticConfigIntegrity: String, Codable, Sendable {
     case corrupt
 }
 
+/// Fresh membership probe result. Diagnostics classify from this, not leftover snapshots.
+public struct DiagnosticProbeOutcome: Sendable, Equatable {
+    public var enabled: Bool
+    public var snapshot: UsageSnapshot?
+    public var error: ProbeError?
+    public var reachable: Bool
+    public var credentialAvailable: Bool
+    public var detailHint: String?
+
+    public init(
+        enabled: Bool,
+        snapshot: UsageSnapshot? = nil,
+        error: ProbeError? = nil,
+        reachable: Bool,
+        credentialAvailable: Bool,
+        detailHint: String? = nil
+    ) {
+        self.enabled = enabled
+        self.snapshot = snapshot
+        self.error = error
+        self.reachable = reachable
+        self.credentialAvailable = credentialAvailable
+        self.detailHint = detailHint
+    }
+
+    public static func success(
+        providerId: String,
+        capturedAt: Date = Date(),
+        detailHint: String? = nil
+    ) -> DiagnosticProbeOutcome {
+        DiagnosticProbeOutcome(
+            enabled: true,
+            snapshot: UsageSnapshot(providerId: providerId, quotas: [], capturedAt: capturedAt),
+            error: nil,
+            reachable: true,
+            credentialAvailable: true,
+            detailHint: detailHint
+        )
+    }
+}
+
+public protocol DiagnosticMembershipProbing: Sendable {
+    func probe(providerId: String) async -> DiagnosticProbeOutcome?
+}
+
 public struct DiagnosticProviderInspection: Sendable, Equatable {
     public var enabled: Bool
     public var credential: DiagnosticCredentialKind
@@ -373,6 +418,30 @@ public protocol DiagnosticsServicing: Sendable {
 }
 
 public enum DiagnosticClassification: Sendable {
+    public static func inspection(
+        providerId: String,
+        outcome: DiagnosticProbeOutcome
+    ) -> DiagnosticProviderInspection {
+        let credential = credential(
+            providerId: providerId,
+            available: outcome.credentialAvailable,
+            lastError: outcome.error
+        )
+        let network = network(lastError: outcome.error, reachable: outcome.reachable)
+        var endpoint = endpoint(lastError: outcome.error, snapshot: outcome.snapshot)
+        if network == .unreachable || credential != .available {
+            endpoint = .skipped
+        }
+        return DiagnosticProviderInspection(
+            enabled: outcome.enabled,
+            credential: credential,
+            network: network,
+            endpoint: endpoint,
+            cache: cache(snapshot: outcome.snapshot),
+            detailHint: outcome.detailHint
+        )
+    }
+
     public static func credential(
         providerId: String,
         available: Bool,
@@ -381,7 +450,10 @@ public enum DiagnosticClassification: Sendable {
         if let probe = lastError as? ProbeError {
             switch probe {
             case .authenticationRequired, .sessionExpired:
-                return .notLoggedIn
+                if ProviderExternalDependency.cliName(for: providerId) != nil {
+                    return .notLoggedIn
+                }
+                return .missingKey
             default:
                 break
             }
