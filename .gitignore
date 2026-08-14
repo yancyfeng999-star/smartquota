@@ -1,5 +1,8 @@
 .DS_Store
 
+# Isolated git worktrees (never commit)
+.worktrees/
+
 # --- Mac (Apps/Mac) ---
 Apps/Mac/.build/
 Apps/Mac/Tuist/.build/

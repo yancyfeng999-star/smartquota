@@ -1,0 +1,18 @@
+{
+  "app": {
+    "themeMode": "dark",
+    "language": "zh-Hans",
+    "usageDisplayMode": "remaining",
+    "overviewMode": true,
+    "backgroundSyncEnabled": false,
+    "backgroundSyncInterval": 900
+  },
+  "claude": {
+    "probeMode": "cli"
+  },
+  "providers": {
+    "claude": {
+      "isEnabled": true
+    }
+  }
+}
