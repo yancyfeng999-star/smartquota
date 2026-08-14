@@ -1,0 +1,34 @@
+{
+  "app": {
+    "themeMode": "system",
+    "language": "en",
+    "usageDisplayMode": "remaining",
+    "userHasChosenTheme": true,
+    "menuBarPercentageEnabled": false,
+    "backgroundSyncEnabled": true,
+    "backgroundSyncInterval": 900,
+    "receiveBetaUpdates": false,
+    "futureFeatureFlag": "keep-me",
+    "experimentalLayout": {
+      "columns": 3,
+      "density": "compact"
+    }
+  },
+  "claude": {
+    "probeMode": "cli",
+    "cliFallbackEnabled": true
+  },
+  "providers": {
+    "claude": {
+      "isEnabled": true,
+      "planLabel": "Pro",
+      "renewalDate": "2026-12-01",
+      "unknownProviderMeta": {
+        "source": "legacy-import",
+        "priority": 1
+      }
+    }
+  },
+  "legacyRootKey": "must-survive-migration",
+  "schemaVersion": 0
+}

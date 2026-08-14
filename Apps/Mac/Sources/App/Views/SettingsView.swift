@@ -21,18 +21,6 @@ struct SettingsContentView: View {
     @State private var backgroundSyncExpanded: Bool = false
     @State private var thresholdAlertsExpanded: Bool = false
 
-    // Manual update: check → download pkg → silent install (no confirm dialogs)
-    @State private var isCheckingUpdate = false
-    @State private var updateStatusText: String?
-    @State private var updateOpenURL: URL?
-    @State private var updateDownloadURL: URL?
-    @State private var updateIsAvailable = false
-    @State private var updateLocalInstallerURL: URL?
-    /// 0…1 while downloading; nil when not downloading.
-    @State private var updateDownloadProgress: Double?
-    /// True while expanding/copying pkg (no system Installer UI).
-    @State private var isInstallingUpdate = false
-
     // Hook settings state
     @State private var hooksExpanded: Bool = false
     @State private var hooksEnabled: Bool = false
@@ -54,6 +42,11 @@ struct SettingsContentView: View {
                 VStack(spacing: 12) {
                     themeCard
                     LanguageSettingsCard()
+                    if settings.canContinueOnboarding {
+                        ContinueOnboardingCard {
+                            OnboardingWindowController.shared.continueFromSettings()
+                        }
+                    }
                     simpleDisplayModeCard
                     menuBarStatusIconCard
                     // 1) Toggle memberships on/off
@@ -62,8 +55,12 @@ struct SettingsContentView: View {
                     backgroundSyncCard
                     thresholdAlertCard
                     launchAtLoginCard
+                    DiagnosticsSettingsCard(monitor: monitor)
+                    SettingsTransferCard(monitor: monitor)
+                    BackupRestoreCard(monitor: monitor)
+                    HelpSettingsCard(monitor: monitor)
                     logsCard
-                    updatesCard
+                    UpdateDetailsView()
                     securityCard
                     aboutCard
                 }
@@ -687,8 +684,10 @@ struct SettingsContentView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 10, weight: .bold))
+                        .decorativeGlyph()
                     Text(l10n.t("common.back"))
-                        .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                        .font(AppTypeScale.callout(theme.fontDesign, weight: .medium))
+                        .untruncatedSupportText()
                 }
                 .foregroundStyle(theme.textPrimary)
                 .padding(.horizontal, 10)
@@ -703,6 +702,7 @@ struct SettingsContentView: View {
                 )
             }
             .buttonStyle(.plain)
+            .supportIconAccessibility(id: AccessibilityChrome.ID.settingsBack, valueKey: "a11y.back.value")
 
             Spacer()
 
@@ -715,273 +715,6 @@ struct SettingsContentView: View {
             // Invisible placeholder to balance the header
             Color.clear
                 .frame(width: 60, height: 1)
-        }
-    }
-
-    // MARK: - Updates Card (manual / free GitHub check only)
-
-    /// Compact: title left, single「检查更新」right; progress bar while downloading.
-    private var updatesCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.3, green: 0.7, blue: 0.4),
-                                    Color(red: 0.2, green: 0.55, blue: 0.35)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 28, height: 28)
-
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(l10n.t("settings.updates"))
-                        .font(.system(size: 13, weight: .bold, design: theme.fontDesign))
-                        .foregroundStyle(theme.textPrimary)
-                        .lineLimit(1)
-
-                    Text(updateSubtitle)
-                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
-                        .foregroundStyle(updateIsAvailable ? theme.accentPrimary : theme.textTertiary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
-
-                Button {
-                    Task { await runManualUpdateCheck() }
-                } label: {
-                    HStack(spacing: 4) {
-                        if isCheckingUpdate && updateDownloadProgress == nil && !isInstallingUpdate {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .frame(width: 12, height: 12)
-                        }
-                        Text(checkUpdateButtonTitle)
-                            .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color(red: 0.3, green: 0.7, blue: 0.4),
-                                        Color(red: 0.2, green: 0.55, blue: 0.35)
-                                    ],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(isCheckingUpdate)
-                .opacity(isCheckingUpdate ? 0.7 : 1)
-            }
-
-            if isInstallingUpdate {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(l10n.t("settings.updates_installing"))
-                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
-                        .foregroundStyle(theme.textTertiary)
-                }
-            } else if let progress = updateDownloadProgress {
-                VStack(alignment: .leading, spacing: 4) {
-                    ProgressView(value: progress, total: 1)
-                        .progressViewStyle(.linear)
-                        .tint(Color(red: 0.3, green: 0.7, blue: 0.4))
-                    Text(l10n.tf("settings.updates_progress_fmt", Int((progress * 100).rounded())))
-                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
-                        .foregroundStyle(theme.textTertiary)
-                        .monospacedDigit()
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(theme.cardGradient)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(
-                            LinearGradient(
-                                colors: [theme.glassBorder, theme.glassBorder.opacity(0.5)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1
-                        )
-                )
-        )
-    }
-
-    private var checkUpdateButtonTitle: String {
-        if isInstallingUpdate {
-            return l10n.t("settings.updates_installing_btn")
-        }
-        if updateDownloadProgress != nil {
-            return l10n.t("settings.updates_downloading_btn")
-        }
-        if isCheckingUpdate {
-            return l10n.t("settings.updates_checking")
-        }
-        return l10n.t("settings.updates_check")
-    }
-
-    /// Compact subtitle under the title (no extra body text below the row).
-    private var updateSubtitle: String {
-        if let updateStatusText {
-            return updateStatusText
-        }
-        return l10n.tf("settings.updates_version_fmt", appVersion)
-    }
-
-    @MainActor
-    private func runManualUpdateCheck() async {
-        isCheckingUpdate = true
-        updateStatusText = nil
-        updateOpenURL = nil
-        updateDownloadURL = nil
-        updateLocalInstallerURL = nil
-        updateIsAvailable = false
-        updateDownloadProgress = nil
-        isInstallingUpdate = false
-        defer {
-            // If we quit for relaunch, this may not run; otherwise reset busy state.
-            isCheckingUpdate = false
-            isInstallingUpdate = false
-            if let p = updateDownloadProgress, p < 1 {
-                updateDownloadProgress = nil
-            }
-        }
-
-        do {
-            let result = try await GitHubReleaseChecker().check(currentVersionString: appVersion)
-            switch result {
-            case .upToDate(let current):
-                updateIsAvailable = false
-                updateDownloadProgress = nil
-                updateStatusText = l10n.tf("settings.updates_up_to_date", current.description)
-            case .updateAvailable(let current, let latest):
-                updateIsAvailable = true
-                updateOpenURL = latest.openURL
-                updateDownloadURL = ReleaseDownloader.installerDownloadURL(from: latest)
-                updateStatusText = l10n.tf(
-                    "settings.updates_available_fmt",
-                    latest.version.description,
-                    current.description
-                )
-                // One tap: download + install. No confirm dialog.
-                await downloadAndInstallUpdate()
-            }
-        } catch let error as ManualUpdateError {
-            updateIsAvailable = false
-            updateDownloadProgress = nil
-            updateStatusText = manualUpdateErrorMessage(error)
-        } catch {
-            updateIsAvailable = false
-            updateDownloadProgress = nil
-            updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
-        }
-    }
-
-    /// Download preferred installer (pkg first). Silent-install pkg; dmg falls back to open.
-    @MainActor
-    private func downloadAndInstallUpdate() async {
-        if let local = updateLocalInstallerURL, FileManager.default.fileExists(atPath: local.path) {
-            await finishWithLocalInstaller(local)
-            return
-        }
-
-        guard let remote = updateDownloadURL else {
-            updateDownloadProgress = nil
-            if let page = updateOpenURL {
-                NSWorkspace.shared.open(page)
-                updateStatusText = l10n.t("settings.updates_open_page")
-            } else {
-                updateStatusText = l10n.t("settings.updates_failed_none")
-            }
-            return
-        }
-
-        updateStatusText = l10n.t("settings.updates_downloading")
-        updateDownloadProgress = 0
-        do {
-            let file = try await ReleaseDownloader().download(from: remote) { fraction in
-                Task { @MainActor in
-                    updateDownloadProgress = fraction
-                    updateStatusText = l10n.tf(
-                        "settings.updates_progress_fmt",
-                        Int((fraction * 100).rounded())
-                    )
-                }
-            }
-            updateLocalInstallerURL = file
-            updateDownloadProgress = 1
-            await finishWithLocalInstaller(file)
-        } catch let error as ManualUpdateError {
-            updateDownloadProgress = nil
-            // Stay in settings — show error only (no browser popup / no password).
-            updateStatusText = manualUpdateErrorMessage(error)
-        } catch {
-            updateDownloadProgress = nil
-            updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
-        }
-    }
-
-    @MainActor
-    private func finishWithLocalInstaller(_ file: URL) async {
-        if file.pathExtension.lowercased() == "pkg" {
-            updateDownloadProgress = nil
-            isInstallingUpdate = true
-            updateStatusText = l10n.t("settings.updates_installing")
-            do {
-                // Expand + spawn apply.sh (user-level ditto after quit). Never asks password.
-                _ = try await SilentPkgInstaller.installAndRelaunch(pkgURL: file)
-                updateStatusText = l10n.t("settings.updates_relaunching")
-                try? await Task.sleep(nanoseconds: 250_000_000)
-                NSApp.terminate(nil)
-            } catch let error as ManualUpdateError {
-                isInstallingUpdate = false
-                updateStatusText = manualUpdateErrorMessage(error)
-            } catch {
-                isInstallingUpdate = false
-                updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
-            }
-            return
-        }
-
-        // dmg / zip fallback only: open file (may show system UI). Main path is pkg silent.
-        updateStatusText = l10n.t("settings.updates_opening")
-        NSWorkspace.shared.open(file)
-        updateStatusText = l10n.t("settings.updates_quitting")
-        try? await Task.sleep(nanoseconds: 800_000_000)
-        NSApp.terminate(nil)
-    }
-
-    private func manualUpdateErrorMessage(_ error: ManualUpdateError) -> String {
-        switch error {
-        case .invalidCurrentVersion:
-            return l10n.t("settings.updates_failed_version")
-        case .noMacReleaseFound:
-            return l10n.t("settings.updates_failed_none")
-        case .network(let detail), .decode(let detail), .install(let detail):
-            return l10n.tf("settings.updates_failed_fmt", detail)
         }
     }
 
@@ -1017,6 +750,7 @@ struct SettingsContentView: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.white)
             }
+            .decorativeGlyph()
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(l10n.t("settings.logs"))
@@ -1034,6 +768,7 @@ struct SettingsContentView: View {
                 FileLogger.shared.openCurrentLogFile()
             } label: {
                 Text(l10n.t("common.open"))
+                    .untruncatedSupportText()
                     .font(.system(size: 12, weight: .semibold, design: theme.fontDesign))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
@@ -1053,6 +788,7 @@ struct SettingsContentView: View {
                     )
             }
             .buttonStyle(.plain)
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.settingsOpenLogs)
         }
         .padding(14)
         .background(

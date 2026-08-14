@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - Expand from under header (not from card top edge)
 
@@ -39,22 +40,31 @@ struct SoftExpandFromHeaderModifier: ViewModifier, Animatable, Sendable {
 
 /// App-wide motion tokens — keep every expand / hover / selection feeling the same.
 enum AppMotion {
+    /// Honors macOS Reduce Motion so expand / hover / selection do not animate.
+    private static var prefersReducedMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    private static func motion(_ animation: Animation) -> Animation {
+        prefersReducedMotion ? .easeInOut(duration: 0.01) : animation
+    }
+
     // MARK: - Timings
 
     /// Card expand / collapse (settings, language, membership, probe).
-    static let expand: Animation = .spring(response: 0.42, dampingFraction: 0.90)
+    static var expand: Animation { motion(.spring(response: 0.42, dampingFraction: 0.90)) }
 
     /// Chevron / small chrome that tracks expand.
-    static let chevron: Animation = .spring(response: 0.36, dampingFraction: 0.88)
+    static var chevron: Animation { motion(.spring(response: 0.36, dampingFraction: 0.88)) }
 
     /// Chip / toggle selection.
-    static let selection: Animation = .spring(response: 0.32, dampingFraction: 0.86)
+    static var selection: Animation { motion(.spring(response: 0.32, dampingFraction: 0.86)) }
 
     /// Hover lift on membership cards.
-    static let hover: Animation = .easeOut(duration: 0.16)
+    static var hover: Animation { motion(.easeOut(duration: 0.16)) }
 
     /// Soft fade for list appearance.
-    static let appear: Animation = .easeOut(duration: 0.35)
+    static var appear: Animation { motion(.easeOut(duration: 0.35)) }
 
     // MARK: - Transitions
 

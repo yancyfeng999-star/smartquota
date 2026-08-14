@@ -771,6 +771,26 @@ public final class JSONSettingsRepository:
         }
     }
 
+    // MARK: - Schema / export / restore hooks
+
+    public func schemaVersion() -> Int {
+        store.schemaVersion()
+    }
+
+    /// Non-sensitive settings suitable for backup/export. Secrets are stripped.
+    public func exportAllowlistedSettings() -> [String: Any] {
+        SettingsBackupPolicy.sanitizeDictionary(store.readAll())
+    }
+
+    /// Explicit restore of an already-parsed settings document.
+    public func restoreSettings(_ dictionary: [String: Any]) throws {
+        try store.replaceAll(SettingsBackupPolicy.sanitizeDictionary(dictionary))
+    }
+
+    public func lastSettingsPersistenceError() -> SettingsPersistenceError? {
+        store.lastError
+    }
+
     // MARK: - Provider Membership Migration
 
     /// Migrates provider-level planLabel and renewalDate to account-level settings.

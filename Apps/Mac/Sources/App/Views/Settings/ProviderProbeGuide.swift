@@ -1,6 +1,9 @@
 import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
 
-/// How each built-in membership probes quota — used by 额度检测配置.
+/// How each built-in membership probes quota — used by 额度检测配置 and diagnostics.
 struct ProviderProbeGuide: Identifiable, Sendable {
     let id: String
     let title: String
@@ -10,6 +13,15 @@ struct ProviderProbeGuide: Identifiable, Sendable {
     /// Optional credential / CLI path hints.
     let credentialHint: String?
     let dashboardURL: URL?
+
+    /// Opens the membership dashboard (diagnostics “打开后台”).
+    @MainActor
+    func openDashboard() {
+        #if canImport(AppKit)
+        guard let dashboardURL else { return }
+        NSWorkspace.shared.open(dashboardURL)
+        #endif
+    }
 
     @MainActor
     static func guide(for providerId: String) -> ProviderProbeGuide {

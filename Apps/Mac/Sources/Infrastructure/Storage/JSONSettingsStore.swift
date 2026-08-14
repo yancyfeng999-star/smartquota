@@ -13,11 +13,27 @@ public final class JSONSettingsStore: @unchecked Sendable {
 
     public let fileURL: URL
     private let lock = NSLock()
+    private var _lastError: SettingsPersistenceError?
+    private var _lastCorruptCopyURL: URL?
 
     /// Creates a store backed by a JSON file.
     /// - Parameter fileURL: Path to settings file. Defaults to `~/.smartquota/settings.json`.
     public init(fileURL: URL? = nil) {
         self.fileURL = fileURL ?? Self.defaultFileURL()
+    }
+
+    /// Last load/write rejection. Corrupt JSON sets this and never overwrites the file.
+    public var lastError: SettingsPersistenceError? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastError
+    }
+
+    /// Sidecar copy of the last unreadable `settings.json` bytes.
+    public var lastCorruptCopyURL: URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastCorruptCopyURL
     }
 
     // MARK: - Public API
@@ -26,24 +42,89 @@ public final class JSONSettingsStore: @unchecked Sendable {
     /// Returns nil if key doesn't exist, file is missing, or type doesn't match.
     public func read<T>(key: String) -> T? {
         let dict = readFile()
-        return resolveRead(dict: dict, keyPath: key.split(separator: ".").map(String.init)) as? T
+        let raw = resolveRead(dict: dict, keyPath: key.split(separator: ".").map(String.init))
+        if let value = raw as? T {
+            return value
+        }
+        if T.self == Int.self, let int = SettingsJSON.intValue(raw) {
+            return int as? T
+        }
+        if T.self == Double.self, let number = SettingsJSON.doubleValue(raw) {
+            return number as? T
+        }
+        return nil
     }
 
     /// Writes a value for the given key path (dot-notation supported).
     /// Pass nil to remove the key. Creates the file and parent directories if needed.
+    /// Refuses to write when the existing file is corrupt so original bytes stay intact.
     public func write(value: Any?, key: String) {
         lock.lock()
         defer { lock.unlock() }
 
-        var dict = readFileUnsafe()
+        var dict: [String: Any]
+        switch loadUnsafe() {
+        case .corrupt(let error):
+            _lastError = error
+            preserveCorruptCopyIfNeeded()
+            return
+        case .missing, .empty:
+            _lastError = nil
+            dict = [SettingsSchema.versionKey: SettingsSchema.currentVersion]
+        case .loaded(let existing):
+            _lastError = nil
+            dict = existing
+        }
+
         let parts = key.split(separator: ".").map(String.init)
         resolveWrite(dict: &dict, keyPath: parts, value: value)
         writeFile(dict)
     }
 
     /// Returns the full settings dictionary (for migration/debugging).
+    /// Corrupt files return `[:]` and record `lastError` without writing.
     public func readAll() -> [String: Any] {
         readFile()
+    }
+
+    /// Throws when the file exists, is non-empty, and is not valid JSON.
+    public func readAllThrowing() throws -> [String: Any] {
+        lock.lock()
+        defer { lock.unlock() }
+        switch loadUnsafe() {
+        case .missing, .empty:
+            _lastError = nil
+            return [:]
+        case .loaded(let dict):
+            _lastError = nil
+            return dict
+        case .corrupt(let error):
+            _lastError = error
+            preserveCorruptCopyIfNeeded()
+            throw error
+        }
+    }
+
+    /// Root `schemaVersion`, or `0` when the key is absent.
+    public func schemaVersion() -> Int {
+        SettingsJSON.intValue(readAll()[SettingsSchema.versionKey]) ?? 0
+    }
+
+    /// Atomically replaces the entire document. Used by migration and explicit restore.
+    public func replaceAll(_ dict: [String: Any]) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        try writeFileThrowing(dict)
+        _lastError = nil
+    }
+
+    /// POSIX mode of the live file, or `nil` when it is missing.
+    public func filePOSIXPermission() -> Int? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let number = attrs[.posixPermissions] as? NSNumber else {
+            return nil
+        }
+        return Int(number.uint16Value)
     }
 
     // MARK: - Default Path
@@ -55,6 +136,13 @@ public final class JSONSettingsStore: @unchecked Sendable {
 
     // MARK: - File I/O
 
+    private enum LoadResult {
+        case missing
+        case empty
+        case loaded([String: Any])
+        case corrupt(SettingsPersistenceError)
+    }
+
     private func readFile() -> [String: Any] {
         lock.lock()
         defer { lock.unlock() }
@@ -63,20 +151,72 @@ public final class JSONSettingsStore: @unchecked Sendable {
 
     /// Must be called while holding the lock.
     private func readFileUnsafe() -> [String: Any] {
-        guard let data = try? Data(contentsOf: fileURL),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        switch loadUnsafe() {
+        case .missing, .empty:
+            _lastError = nil
+            return [:]
+        case .loaded(let dict):
+            _lastError = nil
+            return dict
+        case .corrupt(let error):
+            _lastError = error
+            preserveCorruptCopyIfNeeded()
             return [:]
         }
-        return json
+    }
+
+    /// Must be called while holding the lock.
+    private func loadUnsafe() -> LoadResult {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: fileURL.path) else {
+            return .missing
+        }
+        guard let data = try? Data(contentsOf: fileURL) else {
+            return .corrupt(.corruptJSON(path: fileURL.path))
+        }
+        if data.isEmpty {
+            return .empty
+        }
+        do {
+            let json = try JSONSerialization.jsonObject(with: data)
+            guard let dict = json as? [String: Any] else {
+                return .corrupt(.corruptJSON(path: fileURL.path))
+            }
+            return .loaded(dict)
+        } catch {
+            return .corrupt(.corruptJSON(path: fileURL.path))
+        }
     }
 
     /// Must be called while holding the lock.
     private func writeFile(_ dict: [String: Any]) {
-        let parentDir = fileURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: parentDir, withIntermediateDirectories: true)
+        try? writeFileThrowing(dict)
+    }
 
-        if let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: fileURL, options: .atomic)
+    /// Must be called while holding the lock.
+    private func writeFileThrowing(_ dict: [String: Any]) throws {
+        guard JSONSerialization.isValidJSONObject(dict) else {
+            throw SettingsPersistenceError.validationFailed("settings document is not valid JSON")
+        }
+        let data = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
+        try SettingsFileIO.performAtomicWrite(data, to: fileURL)
+    }
+
+    /// Must be called while holding the lock.
+    private func preserveCorruptCopyIfNeeded() {
+        if _lastCorruptCopyURL != nil { return }
+        guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else { return }
+        let destDir = fileURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(CrashRecoveryMarker.directoryName, isDirectory: true)
+            .appendingPathComponent(CrashRecoveryMarker.corruptDirectoryName, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
+            let dest = destDir.appendingPathComponent("settings.json")
+            try SettingsFileIO.performAtomicWrite(data, to: dest)
+            _lastCorruptCopyURL = dest
+        } catch {
+            // Original bytes stay in place even if the sidecar copy cannot be written.
         }
     }
 

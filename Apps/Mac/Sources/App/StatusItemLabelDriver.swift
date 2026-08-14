@@ -16,8 +16,8 @@ import Infrastructure
 ///    state the SwiftUI label did (monitor, settings, session) and draws the
 ///    composed label into `statusItem.button.image`.
 /// 2. **The background-refresh lifecycle** — a second sync watches the refresh
-///    cadence/target settings and restarts `QuotaMonitor.startMonitoring`,
-///    replacing the label's `.task(id:)`.
+///    cadence/target settings and hands them to `RefreshCoordinator`, which owns
+///    the cancellable timer. Replaces the label's `.task(id:)`.
 ///
 /// Lives for the app's lifetime; the closure retain cycles this creates are
 /// intentional and harmless.
@@ -26,11 +26,13 @@ final class StatusItemLabelDriver {
     private let monitor: QuotaMonitor
     private let settings: AppSettings
     private let sessionMonitor: SessionMonitor
+    private let refreshCoordinator: RefreshCoordinator
+    private let powerState: (any PowerStateProvider)?
 
     private var statusItem: NSStatusItem?
     private var labelSync: ObservationRenderSync<LabelContent>?
     private var loopSync: ObservationRenderSync<RefreshLoopKey>?
-    private var streamConsumer: Task<Void, Never>?
+    private var tickSync: ObservationRenderSync<RefreshState>?
     private var wakeObserver: NSObjectProtocol?
     private var appearanceObserver: NSObjectProtocol?
 
@@ -41,10 +43,18 @@ final class StatusItemLabelDriver {
     private var lastContent: LabelContent?
     private var imageWipeObservation: NSKeyValueObservation?
 
-    init(monitor: QuotaMonitor, settings: AppSettings, sessionMonitor: SessionMonitor) {
+    init(
+        monitor: QuotaMonitor,
+        settings: AppSettings,
+        sessionMonitor: SessionMonitor,
+        refreshCoordinator: RefreshCoordinator,
+        powerState: (any PowerStateProvider)? = nil
+    ) {
         self.monitor = monitor
         self.settings = settings
         self.sessionMonitor = sessionMonitor
+        self.refreshCoordinator = refreshCoordinator
+        self.powerState = powerState
     }
 
     // No deinit: this object lives for the app's lifetime, so the wake
@@ -341,7 +351,8 @@ final class StatusItemLabelDriver {
     }
 
     /// Starts watching the refresh cadence/target settings and (re)starts the
-    /// monitoring loop whenever they change. Call once at app startup.
+    /// coordinator-owned background loop whenever they change. Call once at
+    /// app startup.
     func startMonitoringLifecycle() {
         guard loopSync == nil else { return }
         let sync = ObservationRenderSync(
@@ -350,6 +361,17 @@ final class StatusItemLabelDriver {
         )
         loopSync = sync
         sync.start()
+
+        // After long idle, SwiftUI observation can stop delivering invalidations
+        // (issue #192). Coordinator state changes force a cheap label repaint.
+        if tickSync == nil {
+            let ticks = ObservationRenderSync(
+                read: { [self] in refreshCoordinator.state },
+                render: { [self] _ in labelSync?.renderNow() }
+            )
+            tickSync = ticks
+            ticks.start()
+        }
     }
 
     private func currentRefreshLoopKey() -> RefreshLoopKey {
@@ -375,27 +397,17 @@ final class StatusItemLabelDriver {
     }
 
     private func restartMonitoring(_ key: RefreshLoopKey) {
-        streamConsumer?.cancel()
-        streamConsumer = nil
-        guard key.isEnabled else {
-            monitor.stopMonitoring()
+        if !key.isEnabled {
+            refreshCoordinator.stopBackgroundRefresh()
             return
         }
-        AppLog.monitor.info("Background refresh starting (interval: \(key.seconds)s, providers: \(key.providerIds?.joined(separator: ",") ?? "selected"))")
-        let stream = monitor.startMonitoring(
+        let paused = powerState?.refreshPausePolicy().pauseBackgroundRefresh == true
+        AppLog.monitor.info("Background refresh starting (interval: \(key.seconds)s, providers: \(key.providerIds?.joined(separator: ",") ?? "selected"), paused: \(paused))")
+        refreshCoordinator.setBackgroundRefresh(
+            enabled: true,
             interval: .seconds(key.seconds),
             providerIds: key.providerIds
         )
-        streamConsumer = Task {
-            // Each refresh tick imperatively forces a repaint. We can't rely on
-            // the @Observable chain alone: after long idle it can stop delivering
-            // invalidations (issue #192), freezing the menu-bar image even while
-            // probes keep succeeding. renderNow() dedupes inside render(), so this
-            // is cheap and only repaints when the composed image actually changed.
-            for await _ in stream {
-                self.labelSync?.renderNow()
-            }
-        }
     }
 }
 

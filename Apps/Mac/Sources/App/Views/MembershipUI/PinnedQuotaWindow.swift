@@ -25,6 +25,7 @@ final class PinnedQuotaWindowController: NSObject, NSWindowDelegate {
         monitor: QuotaMonitor,
         sessionMonitor: SessionMonitor,
         quotaAlerter: QuotaAlerter,
+        refreshCoordinator: RefreshCoordinator,
         onHookSettingsChanged: ((Bool) -> Void)?
     ) {
         if isOpen {
@@ -42,6 +43,7 @@ final class PinnedQuotaWindowController: NSObject, NSWindowDelegate {
                 monitor: monitor,
                 sessionMonitor: sessionMonitor,
                 quotaAlerter: quotaAlerter,
+                refreshCoordinator: refreshCoordinator,
                 onHookSettingsChanged: onHookSettingsChanged
             )
         }
@@ -51,6 +53,7 @@ final class PinnedQuotaWindowController: NSObject, NSWindowDelegate {
         monitor: QuotaMonitor,
         sessionMonitor: SessionMonitor,
         quotaAlerter: QuotaAlerter,
+        refreshCoordinator: RefreshCoordinator,
         onHookSettingsChanged: ((Bool) -> Void)?
     ) {
         defer { isOpening = false }
@@ -79,6 +82,7 @@ final class PinnedQuotaWindowController: NSObject, NSWindowDelegate {
             monitor: monitor,
             sessionMonitor: sessionMonitor,
             quotaAlerter: quotaAlerter,
+            refreshCoordinator: refreshCoordinator,
             onHookSettingsChanged: onHookSettingsChanged,
             runsInPinnedWindow: true
         )
@@ -139,6 +143,7 @@ final class PinnedQuotaWindowController: NSObject, NSWindowDelegate {
         monitor: QuotaMonitor,
         sessionMonitor: SessionMonitor,
         quotaAlerter: QuotaAlerter,
+        refreshCoordinator: RefreshCoordinator,
         onHookSettingsChanged: ((Bool) -> Void)?
     ) {
         if isOpen || isOpening {
@@ -148,6 +153,7 @@ final class PinnedQuotaWindowController: NSObject, NSWindowDelegate {
                 monitor: monitor,
                 sessionMonitor: sessionMonitor,
                 quotaAlerter: quotaAlerter,
+                refreshCoordinator: refreshCoordinator,
                 onHookSettingsChanged: onHookSettingsChanged
             )
         }

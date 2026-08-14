@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+@testable import Domain
 @testable import Infrastructure
 
 @Suite("JSONSettingsStore Tests")
@@ -212,14 +213,91 @@ struct JSONSettingsStoreTests {
     }
 
     @Test
-    func `write to malformed file replaces with valid JSON`() throws {
+    func `write to malformed file leaves original bytes unchanged`() throws {
         let (store, dir) = try makeStore(initialJSON: "broken")
         defer { cleanup(dir) }
 
+        let settingsURL = dir.appendingPathComponent("settings.json")
+        let original = try Data(contentsOf: settingsURL)
+
         store.write(value: "fixed", key: "status")
 
+        let after = try Data(contentsOf: settingsURL)
+        #expect(after == original)
         let result: String? = store.read(key: "status")
-        #expect(result == "fixed")
+        #expect(result == nil)
+        #expect(store.lastError?.code == "settings.corrupt_json")
+        #expect(store.lastError?.recoveryHint.isEmpty == false)
+    }
+
+    @Test
+    func `readAllThrowing surfaces corrupt JSON without writing`() throws {
+        let (store, dir) = try makeStore(initialJSON: "not valid json {{{")
+        defer { cleanup(dir) }
+
+        let settingsURL = dir.appendingPathComponent("settings.json")
+        let original = try Data(contentsOf: settingsURL)
+
+        #expect(throws: SettingsPersistenceError.self) {
+            try store.readAllThrowing()
+        }
+        #expect(try Data(contentsOf: settingsURL) == original)
+    }
+
+    @Test
+    func `corrupt JSON is copied under recovery without changing the original file`() throws {
+        let (store, dir) = try makeStore(initialJSON: "not valid json {{{")
+        defer { cleanup(dir) }
+
+        let settingsURL = dir.appendingPathComponent("settings.json")
+        let original = try Data(contentsOf: settingsURL)
+
+        #expect(throws: SettingsPersistenceError.self) {
+            try store.readAllThrowing()
+        }
+
+        #expect(try Data(contentsOf: settingsURL) == original)
+        let copy = try #require(store.lastCorruptCopyURL)
+        #expect(try Data(contentsOf: copy) == original)
+        #expect(copy.path.contains("/recovery/corrupt/"))
+    }
+
+    @Test
+    func `schemaVersion is zero when key is absent`() throws {
+        let json = """
+        { "app": { "themeMode": "dark" } }
+        """
+        let (store, dir) = try makeStore(initialJSON: json)
+        defer { cleanup(dir) }
+
+        #expect(store.schemaVersion() == 0)
+    }
+
+    @Test
+    func `schemaVersion persists on new files`() throws {
+        let (store, dir) = try makeStore()
+        defer { cleanup(dir) }
+
+        store.write(value: "dark", key: "app.themeMode")
+        #expect(store.schemaVersion() == SettingsSchema.currentVersion)
+    }
+
+    @Test
+    func `write preserves unknown root fields`() throws {
+        let json = """
+        {
+            "app": { "themeMode": "dark" },
+            "legacyRootKey": "must-survive-migration"
+        }
+        """
+        let (store, dir) = try makeStore(initialJSON: json)
+        defer { cleanup(dir) }
+
+        store.write(value: "light", key: "app.themeMode")
+
+        let all = store.readAll()
+        #expect(all["legacyRootKey"] as? String == "must-survive-migration")
+        #expect((all["app"] as? [String: Any])?["themeMode"] as? String == "light")
     }
 
     @Test

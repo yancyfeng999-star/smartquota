@@ -28,9 +28,23 @@ struct SmartQuotaApp: App {
     /// permanently stop re-evaluating after system sleep (issue #192).
     private let statusItemDriver: StatusItemLabelDriver
 
+    /// User-triggered and background refresh, cancel, and success/failure counts.
+    private let refreshCoordinator: RefreshCoordinator
+
     /// Binding required by `.menuBarExtraAccess`; also enables programmatic
     /// dropdown control if ever needed.
     @State private var isMenuPresented = false
+
+    /// Session markers + Safe Mode recovery. Injected only via `configRoot` in tests.
+    private let crashRecoveryStore: CrashRecoveryStore
+
+    /// First-launch step completion. Production path is `AppIdentity.ensureConfigDirectory()`.
+    private let firstLaunchStore: FirstLaunchStore
+
+    /// Decided before providers, extensions, refresh, or hooks start.
+    @State private var launchMode: AppLaunchMode
+
+    @State private var didStartNormalServices: Bool
 
     /// The hook HTTP server that receives events from Claude Code
     private let hookServer = HookHTTPServer()
@@ -71,6 +85,27 @@ struct SmartQuotaApp: App {
         }
         #endif
 
+        // Migrate settings first. A thrown migrateIfNeeded() records
+        // recovery/migration-failed so Safe Mode reason is `.migrationFailed`.
+        let configRoot = AppIdentity.ensureConfigDirectory()
+        let recovery = CrashRecoveryStore(
+            configRoot: configRoot,
+            settingsStore: .shared
+        )
+        self.crashRecoveryStore = recovery
+        self.firstLaunchStore = FirstLaunchStore.usingAppIdentity(configRoot)
+        let runner = SettingsMigrationRunner(
+            store: .shared,
+            backupManager: BackupManager(configRoot: configRoot)
+        )
+        let mode = LaunchSettingsBootstrap.migrateThenBeginLaunch(
+            runner: runner,
+            recovery: recovery
+        )
+        let recoveryState = AppRecoveryState(launchMode: mode)
+        self._launchMode = State(initialValue: mode)
+        self._didStartNormalServices = State(initialValue: !recoveryState.isSafeMode)
+
         // Create the shared settings repository (JSON-backed: ~/.smartquota/settings.json)
         // JSONSettingsRepository implements all sub-protocols:
         // - AppSettingsRepository (app-level display/sync settings)
@@ -88,9 +123,11 @@ struct SmartQuotaApp: App {
 
         // Initialize the domain service with quota alerter
         // QuotaMonitor automatically validates selected provider on init
+        let powerState = SystemPowerStateProvider()
         let monitor = QuotaMonitor(
             providers: repository,
-            alerter: quotaAlerter
+            alerter: quotaAlerter,
+            powerStateProvider: powerState
         )
         self.monitor = monitor
         AppLog.monitor.info("QuotaMonitor initialized")
@@ -112,30 +149,34 @@ struct SmartQuotaApp: App {
         // The driver owns the menu-bar pixels and the refresh-loop lifecycle
         // (outside SwiftUI — see StatusItemLabelDriver). Pixels start flowing
         // once `.menuBarExtraAccess` hands over the NSStatusItem.
+        let refreshCoordinator = RefreshCoordinator(monitor: monitor, powerState: powerState)
+        self.refreshCoordinator = refreshCoordinator
         statusItemDriver = StatusItemLabelDriver(
             monitor: monitor,
             settings: AppSettings.shared,
-            sessionMonitor: sessionMonitor
+            sessionMonitor: sessionMonitor,
+            refreshCoordinator: refreshCoordinator,
+            powerState: powerState
         )
-        statusItemDriver.startMonitoringLifecycle()
-
-        // Load user extensions from ~/.smartquota/extensions/
-        let extensionRegistry = ExtensionRegistry(
-            settingsRepository: settingsRepository,
-            configRepository: AppSettings.shared.extensionConfig
+        AppSettings.shared.updateMigrationBackupPath(
+            recovery.recordedMigrationBackupDirectory?.path
         )
-        let extensionProviders = extensionRegistry.loadExtensions(into: monitor)
-        if !extensionProviders.isEmpty {
-            AppLog.providers.info("Loaded \(extensionProviders.count) extension provider(s): \(extensionProviders.map(\.name).joined(separator: ", "))")
+        if recoveryState.shouldStartBackgroundRefresh {
+            statusItemDriver.startMonitoringLifecycle()
         }
 
-        // Start hook server if hooks are enabled
-        if settingsRepository.isHookEnabled() {
-            // Reconcile installed hooks so newly-added events (e.g.
-            // UserPromptSubmit, which revives a stopped session) register for
-            // existing users without re-toggling the setting. install() is
-            // idempotent — it replaces only 智额's own matcher entries
-            // per event and preserves hooks from other tools.
+        if recoveryState.shouldLoadUserExtensions {
+            let extensionRegistry = ExtensionRegistry(
+                settingsRepository: settingsRepository,
+                configRepository: AppSettings.shared.extensionConfig
+            )
+            let extensionProviders = extensionRegistry.loadExtensions(into: monitor)
+            if !extensionProviders.isEmpty {
+                AppLog.providers.info("Loaded \(extensionProviders.count) extension provider(s): \(extensionProviders.map(\.name).joined(separator: ", "))")
+            }
+        }
+
+        if recoveryState.shouldStartHookService, settingsRepository.isHookEnabled() {
             if HookInstaller.isInstalled() {
                 try? HookInstaller.install()
             }
@@ -145,7 +186,48 @@ struct SmartQuotaApp: App {
         // Note: Notification permission is requested in onAppear, not here
         // Menu bar apps need the run loop to be active before requesting permissions
 
-        AppLog.ui.info("\(Brand.nameCN) initialization complete")
+        recovery.markReady()
+        appDelegate.crashRecoveryStore = recovery
+        let launchForOnboarding = mode
+        let storeForOnboarding = firstLaunchStore
+        appDelegate.presentFirstLaunchIfNeeded = {
+            OnboardingWindowController.shared.configure(
+                store: storeForOnboarding,
+                monitor: monitor
+            )
+            OnboardingWindowController.shared.presentIfNeeded(launchMode: launchForOnboarding)
+        }
+        AppLog.ui.info("\(Brand.nameCN) initialization complete (mode: \(String(describing: mode)))")
+    }
+
+    private func leaveSafeMode() {
+        AppSettings.shared.reloadFromDisk()
+        launchMode = .normal
+        SafeModeWindowController.shared.close()
+        if !didStartNormalServices {
+            didStartNormalServices = true
+            startDeferredNormalServices()
+        }
+        OnboardingWindowController.shared.presentIfNeeded(launchMode: .normal)
+    }
+
+    private func startDeferredNormalServices() {
+        statusItemDriver.startMonitoringLifecycle()
+        let settingsRepository = JSONSettingsRepository.shared
+        let extensionRegistry = ExtensionRegistry(
+            settingsRepository: settingsRepository,
+            configRepository: AppSettings.shared.extensionConfig
+        )
+        let extensionProviders = extensionRegistry.loadExtensions(into: monitor)
+        if !extensionProviders.isEmpty {
+            AppLog.providers.info("Loaded \(extensionProviders.count) extension provider(s): \(extensionProviders.map(\.name).joined(separator: ", "))")
+        }
+        if settingsRepository.isHookEnabled() {
+            if HookInstaller.isInstalled() {
+                try? HookInstaller.install()
+            }
+            startHookServer()
+        }
     }
 
     /// App settings for theme
@@ -219,21 +301,48 @@ struct SmartQuotaApp: App {
         // Pure menu-bar agent (LSUIElement=true): stays in status bar until user quits.
         MenuBarExtra {
             Group {
-                #if ENABLE_SPARKLE
-                MenuContentView(monitor: monitor, sessionMonitor: sessionMonitor, quotaAlerter: quotaAlerter) { enabled in
-                        if enabled { startHookServer() } else { stopHookServer() }
+                if case .safeMode(let reason) = launchMode {
+                    SafeModeView(reason: reason, store: crashRecoveryStore) {
+                        leaveSafeMode()
                     }
                     .appThemeProvider(themeModeId: settings.themeMode)
-                    .environment(\.sparkleUpdater, sparkleUpdater)
-                #else
-                MenuContentView(monitor: monitor, sessionMonitor: sessionMonitor, quotaAlerter: quotaAlerter) { enabled in
-                        if enabled { startHookServer() } else { stopHookServer() }
+                    .onAppear {
+                        SafeModeWindowController.shared.show(
+                            reason: reason,
+                            store: crashRecoveryStore,
+                            onRetryNormal: { leaveSafeMode() }
+                        )
                     }
-                    .appThemeProvider(themeModeId: settings.themeMode)
-                #endif
+                } else {
+                    #if ENABLE_SPARKLE
+                    MenuContentView(monitor: monitor, sessionMonitor: sessionMonitor, quotaAlerter: quotaAlerter, refreshCoordinator: refreshCoordinator) { enabled in
+                            if enabled { startHookServer() } else { stopHookServer() }
+                        }
+                        .appThemeProvider(themeModeId: settings.themeMode)
+                        .environment(\.sparkleUpdater, sparkleUpdater)
+                    #else
+                    MenuContentView(monitor: monitor, sessionMonitor: sessionMonitor, quotaAlerter: quotaAlerter, refreshCoordinator: refreshCoordinator) { enabled in
+                            if enabled { startHookServer() } else { stopHookServer() }
+                        }
+                        .appThemeProvider(themeModeId: settings.themeMode)
+                    #endif
+                }
             }
             .onAppear {
+                appDelegate.crashRecoveryStore = crashRecoveryStore
                 statusItemDriver.reassertPresentation()
+                OnboardingWindowController.shared.configure(
+                    store: firstLaunchStore,
+                    monitor: monitor
+                )
+                Task {
+                    let checker = CompatibilityChecker(
+                        store: .shared,
+                        environment: .live(appDirectory: AppIdentity.configDirectoryURL)
+                    )
+                    let report = await checker.check()
+                    AppSettings.shared.updateCompatibilityReport(report)
+                }
             }
             .onDisappear { statusItemDriver.reassertPresentation() }
         } label: {

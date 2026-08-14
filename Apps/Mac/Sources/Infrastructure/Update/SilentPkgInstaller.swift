@@ -7,21 +7,40 @@ import Domain
 public enum SilentPkgInstaller: Sendable {
 
     /// 解包 pkg，调度替换脚本后立即返回；调用方应随后 `NSApp.terminate`。
+    /// Does not claim the running bundle is already the new version.
     @MainActor
-    public static func installAndRelaunch(pkgURL: URL) async throws -> Result {
-        try scheduleReplace(pkgURL: pkgURL, destinationApp: preferredDestination())
-        return Result(installedAppURL: preferredDestination())
+    public static func installAndRelaunch(
+        pkgURL: URL,
+        currentVersion: AppVersion,
+        destinationApp: URL? = nil
+    ) async throws -> Result {
+        let dest = destinationApp ?? preferredDestination()
+        let incoming = try scheduleReplace(
+            pkgURL: pkgURL,
+            destinationApp: dest,
+            currentVersion: currentVersion
+        )
+        return Result(
+            installedAppURL: dest,
+            incomingVersion: incoming,
+            previousVersion: currentVersion
+        )
     }
 
     public struct Result: Sendable, Equatable {
         public let installedAppURL: URL
+        public let incomingVersion: AppVersion
+        public let previousVersion: AppVersion
     }
 
-    /// 与智余 `PackageSilentInstaller.scheduleReplace` 同构。
+    /// Expand, verify the incoming bundle is newer, then schedule replace-after-quit.
+    /// On any failure the current `destinationApp` is left untouched.
+    @discardableResult
     public static func scheduleReplace(
         pkgURL: URL,
-        destinationApp: URL
-    ) throws {
+        destinationApp: URL,
+        currentVersion: AppVersion
+    ) throws -> AppVersion {
         guard pkgURL.pathExtension.lowercased() == "pkg" else {
             throw ManualUpdateError.install("Not a .pkg file")
         }
@@ -47,6 +66,14 @@ public enum SilentPkgInstaller: Sendable {
             throw ManualUpdateError.install("安装包内未找到 App")
         }
 
+        let incomingVersion: AppVersion
+        do {
+            incomingVersion = try UpdateInstallGuard.verifyExpandedApp(newApp, currentVersion: currentVersion)
+        } catch {
+            try? fm.removeItem(at: work)
+            throw error
+        }
+
         let destDir = destinationApp.deletingLastPathComponent()
         guard fm.isWritableFile(atPath: destDir.path) || fm.isWritableFile(atPath: destinationApp.path) else {
             try? fm.removeItem(at: work)
@@ -63,41 +90,13 @@ public enum SilentPkgInstaller: Sendable {
         try? fm.createDirectory(at: logURL, withIntermediateDirectories: true)
         let logFile = logURL.appendingPathComponent("update.log")
 
-        // 与智余 apply.sh 同结构：等 PID 退出 → 挪走旧包 → ditto → 清 quarantine → open
-        let script = """
-        #!/bin/bash
-        set -e
-        NEW=\(shellEscape(newApp.path))
-        DEST=\(shellEscape(destinationApp.path))
-        WORK=\(shellEscape(work.path))
-        LOG=\(shellEscape(logFile.path))
-        PID=\(pid)
-        {
-          echo "$(date '+%Y-%m-%d %H:%M:%S') update start pid=$PID"
-          for i in $(seq 1 100); do
-            if ! kill -0 "$PID" 2>/dev/null; then
-              break
-            fi
-            sleep 0.2
-          done
-          sleep 0.6
-          if [ ! -d "$NEW" ]; then
-            echo "missing new app: $NEW"
-            exit 1
-          fi
-          OLD="${DEST}.preupdate"
-          rm -rf "$OLD"
-          if [ -e "$DEST" ]; then
-            mv "$DEST" "$OLD" || rm -rf "$DEST"
-          fi
-          /usr/bin/ditto --norsrc --noextattr --noqtn "$NEW" "$DEST"
-          /usr/bin/xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
-          rm -rf "$OLD"
-          /usr/bin/open "$DEST"
-          echo "update ok → $DEST"
-          rm -rf "$WORK"
-        } >>"$LOG" 2>&1
-        """
+        let script = makeApplyScript(
+            newApp: newApp,
+            destinationApp: destinationApp,
+            work: work,
+            logFile: logFile,
+            pid: pid
+        )
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
 
@@ -113,7 +112,90 @@ public enum SilentPkgInstaller: Sendable {
             try? fm.removeItem(at: work)
             throw ManualUpdateError.install("Failed to start apply script: \(error.localizedDescription)")
         }
-        appendLog("Silent PKG install scheduled → \(destinationApp.path)")
+        appendLog("Silent PKG install scheduled \(currentVersion) → \(incomingVersion) at \(destinationApp.path)")
+        return incomingVersion
+    }
+
+    /// Incoming copy is created first; the live app is only moved after that copy exists.
+    public static func applyScriptLeavesCurrentAppUntilIncomingReady() -> Bool {
+        let script = makeApplyScript(
+            newApp: URL(fileURLWithPath: "/tmp/new.app"),
+            destinationApp: URL(fileURLWithPath: "/tmp/智额.app"),
+            work: URL(fileURLWithPath: "/tmp/work"),
+            logFile: URL(fileURLWithPath: "/tmp/update.log"),
+            pid: 1
+        )
+        let copiesIncomingFirst = script.contains("${DEST}.incoming") && script.contains("ditto")
+        let parksCurrent = script.contains("mv \"$DEST\" \"$PRE\"")
+        let noBlindDelete = !script.contains("|| rm -rf \"$DEST\"")
+        return copiesIncomingFirst && parksCurrent && noBlindDelete
+    }
+
+    static func makeApplyScript(
+        newApp: URL,
+        destinationApp: URL,
+        work: URL,
+        logFile: URL,
+        pid: Int32
+    ) -> String {
+        """
+        #!/bin/bash
+        set -e
+        NEW=\(shellEscape(newApp.path))
+        DEST=\(shellEscape(destinationApp.path))
+        WORK=\(shellEscape(work.path))
+        LOG=\(shellEscape(logFile.path))
+        PID=\(pid)
+        INCOMING="${DEST}.incoming"
+        PRE="${DEST}.preupdate"
+        {
+          echo "$(date '+%Y-%m-%d %H:%M:%S') update start pid=$PID"
+          for i in $(seq 1 100); do
+            if ! kill -0 "$PID" 2>/dev/null; then
+              break
+            fi
+            sleep 0.2
+          done
+          sleep 0.6
+          if [ ! -d "$NEW" ]; then
+            echo "missing new app: $NEW"
+            exit 1
+          fi
+          rm -rf "$INCOMING"
+          /usr/bin/ditto --norsrc --noextattr --noqtn "$NEW" "$INCOMING"
+          if [ ! -d "$INCOMING" ]; then
+            echo "incoming copy failed"
+            exit 1
+          fi
+          rm -rf "$PRE"
+          if [ -e "$DEST" ]; then
+            if ! mv "$DEST" "$PRE"; then
+              echo "could not park current app"
+              rm -rf "$INCOMING"
+              exit 1
+            fi
+          fi
+          if ! mv "$INCOMING" "$DEST"; then
+            echo "swap failed, restoring"
+            if [ -e "$PRE" ]; then
+              mv "$PRE" "$DEST" || true
+            fi
+            exit 1
+          fi
+          if [ ! -d "$DEST" ]; then
+            echo "dest missing after swap, restoring"
+            if [ -e "$PRE" ]; then
+              mv "$PRE" "$DEST" || true
+            fi
+            exit 1
+          fi
+          /usr/bin/xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
+          rm -rf "$PRE"
+          /usr/bin/open "$DEST"
+          echo "update ok → $DEST"
+          rm -rf "$WORK"
+        } >>"$LOG" 2>&1
+        """
     }
 
     // MARK: - Destination

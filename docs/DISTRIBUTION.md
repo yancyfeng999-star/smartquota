@@ -109,22 +109,27 @@ https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.19
 
 ## 四、用户怎么装
 
-### 推荐：DMG
+### 首次安装：DMG 或 PKG
 
-1. 下载 **SmartQuota-x.y.z.dmg**  
-2. 打开 dmg，把 **智额** 拖到 **Applications**  
-3. 从启动台 / 应用程序打开  
-4. 若 Gatekeeper 拦截：见下文  
-
-### PKG
-
-双击 **SmartQuota-x.y.z.pkg**，按安装向导装到「应用程序」。
+1. 下载 **SmartQuota-x.y.z.dmg** 或 **SmartQuota-x.y.z.pkg**  
+2. DMG：打开后把 **智额** 拖到 **Applications**  
+3. PKG：双击安装向导，装到「应用程序」  
+4. 从启动台 / 应用程序打开  
+5. 若 Gatekeeper 拦截：见下文（默认 ad-hoc，首次需右键打开）  
 
 ### 应用内更新（已装旧版）
 
+**PKG 是主路径**，**DMG 是回退**。
+
 1. 菜单栏 → 设置 → **检查更新**  
-2. 有新版本时自动下载 dmg，打开后拖到 Applications  
-3. 覆盖后重新打开智额  
+2. 先展示当前版本、新版本、发布日期、变更说明、安装包大小和最低 macOS  
+3. 你在更新区域确认后才下载；系统版本不够则不下载  
+4. 有合法 PKG + 校验：下载到临时文件（有大小上限、超时、可取消、失败清理），退出后替换  
+5. 没有 PKG 时打开 DMG，由你拖到 Applications；**不会**把当前版本标成已更新  
+6. 缺少 PKG/DMG 或 SHA256 时显示资产异常，**可打开** GitHub Release 页面手动下载  
+7. 安装失败保留当前可启动的 App，不删除当前版本  
+
+默认只检查**稳定版**。自动更新调度不属于本路径。
 
 ### 系统要求
 

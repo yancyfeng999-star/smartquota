@@ -9,6 +9,13 @@ public enum MonitoringEvent: Sendable {
     case error(providerId: String, Error)
 }
 
+/// Outcome of one provider refresh used by `RefreshCoordinator` to count results.
+public enum ProviderRefreshResult: Sendable, Equatable {
+    case succeeded
+    case failed
+    case skipped
+}
+
 /// The main domain service that coordinates quota monitoring across AI providers.
 /// Providers are rich domain models that own their own snapshots.
 /// QuotaMonitor coordinates refreshes and alerts users when status changes.
@@ -45,6 +52,14 @@ public final class QuotaMonitor {
     /// Current monitoring task
     private var monitoringTask: Task<Void, Never>?
 
+    /// In-flight per-provider refreshes so a second overlapping request reuses
+    /// the same probe instead of starting another account of the same provider.
+    private var inFlightRefreshes: [String: Task<ProviderRefreshResult, Never>] = [:]
+
+    /// Identifies the current in-flight task so a cancelled entry's `defer`
+    /// cannot wipe a replacement attempt.
+    private var inFlightTokens: [String: UUID] = [:]
+
     /// Whether monitoring is active
     public private(set) var isMonitoring: Bool = false
 
@@ -78,20 +93,63 @@ public final class QuotaMonitor {
         accountCoordinators[coordinator.providerId] = coordinator
     }
 
+    /// Reads a stored snapshot for display. Never starts a probe or network request.
+    /// Prefer a disconnected account's last snapshot when showing history; otherwise
+    /// the provider's last captured snapshot.
+    public func historicalSnapshot(providerId: String, accountId: String? = nil) -> UsageSnapshot? {
+        if let coordinator = accountCoordinators[providerId] {
+            if let accountId,
+               let account = coordinator.accounts.first(where: { $0.id == accountId }) {
+                return account.lastSnapshot
+            }
+            if let disconnected = coordinator.accounts.first(where: {
+                $0.connectionState == .disconnected && $0.lastSnapshot != nil
+            }) {
+                return disconnected.lastSnapshot
+            }
+            if let stored = coordinator.accounts.first(where: { $0.lastSnapshot != nil }) {
+                return stored.lastSnapshot
+            }
+        }
+        return providers.provider(id: providerId)?.snapshot
+    }
+
+    /// Cancels in-flight provider refresh tasks and drops them from the map so
+    /// the next refresh starts a new attempt instead of awaiting a cancelled
+    /// (zombie) probe. Callers already awaiting the old task still receive its
+    /// result when it finishes.
+    public func cancelInFlightRefreshes(providerId: String? = nil) {
+        if let providerId {
+            inFlightRefreshes[providerId]?.cancel()
+            inFlightRefreshes[providerId] = nil
+            inFlightTokens[providerId] = nil
+            return
+        }
+        for task in inFlightRefreshes.values {
+            task.cancel()
+        }
+        inFlightRefreshes.removeAll()
+        inFlightTokens.removeAll()
+    }
+
     /// Returns the snapshot for the active connected account, if a coordinator
     /// is registered and the active account is in an active state (connected or
     /// pending confirmation). Falls back to the provider's own snapshot when no
     /// coordinator exists. Returns `nil` when the active account is disconnected
     /// (stale snapshot excluded from menu bar).
     public func connectedAccountSnapshot(providerId: String) -> UsageSnapshot? {
+        guard let provider = providers.provider(id: providerId),
+              contributesToLiveQuota(provider) else {
+            return nil
+        }
         if let coordinator = accountCoordinators[providerId] {
             if let activeAccount = coordinator.activeAccount,
                activeAccount.connectionState.isActive {
-                return activeAccount.lastSnapshot ?? providers.provider(id: providerId)?.snapshot
+                return activeAccount.lastSnapshot ?? provider.snapshot
             }
             return nil
         }
-        return providers.provider(id: providerId)?.snapshot
+        return provider.snapshot
     }
 
     /// Returns the account coordinator for a provider, if registered.
@@ -135,7 +193,7 @@ public final class QuotaMonitor {
             await withTaskGroup(of: Void.self) { group in
                 for provider in wave {
                     group.addTask {
-                        await self.refreshProvider(provider)
+                        await self.refresh(providerId: provider.id)
                     }
                 }
             }
@@ -145,15 +203,17 @@ public final class QuotaMonitor {
     /// Refreshes a single provider.
     /// `kind` defaults to `.interactive`; the background monitoring loop passes
     /// `.background` so providers can skip non-glanceable work (issue #204).
-    private func refreshProvider(_ provider: any AIProvider, kind: RefreshKind = .interactive) async {
+    private func refreshProvider(_ provider: any AIProvider, kind: RefreshKind = .interactive) async -> ProviderRefreshResult {
         guard await provider.isAvailable() else {
-            return
+            return .skipped
         }
 
         let result: Result<UsageSnapshot, Error>
         do {
             let snapshot = try await provider.refresh(kind)
             result = .success(snapshot)
+        } catch is CancellationError {
+            return .skipped
         } catch {
             result = .failure(error)
         }
@@ -178,7 +238,9 @@ public final class QuotaMonitor {
         // Handle snapshot update and alerts (only on success)
         if case let .success(snapshot) = result {
             await handleSnapshotUpdate(provider: provider, snapshot: snapshot)
+            return .succeeded
         }
+        return .failed
     }
 
     /// Classifies probe errors as authentication failures.
@@ -232,10 +294,36 @@ public final class QuotaMonitor {
 
     /// Refreshes a single provider by its ID.
     public func refresh(providerId: String, kind: RefreshKind = .interactive) async {
-        guard let provider = providers.provider(id: providerId) else {
-            return
+        _ = await refreshResult(providerId: providerId, kind: kind)
+    }
+
+    /// Same as `refresh(providerId:kind:)` but returns the counted outcome.
+    /// A second overlapping refresh of the same provider awaits the in-flight task.
+    public func refreshResult(providerId: String, kind: RefreshKind = .interactive) async -> ProviderRefreshResult {
+        if let existing = inFlightRefreshes[providerId] {
+            if existing.isCancelled {
+                inFlightRefreshes[providerId] = nil
+                inFlightTokens[providerId] = nil
+            } else {
+                return await existing.value
+            }
         }
-        await refreshProvider(provider, kind: kind)
+        let token = UUID()
+        inFlightTokens[providerId] = token
+        let task = Task { @MainActor in
+            defer {
+                if self.inFlightTokens[providerId] == token {
+                    self.inFlightRefreshes[providerId] = nil
+                    self.inFlightTokens[providerId] = nil
+                }
+            }
+            guard let provider = self.providers.provider(id: providerId) else {
+                return ProviderRefreshResult.skipped
+            }
+            return await self.refreshProvider(provider, kind: kind)
+        }
+        inFlightRefreshes[providerId] = task
+        return await task.value
     }
 
     /// Refreshes the given providers once, preserving order and removing duplicates.
@@ -261,7 +349,7 @@ public final class QuotaMonitor {
         await withTaskGroup(of: Void.self) { group in
             for provider in otherProviders {
                 group.addTask {
-                    await self.refreshProvider(provider)
+                    await self.refresh(providerId: provider.id)
                 }
             }
         }
@@ -277,6 +365,19 @@ public final class QuotaMonitor {
     /// Returns all providers
     public var allProviders: [any AIProvider] {
         providers.all
+    }
+
+    /// Copies stored membership switches onto in-memory providers after import/restore.
+    public func reloadEnablement(from repository: any ProviderSettingsRepository) {
+        for provider in allProviders {
+            let stored = repository.isEnabled(
+                forProvider: provider.id,
+                defaultValue: ProviderEnablement.defaultEnabled(for: provider.id)
+            )
+            if provider.isEnabled != stored {
+                provider.isEnabled = stored
+            }
+        }
     }
 
     /// Returns only enabled providers
@@ -297,6 +398,7 @@ public final class QuotaMonitor {
     /// Returns the lowest quota across all enabled providers
     public func lowestQuota() -> UsageQuota? {
         providers.enabled
+            .filter(contributesToLiveQuota)
             .compactMap(\.snapshot?.lowestQuota)
             .min()
     }
@@ -304,7 +406,7 @@ public final class QuotaMonitor {
     /// Returns the selected quota for a provider from enabled provider snapshots.
     public func quota(providerId: String, quotaKey: String) -> UsageQuota? {
         providers.enabled
-            .first { $0.id == providerId }?
+            .first { $0.id == providerId && contributesToLiveQuota($0) }?
             .snapshot?
             .quota(forKey: quotaKey)
     }
@@ -451,17 +553,24 @@ public final class QuotaMonitor {
     /// Excludes providers whose active account is disconnected (stale snapshot).
     public var overallStatus: QuotaStatus {
         providers.enabled
-            .filter { provider in
-                guard let coordinator = accountCoordinators[provider.id] else {
-                    return true // No coordinator: always include
-                }
-                guard let active = coordinator.activeAccount else {
-                    return true // No active account: include provider's own snapshot
-                }
-                return active.connectionState.isActive
-            }
+            .filter(contributesToLiveQuota)
             .compactMap(\.snapshot?.overallStatus)
             .max() ?? .healthy
+    }
+
+    /// Live menu-bar / alert data: lastError (未登录 / 连接失败 / other) is not
+    /// treated as a current quota. Old snapshots stay on the provider for cards.
+    public func contributesToLiveQuota(_ provider: any AIProvider) -> Bool {
+        if RefreshFailureClassifier.excludesFromLiveQuota(provider.lastError) {
+            return false
+        }
+        guard let coordinator = accountCoordinators[provider.id] else {
+            return true
+        }
+        guard let active = coordinator.activeAccount else {
+            return true
+        }
+        return active.connectionState.isActive
     }
 
     // MARK: - Selection
@@ -473,7 +582,10 @@ public final class QuotaMonitor {
 
     /// Status of the currently selected provider (for menu bar icon)
     public var selectedProviderStatus: QuotaStatus {
-        selectedProvider?.snapshot?.overallStatus ?? .healthy
+        guard let provider = selectedProvider, contributesToLiveQuota(provider) else {
+            return .healthy
+        }
+        return provider.snapshot?.overallStatus ?? .healthy
     }
 
     /// Whether any provider is currently refreshing

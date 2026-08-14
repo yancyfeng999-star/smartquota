@@ -30,6 +30,9 @@ struct ProviderSummaryCardView: View {
             y: isHovering ? 3 : 0
         )
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(statusLabel)
         .onTapGesture(perform: onSelect)
         .onHover { hovering in
             withAnimation(AppMotion.hover) {
@@ -168,12 +171,12 @@ struct ProviderSummaryCardView: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 2)
                 Text(item.displayValue(mode: displayMode))
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(AppTypeScale.callout(.rounded, weight: .bold))
                     .monospacedDigit()
                     // Same style as 5h / 7d / 总额 — no accent/highlight color
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.75)
+                    .untruncatedSupportText()
             }
 
             GeometryReader { proxy in
@@ -406,10 +409,14 @@ struct ProviderSummaryCardView: View {
 
     private var statusTint: Color {
         if provider.isSyncing { return MembershipPalette.statusInfo }
+        if let error = provider.lastError {
+            switch RefreshFailureClassifier.classify(error) {
+            case .notLoggedIn: return MembershipPalette.statusWarning
+            case .connectionFailed, .other: return MembershipPalette.statusDanger
+            }
+        }
         if provider.snapshot == nil {
-            return provider.lastError != nil
-                ? MembershipPalette.statusDanger
-                : MembershipPalette.statusWarning
+            return MembershipPalette.statusWarning
         }
         switch effectiveStatus {
         case .healthy: return MembershipPalette.statusSuccess
@@ -420,8 +427,18 @@ struct ProviderSummaryCardView: View {
 
     private var statusLabel: String {
         if provider.isSyncing { return l10n.t("status.syncing") }
+        if let error = provider.lastError {
+            switch RefreshFailureClassifier.classify(error) {
+            case .notLoggedIn:
+                return lastSuccessSuffix(l10n.t("refresh.status.not_logged_in"))
+            case .connectionFailed:
+                return lastSuccessSuffix(l10n.t("refresh.status.connection_failed"))
+            case .other:
+                return lastSuccessSuffix(l10n.t("menu.unavailable"))
+            }
+        }
         if provider.snapshot == nil {
-            return provider.lastError != nil ? l10n.t("menu.unavailable") : l10n.t("common.no_quota")
+            return l10n.t("common.no_quota")
         }
         switch effectiveStatus {
         case .healthy: return l10n.t("status.healthy")
@@ -429,6 +446,18 @@ struct ProviderSummaryCardView: View {
         case .critical: return l10n.t("status.critical")
         case .depleted: return l10n.t("status.depleted")
         }
+    }
+
+    private func lastSuccessSuffix(_ status: String) -> String {
+        guard let date = provider.snapshot?.capturedAt else { return status }
+        return "\(status) · \(l10n.tf("refresh.last_success", timeString(date)))"
+    }
+
+    private func timeString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = l10n.language.locale
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 
     private static func shortDate(_ date: Date) -> String {

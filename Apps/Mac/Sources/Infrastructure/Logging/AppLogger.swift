@@ -44,6 +44,9 @@ import OSLog
 public enum AppLog {
     /// Logger for quota monitoring operations
     public static let monitor = CategoryLogger(category: "monitor")
+
+    /// Logger for refresh lifecycle metrics (duration, failure class, task/cancel counts)
+    public static let refresh = CategoryLogger(category: "refresh")
     
     /// Logger for AI provider operations
     public static let providers = CategoryLogger(category: "providers")
