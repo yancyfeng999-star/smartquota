@@ -69,9 +69,13 @@ struct CompatibilityView: View {
                 }
             }
 
-            if report.issues.contains(where: { $0.kind == .notifications }) {
+            if followUpActions.contains(.openSystemSettings)
+                || report.issues.contains(where: { $0.kind == .notifications || $0.kind == .keychain })
+            {
                 Button(l10n.t("compat.action.open_settings")) {
-                    openSystemSettings(report.issues.first { $0.kind == .notifications }?.systemSettingsPane)
+                    let pane = report.issues.first { $0.kind == .notifications }?.systemSettingsPane
+                        ?? report.issues.first { $0.kind == .keychain }?.systemSettingsPane
+                    openSystemSettings(pane)
                 }
                 .buttonStyle(.plain)
             }

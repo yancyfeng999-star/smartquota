@@ -179,6 +179,15 @@ struct SmartQuotaApp: App {
 
         recovery.markReady()
         appDelegate.crashRecoveryStore = recovery
+        let launchForOnboarding = mode
+        let storeForOnboarding = firstLaunchStore
+        appDelegate.presentFirstLaunchIfNeeded = {
+            OnboardingWindowController.shared.configure(
+                store: storeForOnboarding,
+                monitor: monitor
+            )
+            OnboardingWindowController.shared.presentIfNeeded(launchMode: launchForOnboarding)
+        }
         AppLog.ui.info("\(Brand.nameCN) initialization complete (mode: \(String(describing: mode)))")
     }
 
@@ -317,8 +326,6 @@ struct SmartQuotaApp: App {
                     store: firstLaunchStore,
                     monitor: monitor
                 )
-                // Safe Mode must never present first-launch onboarding.
-                OnboardingWindowController.shared.presentIfNeeded(launchMode: launchMode)
                 Task {
                     let checker = CompatibilityChecker(
                         store: .shared,

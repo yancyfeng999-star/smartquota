@@ -55,11 +55,31 @@ struct FirstLaunchStateTests {
         #expect(state.currentStep == .firstRefresh)
 
         state.recordFirstRefresh(.success)
+        #expect(state.canAdvance)
         state.completeCurrentAndAdvance()
         #expect(state.currentStep == .completed)
         #expect(state.isCompleted)
         #expect(state.shouldPresentOnFirstLaunch == false)
         #expect(state.canContinueFromSettings == false)
+    }
+
+    @Test
+    func `first refresh continue requires a check skip keeps settings resume`() {
+        var state = FirstLaunchState.fresh
+        state.currentStep = .firstRefresh
+        state.selectProvider("claude")
+        #expect(state.lastRefreshOutcome == nil)
+        #expect(state.canAdvance == false)
+        state.completeCurrentAndAdvance()
+        #expect(state.currentStep == .firstRefresh)
+        #expect(state.isCompleted == false)
+        #expect(state.canContinueFromSettings)
+
+        state.skip()
+        #expect(state.skipped)
+        #expect(state.isCompleted == false)
+        #expect(state.shouldPresentOnFirstLaunch == false)
+        #expect(state.canContinueFromSettings)
     }
 
     @Test
@@ -134,20 +154,28 @@ struct FirstLaunchStateTests {
     }
 
     @Test
-    func `first refresh classifies success not logged in and needs configuration`() {
+    func `first refresh classifies CLI auth config and transient failures separately`() {
         let snapshot = UsageSnapshot(providerId: "claude", quotas: [], capturedAt: Date())
         #expect(FirstRefreshOutcome.classify(snapshot: snapshot, error: nil) == .success)
         #expect(FirstRefreshOutcome.classify(snapshot: nil, error: ProbeError.authenticationRequired) == .notLoggedIn)
         #expect(FirstRefreshOutcome.classify(snapshot: nil, error: ProbeError.sessionExpired(hint: nil)) == .notLoggedIn)
-        #expect(FirstRefreshOutcome.classify(snapshot: nil, error: ProbeError.cliNotFound("claude")) == .needsConfiguration)
+        #expect(FirstRefreshOutcome.classify(snapshot: nil, error: ProbeError.cliNotFound("claude")) == .missingCLI)
+        #expect(FirstRefreshOutcome.classify(snapshot: nil, error: ProbeError.timeout) == .checkFailed)
+        #expect(FirstRefreshOutcome.classify(snapshot: nil, error: ProbeError.parseFailed("bad json")) == .checkFailed)
+        #expect(FirstRefreshOutcome.classify(snapshot: nil, error: ProbeError.executionFailed("network down")) == .checkFailed)
+        #expect(FirstRefreshOutcome.classify(snapshot: nil, error: ProbeError.rateLimited(retryAt: Date())) == .checkFailed)
         #expect(FirstRefreshOutcome.classify(snapshot: nil, error: nil) == .needsConfiguration)
 
         #expect(FirstRefreshOutcome.success.messageKey == "onboard.refresh.success")
         #expect(FirstRefreshOutcome.notLoggedIn.messageKey == "onboard.refresh.not_logged_in")
+        #expect(FirstRefreshOutcome.missingCLI.messageKey == "onboard.refresh.missing_cli")
         #expect(FirstRefreshOutcome.needsConfiguration.messageKey == "onboard.refresh.needs_config")
+        #expect(FirstRefreshOutcome.checkFailed.messageKey == "onboard.refresh.check_failed")
         #expect(FirstRefreshOutcome.success.nextStepKey == "onboard.refresh.next_success")
         #expect(FirstRefreshOutcome.notLoggedIn.nextStepKey == "onboard.refresh.next_login")
+        #expect(FirstRefreshOutcome.missingCLI.nextStepKey == "onboard.refresh.next_missing_cli")
         #expect(FirstRefreshOutcome.needsConfiguration.nextStepKey == "onboard.refresh.next_config")
+        #expect(FirstRefreshOutcome.checkFailed.nextStepKey == "onboard.refresh.next_check_failed")
     }
 
     @Test
@@ -181,6 +209,14 @@ struct FirstLaunchStateTests {
             ]
         )
         #expect(OnboardingFollowUp.actions(report: missingCLI, missingCredential: false, outcome: nil) == [
+            .viewHelp, .recheck,
+        ])
+        #expect(OnboardingFollowUp.actions(
+            report: missingCLI,
+            missingCredential: false,
+            outcome: .missingCLI,
+            hasSelectedProvider: true
+        ) == [
             .openConfiguration, .viewHelp, .recheck,
         ])
 
@@ -195,7 +231,7 @@ struct FirstLaunchStateTests {
         )
         #expect(denied.isReady == false)
         #expect(OnboardingFollowUp.actions(report: denied, missingCredential: false, outcome: nil) == [
-            .openConfiguration, .viewHelp, .recheck,
+            .openSystemSettings, .viewHelp, .recheck,
         ])
 
         #expect(OnboardingFollowUp.actions(report: ready, missingCredential: true, outcome: nil) == [
@@ -204,6 +240,57 @@ struct FirstLaunchStateTests {
         #expect(OnboardingFollowUp.actions(report: ready, missingCredential: false, outcome: .notLoggedIn) == [
             .openConfiguration, .viewHelp, .recheck,
         ])
+        #expect(OnboardingFollowUp.actions(report: ready, missingCredential: false, outcome: .checkFailed) == [
+            .viewHelp, .recheck,
+        ])
+    }
+
+    @Test
+    func `opening setup without a membership stays on choose provider`() {
+        var state = FirstLaunchState.fresh
+        state.currentStep = .compatibility
+        #expect(state.configurationDestination == .chooseProvider)
+        state.selectProvider("claude")
+        #expect(state.configurationDestination == .configureProvider)
+    }
+
+    @Test
+    func `existing install signals grandfather as completed`() {
+        let fromSettings = FirstLaunchState.resolved(
+            from: FirstLaunchSignals(
+                recordExists: false,
+                settingsFileExisted: true,
+                priorReadyMarkerExisted: false,
+                priorCleanMarkerExisted: false
+            ),
+            recorded: nil
+        )
+        #expect(fromSettings.isCompleted)
+        #expect(fromSettings.shouldPresentOnFirstLaunch == false)
+
+        let fromReady = FirstLaunchState.resolved(
+            from: FirstLaunchSignals(priorReadyMarkerExisted: true),
+            recorded: nil
+        )
+        #expect(fromReady.isCompleted)
+
+        let fromClean = FirstLaunchState.resolved(
+            from: FirstLaunchSignals(priorCleanMarkerExisted: true),
+            recorded: nil
+        )
+        #expect(fromClean.isCompleted)
+
+        let fresh = FirstLaunchState.resolved(from: FirstLaunchSignals(), recorded: nil)
+        #expect(fresh == .fresh)
+
+        var inProgress = FirstLaunchState.fresh
+        inProgress.completeCurrentAndAdvance()
+        let kept = FirstLaunchState.resolved(
+            from: FirstLaunchSignals(recordExists: true, settingsFileExisted: true),
+            recorded: inProgress
+        )
+        #expect(kept.currentStep == .compatibility)
+        #expect(kept.isCompleted == false)
     }
 
     @Test

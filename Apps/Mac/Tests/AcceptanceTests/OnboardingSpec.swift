@@ -120,8 +120,79 @@ struct OnboardingSpec {
         #expect(report.isReady == false)
         #expect(FirstLaunchState.fresh.treatsEnvironmentAsReady(report) == false)
         #expect(OnboardingFollowUp.actions(report: report, missingCredential: true, outcome: .needsConfiguration) == [
-            .openConfiguration, .viewHelp, .recheck,
+            .openSystemSettings, .openConfiguration, .viewHelp, .recheck,
         ])
+    }
+
+    @Test
+    func `existing settings or prior ready clean markers grandfather as completed`() throws {
+        let withSettings = try OnboardingHarness.make()
+        defer { withSettings.cleanup() }
+        try Data("{}".utf8).write(to: withSettings.settingsURL)
+        let settingsStore = FirstLaunchStore(configRoot: withSettings.configRoot)
+        let fromSettings = settingsStore.load()
+        #expect(fromSettings.isCompleted)
+        #expect(fromSettings.shouldPresentOnFirstLaunch == false)
+        #expect(FileManager.default.fileExists(atPath: withSettings.recordURL.path))
+
+        let withReady = try OnboardingHarness.make()
+        defer { withReady.cleanup() }
+        try FileManager.default.createDirectory(at: withReady.recoveryDirectory, withIntermediateDirectories: true)
+        try Data("1".utf8).write(to: withReady.readyMarkerURL)
+        #expect(FirstLaunchStore(configRoot: withReady.configRoot).load().isCompleted)
+
+        let withClean = try OnboardingHarness.make()
+        defer { withClean.cleanup() }
+        try FileManager.default.createDirectory(at: withClean.recoveryDirectory, withIntermediateDirectories: true)
+        try Data("1".utf8).write(to: withClean.cleanMarkerURL)
+        #expect(FirstLaunchStore(configRoot: withClean.configRoot).load().isCompleted)
+    }
+
+    @Test
+    func `settings created after store init do not grandfather a new install`() throws {
+        let env = try OnboardingHarness.make()
+        defer { env.cleanup() }
+
+        let store = FirstLaunchStore(configRoot: env.configRoot)
+        try Data("{\"schemaVersion\":2}".utf8).write(to: env.settingsURL)
+        let state = store.load()
+        #expect(state == .fresh)
+        #expect(state.shouldPresent(launchMode: .normal))
+    }
+
+    @Test
+    func `in-progress first-launch record is not overwritten by existing settings`() throws {
+        let env = try OnboardingHarness.make()
+        defer { env.cleanup() }
+
+        var state = FirstLaunchState.fresh
+        state.completeCurrentAndAdvance()
+        try FirstLaunchStore(configRoot: env.configRoot).save(state)
+        try Data("{}".utf8).write(to: env.settingsURL)
+
+        let reloaded = FirstLaunchStore(configRoot: env.configRoot).load()
+        #expect(reloaded.currentStep == .compatibility)
+        #expect(reloaded.isCompleted == false)
+        #expect(reloaded.shouldPresentOnFirstLaunch)
+    }
+
+    @Test
+    func `continuing first refresh without a check does not complete onboarding`() throws {
+        let env = try OnboardingHarness.make()
+        defer { env.cleanup() }
+
+        let store = FirstLaunchStore(configRoot: env.configRoot)
+        var state = store.load()
+        state.currentStep = .firstRefresh
+        state.selectProvider("claude")
+        #expect(state.canAdvance == false)
+        state.completeCurrentAndAdvance()
+        try store.save(state)
+
+        let reloaded = store.load()
+        #expect(reloaded.isCompleted == false)
+        #expect(reloaded.currentStep == .firstRefresh)
+        #expect(reloaded.canContinueFromSettings)
     }
 
     @Test
@@ -191,6 +262,16 @@ private enum OnboardingHarness {
         let parent: URL
         let configRoot: URL
         var recordURL: URL { configRoot.appendingPathComponent(FirstLaunchStore.fileName) }
+        var settingsURL: URL { configRoot.appendingPathComponent("settings.json") }
+        var recoveryDirectory: URL {
+            configRoot.appendingPathComponent(CrashRecoveryMarker.directoryName, isDirectory: true)
+        }
+        var readyMarkerURL: URL {
+            recoveryDirectory.appendingPathComponent(CrashRecoveryMarker.ready)
+        }
+        var cleanMarkerURL: URL {
+            recoveryDirectory.appendingPathComponent(CrashRecoveryMarker.clean)
+        }
 
         func cleanup() {
             try? FileManager.default.removeItem(at: parent)

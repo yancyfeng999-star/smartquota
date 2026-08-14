@@ -120,7 +120,6 @@ struct OnboardingView: View {
                 CompatibilityView(
                     report: report,
                     onRecheck: { Task { await runCompatibilityCheck() } },
-                    onOpenConfiguration: { jumpToConfigure() },
                     onViewHelp: { showingHelp = true }
                 )
             } else if isCheckingCompatibility {
@@ -238,7 +237,8 @@ struct OnboardingView: View {
                 OnboardingFollowUp.actions(
                     report: report,
                     missingCredential: state.lastRefreshOutcome == .needsConfiguration,
-                    outcome: state.lastRefreshOutcome
+                    outcome: state.lastRefreshOutcome,
+                    hasSelectedProvider: state.selectedProviderId != nil
                 )
             )
         }
@@ -332,6 +332,7 @@ struct OnboardingView: View {
 
     private func title(for action: OnboardingFollowUpAction) -> String {
         switch action {
+        case .openSystemSettings: l10n.t("compat.action.open_settings")
         case .openConfiguration: l10n.t("onboard.action.open_config")
         case .viewHelp: l10n.t("onboard.action.view_help")
         case .recheck: l10n.t("onboard.action.recheck")
@@ -340,6 +341,8 @@ struct OnboardingView: View {
 
     private func perform(_ action: OnboardingFollowUpAction) {
         switch action {
+        case .openSystemSettings:
+            openSystemSettingsFromReport()
         case .openConfiguration:
             jumpToConfigure()
         case .viewHelp:
@@ -372,11 +375,15 @@ struct OnboardingView: View {
     }
 
     private func jumpToConfigure() {
-        if state.selectedProviderId == nil, let first = orderedProviders.first {
-            select(first.id)
-        }
-        state.currentStep = .configureProvider
+        state.currentStep = state.configurationDestination
         persist()
+    }
+
+    private func openSystemSettingsFromReport() {
+        let pane = report?.issues.first { $0.kind == .notifications }?.systemSettingsPane
+            ?? report?.issues.first { $0.kind == .keychain }?.systemSettingsPane
+        guard let pane, let url = URL(string: pane) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func persist() {

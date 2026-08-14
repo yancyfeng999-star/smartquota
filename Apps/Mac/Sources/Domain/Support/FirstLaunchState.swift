@@ -27,13 +27,17 @@ public enum OnboardingStep: String, Codable, Sendable, CaseIterable {
 public enum FirstRefreshOutcome: String, Codable, Sendable {
     case success
     case notLoggedIn
+    case missingCLI
     case needsConfiguration
+    case checkFailed
 
     public var messageKey: String {
         switch self {
         case .success: "onboard.refresh.success"
         case .notLoggedIn: "onboard.refresh.not_logged_in"
+        case .missingCLI: "onboard.refresh.missing_cli"
         case .needsConfiguration: "onboard.refresh.needs_config"
+        case .checkFailed: "onboard.refresh.check_failed"
         }
     }
 
@@ -41,7 +45,9 @@ public enum FirstRefreshOutcome: String, Codable, Sendable {
         switch self {
         case .success: "onboard.refresh.next_success"
         case .notLoggedIn: "onboard.refresh.next_login"
+        case .missingCLI: "onboard.refresh.next_missing_cli"
         case .needsConfiguration: "onboard.refresh.next_config"
+        case .checkFailed: "onboard.refresh.next_check_failed"
         }
     }
 
@@ -50,17 +56,22 @@ public enum FirstRefreshOutcome: String, Codable, Sendable {
             switch probe {
             case .authenticationRequired, .sessionExpired:
                 return .notLoggedIn
-            default:
+            case .cliNotFound:
+                return .missingCLI
+            case .parseFailed, .timeout, .executionFailed, .rateLimited, .noData:
+                return .checkFailed
+            case .updateRequired, .folderTrustRequired, .subscriptionRequired:
                 return .needsConfiguration
             }
         }
-        if error != nil { return .needsConfiguration }
+        if error != nil { return .checkFailed }
         if snapshot != nil { return .success }
         return .needsConfiguration
     }
 }
 
 public enum OnboardingFollowUpAction: String, Codable, Sendable, CaseIterable {
+    case openSystemSettings
     case openConfiguration
     case viewHelp
     case recheck
@@ -70,22 +81,59 @@ public enum OnboardingFollowUp: Sendable {
     public static func actions(
         report: CompatibilityReport?,
         missingCredential: Bool,
-        outcome: FirstRefreshOutcome?
+        outcome: FirstRefreshOutcome?,
+        hasSelectedProvider: Bool = false
     ) -> [OnboardingFollowUpAction] {
-        let reportNeeds: Bool
-        if let report {
-            reportNeeds = report.hasMissingEnabledCLI
-                || !report.keychainAvailable
-                || !report.notificationStatus.isGranted
-                || !report.appDirectoryWritable
-        } else {
-            reportNeeds = false
+        let permissionIssue = report.map {
+            !$0.keychainAvailable || !$0.notificationStatus.isGranted
+        } ?? false
+        let reportMissingCLI = report?.hasMissingEnabledCLI == true
+        let setupIssue = missingCredential
+            || outcome == .notLoggedIn
+            || outcome == .needsConfiguration
+            || outcome == .missingCLI
+            || (reportMissingCLI && hasSelectedProvider)
+        let checkFailed = outcome == .checkFailed
+
+        var actions: [OnboardingFollowUpAction] = []
+        if permissionIssue {
+            actions.append(.openSystemSettings)
         }
-        let refreshNeeds = outcome == .notLoggedIn || outcome == .needsConfiguration
-        if reportNeeds || missingCredential || refreshNeeds {
-            return Array(OnboardingFollowUpAction.allCases)
+        if setupIssue {
+            actions.append(.openConfiguration)
         }
-        return []
+        if permissionIssue || setupIssue || checkFailed || reportMissingCLI {
+            actions.append(.viewHelp)
+            actions.append(.recheck)
+        }
+        return actions
+    }
+}
+
+/// Inputs captured before launch mutation (migrate / beginLaunch) so existing
+/// 0.3.28 installs can be grandfathered without treating a just-written
+/// `settings.json` as a prior install.
+public struct FirstLaunchSignals: Sendable, Equatable {
+    public var recordExists: Bool
+    public var settingsFileExisted: Bool
+    public var priorReadyMarkerExisted: Bool
+    public var priorCleanMarkerExisted: Bool
+
+    public init(
+        recordExists: Bool = false,
+        settingsFileExisted: Bool = false,
+        priorReadyMarkerExisted: Bool = false,
+        priorCleanMarkerExisted: Bool = false
+    ) {
+        self.recordExists = recordExists
+        self.settingsFileExisted = settingsFileExisted
+        self.priorReadyMarkerExisted = priorReadyMarkerExisted
+        self.priorCleanMarkerExisted = priorCleanMarkerExisted
+    }
+
+    public var shouldTreatAsCompletedInstall: Bool {
+        !recordExists
+            && (settingsFileExisted || priorReadyMarkerExisted || priorCleanMarkerExisted)
     }
 }
 
@@ -152,11 +200,31 @@ public struct FirstLaunchState: Codable, Equatable, Sendable {
         switch currentStep {
         case .chooseProvider:
             return selectedProviderId?.isEmpty == false
+        case .firstRefresh:
+            return lastRefreshOutcome != nil
         case .completed:
             return false
         default:
             return true
         }
+    }
+
+    /// Compatibility “打开配置” never skips membership selection.
+    public var configurationDestination: OnboardingStep {
+        selectedProviderId?.isEmpty == false ? .configureProvider : .chooseProvider
+    }
+
+    public static func resolved(
+        from signals: FirstLaunchSignals,
+        recorded: FirstLaunchState?
+    ) -> FirstLaunchState {
+        if let recorded { return recorded }
+        if signals.shouldTreatAsCompletedInstall {
+            var completed = FirstLaunchState.fresh
+            completed.finish()
+            return completed
+        }
+        return .fresh
     }
 
     public mutating func completeCurrentAndAdvance() {
