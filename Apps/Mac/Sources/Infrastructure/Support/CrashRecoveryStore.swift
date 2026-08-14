@@ -25,6 +25,7 @@ public final class CrashRecoveryStore: @unchecked Sendable {
     private let backupManager: any BackupManaging
     private let lock = NSLock()
     private var _lastLaunchMode: AppLaunchMode = .normal
+    private var _recordedMigrationBackupDirectory: URL?
 
     public init(
         configRoot: URL,
@@ -52,6 +53,18 @@ public final class CrashRecoveryStore: @unchecked Sendable {
     public var startupFailureCount: Int { readFailureCount() }
 
     public var lastCorruptCopyURL: URL? { settingsStore.lastCorruptCopyURL }
+
+    /// Pre-migration backup folder recorded when `migrateIfNeeded()` failed.
+    public var recordedMigrationBackupDirectory: URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = _recordedMigrationBackupDirectory {
+            return cached
+        }
+        let parsed = parseBackupDirectoryFromMarker()
+        _recordedMigrationBackupDirectory = parsed
+        return parsed
+    }
 
     /// Reads previous markers, decides launch mode, then writes a new session marker.
     @discardableResult
@@ -100,17 +113,38 @@ public final class CrashRecoveryStore: @unchecked Sendable {
         writeFailureCount(0)
     }
 
-    public func recordMigrationFailure(_ error: SettingsPersistenceError? = nil) {
+    public func recordMigrationFailure(
+        _ error: SettingsPersistenceError? = nil,
+        backupDirectory: URL? = nil
+    ) {
         lock.lock()
         defer { lock.unlock() }
-        let body = error?.code ?? SafeModeReason.migrationFailed.rawValue
-        writeString(body, to: migrationFailedURL)
+        let directory = backupDirectory
+            ?? error?.backupDirectoryPath.map { URL(fileURLWithPath: $0) }
+        _recordedMigrationBackupDirectory = directory
+
+        var payload: [String: String] = [
+            "code": error?.code ?? SafeModeReason.migrationFailed.rawValue,
+        ]
+        if let hint = error?.recoveryHint {
+            payload["hint"] = hint
+        }
+        if let directory {
+            payload["backupDirectory"] = directory.path
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: payload),
+           let text = String(data: data, encoding: .utf8) {
+            writeString(text, to: migrationFailedURL)
+        } else {
+            writeString(error?.code ?? SafeModeReason.migrationFailed.rawValue, to: migrationFailedURL)
+        }
     }
 
     public func clearMigrationFailure() {
         lock.lock()
         defer { lock.unlock() }
         removeFile(migrationFailedURL)
+        _recordedMigrationBackupDirectory = nil
     }
 
     public func restoreLatestBackup() throws {
@@ -123,6 +157,7 @@ public final class CrashRecoveryStore: @unchecked Sendable {
         }
         try backupManager.restore(latest)
         removeFile(migrationFailedURL)
+        _recordedMigrationBackupDirectory = nil
         markRecoverySucceeded()
     }
 
@@ -134,6 +169,7 @@ public final class CrashRecoveryStore: @unchecked Sendable {
             SettingsSchema.versionKey: SettingsSchema.currentVersion,
         ])
         removeFile(migrationFailedURL)
+        _recordedMigrationBackupDirectory = nil
         markRecoverySucceeded()
     }
 
@@ -200,6 +236,16 @@ public final class CrashRecoveryStore: @unchecked Sendable {
     }
 
     // MARK: - I/O
+
+    private func parseBackupDirectoryFromMarker() -> URL? {
+        guard let data = try? Data(contentsOf: migrationFailedURL),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let path = json["backupDirectory"] as? String,
+              !path.isEmpty else {
+            return nil
+        }
+        return URL(fileURLWithPath: path)
+    }
 
     private func probeSettingsCorrupt() -> Bool {
         do {

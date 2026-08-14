@@ -14,3 +14,4 @@ Reusable JSON fixtures for migration, recovery, and settings-store tests.
 | `unknown-fields-settings.json` | Known fields plus unknown keys that must be preserved on read/write/migration. |
 | `corrupted-settings.json` | Invalid JSON; load must fail soft and must not clobber the original on recovery paths. |
 | `empty-settings.json` | Zero-byte file; treat as empty dict / missing useful content. |
+| `v1-settings.json` | Schema v1 snapshot with a future field that must survive the v1→v2 step. |

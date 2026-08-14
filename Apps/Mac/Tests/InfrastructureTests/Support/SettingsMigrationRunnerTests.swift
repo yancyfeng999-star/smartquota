@@ -203,6 +203,176 @@ struct SettingsMigrationRunnerTests {
         #expect((exported["app"] as? [String: Any])?["themeMode"] as? String == "dark")
     }
 
+    @Test
+    func `three historical fixtures upgrade then rollback via backup`() throws {
+        let fixtures = [
+            "empty-settings.json",
+            "old-fields-settings.json",
+            "v1-settings.json",
+        ]
+        for name in fixtures {
+            let env = try makeEnv()
+            defer { env.cleanup() }
+
+            try copyFixture(name, to: env.settingsURL)
+            let originalBytes = try Data(contentsOf: env.settingsURL)
+            let runner = SettingsMigrationRunner(store: env.store, backupManager: env.backupManager)
+            let backup = try #require(try runner.migrateIfNeeded())
+
+            #expect(env.store.schemaVersion() == SettingsSchema.currentVersion)
+            let attrs = try FileManager.default.attributesOfItem(atPath: env.settingsURL.path)
+            let perms = attrs[.posixPermissions] as? NSNumber
+            #expect(perms?.uint16Value == UInt16(SettingsSchema.posixFilePermission))
+
+            try env.backupManager.restore(backup)
+            if name == "empty-settings.json" {
+                let restored = env.store.readAll()
+                #expect(restored.isEmpty || restored[SettingsSchema.versionKey] != nil)
+            } else {
+                let restored = env.store.readAll()
+                #expect(SettingsJSON.intValue(restored[SettingsSchema.versionKey]) ?? 0 < SettingsSchema.currentVersion
+                    || originalBytes.isEmpty)
+            }
+        }
+    }
+
+    @Test
+    func `v1 snapshot upgrades to current and keeps unknown fields`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try copyFixture("v1-settings.json", to: env.settingsURL)
+        let runner = SettingsMigrationRunner(store: env.store, backupManager: env.backupManager)
+        let backup = try runner.migrateIfNeeded()
+        #expect(backup != nil)
+
+        let all = env.store.readAll()
+        #expect(intValue(all["schemaVersion"]) == SettingsSchema.currentVersion)
+        #expect(all["legacyRootKey"] as? String == "v1-snapshot-must-survive")
+        let app = try #require(all["app"] as? [String: Any])
+        #expect(app["futureV2Flag"] as? String == "keep-through-v2")
+        #expect(app["themeMode"] as? String == "cli")
+        #expect(app["language"] as? String == "en")
+        #expect((all["providers"] as? [String: Any]).flatMap { $0["claude"] as? [String: Any] }?["planLabel"] as? String == "Pro")
+    }
+
+    @Test
+    func `missing intermediate step does not guess fields across versions`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try copyFixture("v1-settings.json", to: env.settingsURL)
+        let originalBytes = try Data(contentsOf: env.settingsURL)
+        let runner = SettingsMigrationRunner(
+            store: env.store,
+            backupManager: env.backupManager,
+            steps: [LegacySettingsToV1Step()],
+            currentVersion: 2
+        )
+
+        let error = #expect(throws: SettingsPersistenceError.self) {
+            try runner.migrateIfNeeded()
+        }
+        if case .migrationFailed(let from, let to, let reason) = error {
+            #expect(from == 1)
+            #expect(to == 2)
+            #expect(reason.contains("missing migration step"))
+            #expect(error?.recoveryHint.contains("backup") == true || error?.recoveryHint.contains("Backup") == true)
+        } else {
+            Issue.record("expected migrationFailed, got \(String(describing: error))")
+        }
+        #expect(try Data(contentsOf: env.settingsURL) == originalBytes)
+    }
+
+    @Test
+    func `migrate failure restores original and names the backup directory`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try copyFixture("old-fields-settings.json", to: env.settingsURL)
+        let originalBytes = try Data(contentsOf: env.settingsURL)
+
+        let runner = SettingsMigrationRunner(
+            store: env.store,
+            backupManager: env.backupManager,
+            steps: [FailingMigrationStep()]
+        )
+
+        let error = #expect(throws: SettingsPersistenceError.self) {
+            try runner.migrateIfNeeded()
+        }
+        #expect(try Data(contentsOf: env.settingsURL) == originalBytes)
+        let backupDir = try #require(runner.lastBackupDirectory)
+        #expect(FileManager.default.fileExists(atPath: backupDir.path))
+        #expect(error?.recoveryHint.contains(backupDir.path) == true)
+        #expect(error?.backupDirectoryPath == backupDir.path)
+    }
+
+    @Test
+    func `permission failure after write restores original bytes`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try copyFixture("old-fields-settings.json", to: env.settingsURL)
+        let originalBytes = try Data(contentsOf: env.settingsURL)
+
+        var io = SettingsFileIO.live
+        io.posixPermissions = { _ in 0o644 }
+        let runner = SettingsMigrationRunner(
+            store: env.store,
+            backupManager: env.backupManager,
+            fileIO: io
+        )
+
+        let error = #expect(throws: SettingsPersistenceError.self) {
+            try runner.migrateIfNeeded()
+        }
+        if case .validationFailed(let reason) = error {
+            #expect(reason.contains("permission") || reason.contains("0600"))
+        } else {
+            Issue.record("expected validationFailed, got \(String(describing: error))")
+        }
+        #expect(try Data(contentsOf: env.settingsURL) == originalBytes)
+    }
+
+    @Test
+    func `launch bootstrap records migration failure for Safe Mode`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try copyFixture("old-fields-settings.json", to: env.settingsURL)
+        let originalBytes = try Data(contentsOf: env.settingsURL)
+        let recovery = CrashRecoveryStore(configRoot: env.configRoot, settingsStore: env.store)
+        let runner = SettingsMigrationRunner(
+            store: env.store,
+            backupManager: env.backupManager,
+            steps: [FailingMigrationStep()]
+        )
+
+        let mode = LaunchSettingsBootstrap.migrateThenBeginLaunch(runner: runner, recovery: recovery)
+        #expect(mode == .safeMode(reason: .migrationFailed))
+        #expect(recovery.hasMigrationFailureMarker)
+        #expect(recovery.recordedMigrationBackupDirectory != nil)
+        #expect(try Data(contentsOf: env.settingsURL) == originalBytes)
+    }
+
+    @Test
+    func `launch bootstrap clears a previous migration marker after success`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try copyFixture("v1-settings.json", to: env.settingsURL)
+        let recovery = CrashRecoveryStore(configRoot: env.configRoot, settingsStore: env.store)
+        recovery.recordMigrationFailure(.migrationFailed(from: 1, to: 2, reason: "stale"))
+        #expect(recovery.hasMigrationFailureMarker)
+
+        let runner = SettingsMigrationRunner(store: env.store, backupManager: env.backupManager)
+        let mode = LaunchSettingsBootstrap.migrateThenBeginLaunch(runner: runner, recovery: recovery)
+        #expect(mode == .normal)
+        #expect(recovery.hasMigrationFailureMarker == false)
+        #expect(env.store.schemaVersion() == SettingsSchema.currentVersion)
+    }
+
     // MARK: - Helpers
 
     private struct Env {

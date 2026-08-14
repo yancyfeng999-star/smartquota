@@ -31,6 +31,9 @@ struct SafeModeView: View {
                     if AppRecoveryState(launchMode: .safeMode(reason: reason)).usesReadOnlyDefaultSettings {
                         note(l10n.t("recovery.readonly_defaults"))
                     }
+                    if let backupPath = store.recordedMigrationBackupDirectory?.path {
+                        note(l10n.tf("recovery.migration_backup_fmt", backupPath))
+                    }
                     note(l10n.t("recovery.scope_note"))
                     if let statusText {
                         Text(statusText)

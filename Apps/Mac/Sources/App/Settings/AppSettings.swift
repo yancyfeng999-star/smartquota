@@ -161,6 +161,20 @@ public final class AppSettings {
     /// Observation token — increment when any plan label / renewal date changes.
     public private(set) var planLabelsRevision: Int = 0
 
+    /// Last launch/settings-screen compatibility snapshot.
+    public private(set) var lastCompatibilityReport: CompatibilityReport?
+
+    /// Pre-migration backup folder when the last migrateIfNeeded() failed.
+    public private(set) var lastMigrationBackupPath: String?
+
+    public func updateCompatibilityReport(_ report: CompatibilityReport) {
+        lastCompatibilityReport = report
+    }
+
+    public func updateMigrationBackupPath(_ path: String?) {
+        lastMigrationBackupPath = path
+    }
+
     // MARK: - Membership card order
 
     /// Provider ids top→bottom on the main menu. Empty → product default order.

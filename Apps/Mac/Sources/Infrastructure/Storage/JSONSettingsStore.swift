@@ -118,6 +118,15 @@ public final class JSONSettingsStore: @unchecked Sendable {
         _lastError = nil
     }
 
+    /// POSIX mode of the live file, or `nil` when it is missing.
+    public func filePOSIXPermission() -> Int? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let number = attrs[.posixPermissions] as? NSNumber else {
+            return nil
+        }
+        return Int(number.uint16Value)
+    }
+
     // MARK: - Default Path
 
     public static func defaultFileURL() -> URL {

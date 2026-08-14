@@ -79,15 +79,22 @@ struct SmartQuotaApp: App {
         }
         #endif
 
-        // Crash/session markers first: leftover session or corrupt settings
-        // must not start extensions, background refresh, or the hook server.
+        // Migrate settings first. A thrown migrateIfNeeded() records
+        // recovery/migration-failed so Safe Mode reason is `.migrationFailed`.
+        let configRoot = AppIdentity.ensureConfigDirectory()
         let recovery = CrashRecoveryStore(
-            configRoot: AppIdentity.ensureConfigDirectory(),
+            configRoot: configRoot,
             settingsStore: .shared
         )
         self.crashRecoveryStore = recovery
-        _ = try? JSONSettingsStore.shared.readAllThrowing()
-        let mode = recovery.beginLaunch()
+        let runner = SettingsMigrationRunner(
+            store: .shared,
+            backupManager: BackupManager(configRoot: configRoot)
+        )
+        let mode = LaunchSettingsBootstrap.migrateThenBeginLaunch(
+            runner: runner,
+            recovery: recovery
+        )
         let recoveryState = AppRecoveryState(launchMode: mode)
         self._launchMode = State(initialValue: mode)
         self._didStartNormalServices = State(initialValue: !recoveryState.isSafeMode)
@@ -137,6 +144,9 @@ struct SmartQuotaApp: App {
             monitor: monitor,
             settings: AppSettings.shared,
             sessionMonitor: sessionMonitor
+        )
+        AppSettings.shared.updateMigrationBackupPath(
+            recovery.recordedMigrationBackupDirectory?.path
         )
         if recoveryState.shouldStartBackgroundRefresh {
             statusItemDriver.startMonitoringLifecycle()
@@ -298,6 +308,14 @@ struct SmartQuotaApp: App {
             .onAppear {
                 appDelegate.crashRecoveryStore = crashRecoveryStore
                 statusItemDriver.reassertPresentation()
+                Task {
+                    let checker = CompatibilityChecker(
+                        store: .shared,
+                        environment: .live(appDirectory: AppIdentity.configDirectoryURL)
+                    )
+                    let report = await checker.check()
+                    AppSettings.shared.updateCompatibilityReport(report)
+                }
             }
             .onDisappear { statusItemDriver.reassertPresentation() }
         } label: {

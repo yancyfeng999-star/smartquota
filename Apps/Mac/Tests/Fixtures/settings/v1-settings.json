@@ -1,0 +1,20 @@
+{
+  "app": {
+    "themeMode": "cli",
+    "language": "en",
+    "usageDisplayMode": "remaining",
+    "membershipOrder": ["claude", "codex"],
+    "backgroundSyncInterval": 900,
+    "overviewModeEnabled": false,
+    "futureV2Flag": "keep-through-v2"
+  },
+  "providers": {
+    "claude": {
+      "isEnabled": true,
+      "planLabel": "Pro",
+      "renewalDate": "2026-12-01"
+    }
+  },
+  "legacyRootKey": "v1-snapshot-must-survive",
+  "schemaVersion": 1
+}

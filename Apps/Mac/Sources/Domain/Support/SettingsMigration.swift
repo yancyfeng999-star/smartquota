@@ -2,10 +2,19 @@ import CryptoKit
 import Foundation
 
 public enum SettingsSchema: Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
     public static let versionKey = "schemaVersion"
     /// Used when `Bundle.main` has no marketing version (unit tests).
     public static let fallbackAppVersion = "0.3.28"
+    /// Live `settings.json` must be owner read/write only.
+    public static let posixFilePermission = 0o600
+}
+
+public enum SettingsMigrationCatalog: Sendable {
+    /// One step per version. Never skip or guess fields across versions.
+    public static var orderedSteps: [any SettingsMigrationStep] {
+        [LegacySettingsToV1Step(), SettingsV1ToV2Step()]
+    }
 }
 
 public protocol SettingsMigrationStep: Sendable {
@@ -44,22 +53,66 @@ public enum SettingsPersistenceError: Error, Equatable, Sendable, LocalizedError
 
     /// Machine-readable next step; UI localization happens later.
     public var recoveryHint: String {
+        let backupSuffix = backupDirectoryPath.map { " Backup location: \($0)" } ?? ""
         switch self {
         case .corruptJSON:
-            "The settings file is unreadable. Restore a local backup or reset settings. The original file was left unchanged."
+            return "The settings file is unreadable. Restore a local backup or reset settings. The original file was left unchanged." + backupSuffix
         case .validationFailed:
-            "Migrated settings failed validation. The original file was left unchanged. Restore a backup if the app cannot start."
+            return "Migrated settings failed validation. The original file was restored."
+                + (backupSuffix.isEmpty
+                    ? " Restore a backup if the app cannot start."
+                    : backupSuffix)
         case .migrationFailed:
-            "Settings migration failed. The original file was left unchanged. Restore the pre-migration backup under backups/."
+            return "Settings migration failed. The original file was restored."
+                + (backupSuffix.isEmpty
+                    ? " Restore the pre-migration backup under backups/."
+                    : backupSuffix)
         case .writeFailed:
-            "Writing settings failed. The original file was left unchanged. Free disk space or restore a backup."
+            return "Writing settings failed. The original file was restored."
+                + (backupSuffix.isEmpty
+                    ? " Free disk space or restore a backup."
+                    : backupSuffix)
         case .checksumMismatch:
-            "Backup checksum verification failed. The live settings file was left unchanged. Choose another backup."
+            return "Backup checksum verification failed. The live settings file was left unchanged. Choose another backup."
         case .backupNotFound:
-            "The requested backup could not be found. Pick a backup from the list and try again."
+            return "The requested backup could not be found. Pick a backup from the list and try again."
         case .restoreRejected:
-            "Restore was rejected because the backup contains a file that is not on the allowlist. The live settings file was left unchanged."
+            return "Restore was rejected because the backup contains a file that is not on the allowlist. The live settings file was left unchanged."
         }
+    }
+
+    public var backupDirectoryPath: String? {
+        switch self {
+        case .corruptJSON, .backupNotFound, .checksumMismatch, .restoreRejected:
+            return nil
+        case .validationFailed(let reason), .writeFailed(let reason):
+            return Self.parseBackupDirectory(from: reason)
+        case .migrationFailed(_, _, let reason):
+            return Self.parseBackupDirectory(from: reason)
+        }
+    }
+
+    public func includingBackupDirectory(_ path: String) -> SettingsPersistenceError {
+        let token = "backupLocation=\(path)"
+        switch self {
+        case .migrationFailed(let from, let to, let reason):
+            return .migrationFailed(from: from, to: to, reason: reason.contains("backupLocation=") ? reason : "\(reason); \(token)")
+        case .validationFailed(let reason):
+            return .validationFailed(reason.contains("backupLocation=") ? reason : "\(reason); \(token)")
+        case .writeFailed(let reason):
+            return .writeFailed(reason.contains("backupLocation=") ? reason : "\(reason); \(token)")
+        default:
+            return self
+        }
+    }
+
+    private static func parseBackupDirectory(from reason: String) -> String? {
+        guard let range = reason.range(of: "backupLocation=") else { return nil }
+        let value = String(reason[range.upperBound...])
+        let path = value.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: true).first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return path?.isEmpty == false ? path : nil
     }
 
     public var errorDescription: String? {
@@ -292,6 +345,7 @@ public enum SettingsValidator: Sendable {
             }
             try requireOptionalString(appDict["themeMode"], name: "app.themeMode")
             try requireOptionalString(appDict["language"], name: "app.language")
+            try requireOptionalString(appDict["usageDisplayMode"], name: "app.usageDisplayMode")
             if let order = appDict["membershipOrder"], !(order is [Any]) {
                 throw SettingsPersistenceError.validationFailed("app.membershipOrder must be an array")
             }
@@ -334,7 +388,7 @@ public struct LegacySettingsToV1Step: SettingsMigrationStep {
 
     public func migrate(_ input: [String: Any]) throws -> [String: Any] {
         var output = input
-        output[SettingsSchema.versionKey] = SettingsSchema.currentVersion
+        output[SettingsSchema.versionKey] = toVersion
 
         var app = output["app"] as? [String: Any] ?? [:]
         if app["themeMode"] == nil {
@@ -351,6 +405,26 @@ public struct LegacySettingsToV1Step: SettingsMigrationStep {
         }
         if app["overviewModeEnabled"] == nil, let legacy = app["overviewMode"] {
             app["overviewModeEnabled"] = legacy
+        }
+        output["app"] = app
+        return output
+    }
+}
+
+/// v1 → v2: stamp the version and fill `usageDisplayMode` only. Do not re-run v0 mappings.
+public struct SettingsV1ToV2Step: SettingsMigrationStep {
+    public init() {}
+
+    public var fromVersion: Int { 1 }
+    public var toVersion: Int { 2 }
+
+    public func migrate(_ input: [String: Any]) throws -> [String: Any] {
+        var output = input
+        output[SettingsSchema.versionKey] = toVersion
+
+        var app = output["app"] as? [String: Any] ?? [:]
+        if app["usageDisplayMode"] == nil {
+            app["usageDisplayMode"] = "remaining"
         }
         output["app"] = app
         return output

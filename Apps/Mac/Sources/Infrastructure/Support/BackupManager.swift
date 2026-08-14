@@ -4,13 +4,29 @@ import Domain
 /// Atomic writer used by backups and settings migration.
 public struct SettingsFileIO: Sendable {
     public var writeAtomically: @Sendable (Data, URL) throws -> Void
+    public var posixPermissions: @Sendable (URL) throws -> Int
 
-    public init(writeAtomically: @escaping @Sendable (Data, URL) throws -> Void) {
+    public init(
+        writeAtomically: @escaping @Sendable (Data, URL) throws -> Void,
+        posixPermissions: @escaping @Sendable (URL) throws -> Int = SettingsFileIO.readPOSIXPermissions
+    ) {
         self.writeAtomically = writeAtomically
+        self.posixPermissions = posixPermissions
     }
 
-    public static let live = SettingsFileIO { data, url in
-        try performAtomicWrite(data, to: url)
+    public static let live = SettingsFileIO(
+        writeAtomically: { data, url in
+            try performAtomicWrite(data, to: url)
+        },
+        posixPermissions: readPOSIXPermissions
+    )
+
+    public static func readPOSIXPermissions(at url: URL) throws -> Int {
+        let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+        guard let number = attrs[.posixPermissions] as? NSNumber else {
+            throw SettingsPersistenceError.validationFailed("settings file permissions are missing")
+        }
+        return Int(number.uint16Value)
     }
 
     public static func performAtomicWrite(_ data: Data, to url: URL) throws {
@@ -26,6 +42,10 @@ public struct SettingsFileIO: Sendable {
             } else {
                 try fileManager.moveItem(at: temp, to: url)
             }
+            try fileManager.setAttributes(
+                [.posixPermissions: SettingsSchema.posixFilePermission],
+                ofItemAtPath: url.path
+            )
         } catch {
             try? fileManager.removeItem(at: temp)
             if let persistence = error as? SettingsPersistenceError {
@@ -137,6 +157,12 @@ public final class BackupManager: BackupManaging, @unchecked Sendable {
             manifests.append(manifest)
         }
         return manifests.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    public func directoryURL(for backup: BackupManifest) -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        return try? findDirectory(matching: backup)
     }
 
     public func restore(_ backup: BackupManifest) throws {

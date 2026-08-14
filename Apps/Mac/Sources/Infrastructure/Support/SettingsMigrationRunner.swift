@@ -10,10 +10,12 @@ public final class SettingsMigrationRunner: @unchecked Sendable {
     private let fileIO: SettingsFileIO
     private let lock = NSLock()
 
+    public private(set) var lastBackupDirectory: URL?
+
     public init(
         store: JSONSettingsStore,
         backupManager: any BackupManaging,
-        steps: [any SettingsMigrationStep] = [LegacySettingsToV1Step()],
+        steps: [any SettingsMigrationStep] = SettingsMigrationCatalog.orderedSteps,
         currentVersion: Int = SettingsSchema.currentVersion,
         fileIO: SettingsFileIO = .live
     ) {
@@ -31,6 +33,7 @@ public final class SettingsMigrationRunner: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
+        lastBackupDirectory = nil
         let originalData = (try? Data(contentsOf: store.fileURL)) ?? Data()
         let originalDict: [String: Any]
         if originalData.isEmpty {
@@ -57,43 +60,110 @@ public final class SettingsMigrationRunner: @unchecked Sendable {
         }
 
         let backup = try backupManager.createPreMutationBackup()
-        var working = originalDict
-        var version = fromVersion
+        if let manager = backupManager as? BackupManager {
+            lastBackupDirectory = manager.directoryURL(for: backup)
+        }
 
-        while version < currentVersion {
-            guard let step = steps.first(where: { $0.fromVersion == version }) else {
-                throw SettingsPersistenceError.migrationFailed(
-                    from: version,
-                    to: currentVersion,
-                    reason: "missing migration step from \(version)"
+        do {
+            var working = originalDict
+            var version = fromVersion
+
+            while version < currentVersion {
+                guard let step = steps.first(where: { $0.fromVersion == version }) else {
+                    throw annotate(
+                        SettingsPersistenceError.migrationFailed(
+                            from: version,
+                            to: currentVersion,
+                            reason: "missing migration step from \(version)"
+                        )
+                    )
+                }
+                do {
+                    working = try step.migrate(working)
+                } catch let error as SettingsPersistenceError {
+                    throw annotate(error)
+                } catch {
+                    throw annotate(
+                        SettingsPersistenceError.migrationFailed(
+                            from: step.fromVersion,
+                            to: step.toVersion,
+                            reason: error.localizedDescription
+                        )
+                    )
+                }
+                guard step.toVersion == version + 1 else {
+                    throw annotate(
+                        SettingsPersistenceError.migrationFailed(
+                            from: step.fromVersion,
+                            to: step.toVersion,
+                            reason: "migration steps must advance one version at a time"
+                        )
+                    )
+                }
+                version = step.toVersion
+            }
+
+            try SettingsValidator.validate(working, expectedVersion: currentVersion)
+            guard JSONSerialization.isValidJSONObject(working) else {
+                throw annotate(
+                    SettingsPersistenceError.validationFailed("migrated document is not valid JSON")
                 )
             }
+            let data = try JSONSerialization.data(withJSONObject: working, options: [.prettyPrinted, .sortedKeys])
             do {
-                working = try step.migrate(working)
+                try fileIO.writeAtomically(data, store.fileURL)
             } catch let error as SettingsPersistenceError {
-                throw error
+                restoreOriginalBytes(originalData)
+                throw annotate(error)
             } catch {
-                throw SettingsPersistenceError.migrationFailed(
-                    from: step.fromVersion,
-                    to: step.toVersion,
+                restoreOriginalBytes(originalData)
+                throw annotate(SettingsPersistenceError.writeFailed(error.localizedDescription))
+            }
+
+            do {
+                try validateFilePermissions()
+            } catch {
+                restoreOriginalBytes(originalData)
+                throw annotate(error as? SettingsPersistenceError ?? .validationFailed("settings file permissions"))
+            }
+            return backup
+        } catch let error as SettingsPersistenceError {
+            restoreOriginalBytes(originalData)
+            throw annotate(error)
+        } catch {
+            restoreOriginalBytes(originalData)
+            throw annotate(
+                SettingsPersistenceError.migrationFailed(
+                    from: fromVersion,
+                    to: currentVersion,
                     reason: error.localizedDescription
                 )
-            }
-            version = step.toVersion
+            )
         }
+    }
 
-        try SettingsValidator.validate(working, expectedVersion: currentVersion)
-        guard JSONSerialization.isValidJSONObject(working) else {
-            throw SettingsPersistenceError.validationFailed("migrated document is not valid JSON")
+    private func validateFilePermissions() throws {
+        let mode = try fileIO.posixPermissions(store.fileURL)
+        if (mode & 0o777) != SettingsSchema.posixFilePermission {
+            throw SettingsPersistenceError.validationFailed(
+                "settings file permission \(String(mode, radix: 8)) != 0600"
+            )
         }
-        let data = try JSONSerialization.data(withJSONObject: working, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    private func annotate(_ error: SettingsPersistenceError) -> SettingsPersistenceError {
+        guard let path = lastBackupDirectory?.path else { return error }
+        return error.includingBackupDirectory(path)
+    }
+
+    private func restoreOriginalBytes(_ data: Data) {
+        let url = store.fileURL
         do {
-            try fileIO.writeAtomically(data, store.fileURL)
-        } catch let error as SettingsPersistenceError {
-            throw error
+            let parent = url.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
         } catch {
-            throw SettingsPersistenceError.writeFailed(error.localizedDescription)
+            // Best effort: the live file is still the original unless a later write succeeded.
         }
-        return backup
     }
 }
