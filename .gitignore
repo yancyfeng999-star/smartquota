@@ -7,6 +7,8 @@
 Apps/Mac/.build/
 Apps/Mac/Tuist/.build/
 Apps/Mac/**/Package.resolved
+!Apps/Mac/Tuist/Package.resolved
+Apps/Mac/**/*.xcresult/
 Apps/Mac/**/*.xcodeproj/
 Apps/Mac/**/*.xcworkspace/
 Apps/Mac/Derived/

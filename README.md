@@ -6,23 +6,25 @@
 |--|--|
 | **中文名** | 智额 |
 | **英文名** | SmartQuota |
-| **macOS** | **0.3.28** (build 31) · 菜单栏 · Swift / Tuist · macOS 15+ |
+| **macOS** | **0.3.29** (build 32) · 菜单栏 · Swift / Tuist · macOS 15+ |
 | **Windows** | **0.5.0** · 系统托盘 · Tauri 2 · Setup.exe · Win 10/11 |
-| **许可证** | [MIT](./LICENSE) |
+| **许可证** | [Apache-2.0](./LICENSE) |
 | **仓库** | [github.com/yancyfeng999-star/smartquota](https://github.com/yancyfeng999-star/smartquota) |
 
 本地读取各 AI 客户端 / CLI 的登录态与公开额度 API，在菜单栏（Mac）或托盘（Windows）汇总展示。  
 **不建云账号、不上报密钥与用量、不后台静默更新**（用户点「检查更新」后可一键装 pkg）。
 
-> **当前状态（2026-08）**：本阶段功能已交付，仓库与 GitHub Release 已同步，**项目暂时完结**。后续可按需继续加会员、公证签名或 Windows 发版。
+> **当前状态（2026-08）**：Mac 源码版本为 v0.3.29（build 32），最后一个已发布 Release 为 v0.3.28；仓库可日常使用，通用能力（迁移、备份、诊断、无障碍和恢复）仍在持续完善。源码、文档和 Release 状态以实际证据为准。
 
 ---
 
 ## 下载安装（推荐）
 
-### macOS 最新版
+### macOS 最新已发布版本
 
 **Release：** [v0.3.28](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.28)
+
+源码当前版本为 v0.3.29；v0.3.29 Release 资产将在发布流程完成后替换下面的下载入口。
 
 | 文件 | 用法 |
 |------|------|
@@ -55,7 +57,7 @@
 - **固定窗口 / 排序 / 告警阈值 / 临近重置提醒**  
 - **用户扩展**：`~/.smartquota/extensions`（manifest + 脚本）
 
-### Mac 0.3.26 亮点
+### Mac 0.3.29 亮点
 
 - **静默更新（对齐智余）**：解包 `.pkg` → 退出后覆盖 → 自动打开；**无确认框、无管理员密码**  
 - 日志：`~/Library/Logs/SmartQuota/update.log`
@@ -131,9 +133,24 @@ npm run tauri:build    # Setup.exe（需 Windows）
 | [Apps/Windows/README.md](./Apps/Windows/README.md) | Windows 构建 |
 | [SECURITY.md](./SECURITY.md) | 安全与隐私 |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | 贡献与隐私红线 |
-| [PROJECT_STATUS.md](./PROJECT_STATUS.md) | 本阶段完结状态 |
+| [LICENSE](./LICENSE) | 仓库自有代码与文档的 Apache-2.0 授权 |
+| [NOTICE](./NOTICE) | 第三方依赖、商标、资源和隐私边界 |
+| [docs/REPOSITORY_GOVERNANCE.md](./docs/REPOSITORY_GOVERNANCE.md) | 分支、PR、CI、依赖与发布治理 |
+| [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) | 社区参与行为准则 |
+| [PROJECT_STATUS.md](./PROJECT_STATUS.md) | 当前版本、已完成项与未验证项 |
 
 完整目录：[docs/README.md](./docs/README.md)
+
+---
+
+## 开源范围与治理
+
+- 本仓库自有代码、文档和脚本采用 [Apache License 2.0](./LICENSE)。
+- Swift Package Manager 依赖和随包资源保留各自的许可证与版权要求，详见 [NOTICE](./NOTICE)；它们不因为被本项目引用就自动变成 Apache-2.0。
+- ChatGPT、Claude、Gemini、Copilot、Cursor、Grok、Kimi、MiniMax、AWS、GitHub 等名称和标识归各自权利人所有；智额是非官方本机工具，不代表任何厂商。
+- 应用连接的第三方服务仍受其自身服务条款和隐私政策约束；Apache-2.0 只授权本仓库适用范围内的内容。
+- 安全问题请先阅读 [SECURITY.md](./SECURITY.md)，功能问题和改进建议请遵守 [CONTRIBUTING.md](./CONTRIBUTING.md)；Issue、PR、截图和日志不得包含真实账号、邮箱、Token、Cookie、Keychain 内容或额度数据。
+- 公开文档和依赖声明在发布前由 `scripts/check-open-source-docs.sh` 校验；检查失败时不创建 Release。
 
 ---
 
@@ -141,8 +158,9 @@ npm run tauri:build    # Setup.exe（需 Windows）
 
 1. 改 `Apps/Mac/Sources/App/Info.plist` 版本号 / build  
 2. `Apps/Mac/scripts/package-release.sh`  
-3. 上传 GitHub Release（**资产名用 ASCII**：`SmartQuota-x.y.z.dmg` / `.pkg`）  
-4. 更新 `CHANGELOG.md`、`releases/Mac/LATEST*`  
+3. 上传 GitHub Release（**资产名用 ASCII**：`SmartQuota-x.y.z.dmg` / `.pkg`）
+4. 更新 `CHANGELOG.md`、`releases/Mac/LATEST*`、用户/开发者/发布文档
+5. 运行 `./scripts/check-open-source-docs.sh`，确认许可证、NOTICE、依赖锁文件、链接、版本和敏感信息检查通过
 
 安装包 **不入库**（见 `.gitignore`），仅 Release 分发。
 
@@ -150,5 +168,5 @@ npm run tauri:build    # Setup.exe（需 Windows）
 
 ## 许可
 
-MIT · 见 [LICENSE](./LICENSE) 与 [NOTICE](./NOTICE)。  
-非各 AI 厂商官方应用；各商标归权利人所有。
+本仓库自有代码和文档采用 Apache-2.0；完整授权见 [LICENSE](./LICENSE)，第三方声明见 [NOTICE](./NOTICE)。
+本项目不授予任何第三方服务、账号、接口或商标的使用权；智额不是各 AI 厂商官方应用，各商标归权利人所有。

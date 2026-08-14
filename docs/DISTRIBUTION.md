@@ -1,6 +1,8 @@
 # 智额 · 分发与安装
 
-如何把智额打成安装包、上传 GitHub Release，并在其他 Mac 上使用。
+如何把智额打成安装包、上传 GitHub Release，并在其他 Mac 上使用。仓库自有代码、文档和脚本采用 [Apache License 2.0](../LICENSE)，第三方依赖和分发归属见 [NOTICE](../NOTICE)。
+
+当前源码版本：0.3.29（build 32，待发布）；最后一个已发布 Mac Release：v0.3.28。
 
 ---
 
@@ -22,9 +24,9 @@ COPY_TO_DESKTOP=1 ./scripts/package-release.sh   # 同时拷到 桌面/智额-�
 ```text
 releases/Mac/
   README.md / LATEST / LATEST.md
-  v0.3.12/
-    智额-0.3.12.dmg      ← 本机中文名（方便 AirDrop）
-    智额-0.3.12.pkg
+  v0.3.28/
+    智额-0.3.28.dmg      ← 本机中文名（方便 AirDrop）
+    智额-0.3.28.pkg
     RELEASE_NOTES.md
     SHA256SUMS.txt
 ```
@@ -54,9 +56,10 @@ releases/Mac/
    - `CFBundleVersion`：构建号 +1（如 `21` → `22`）  
 2. **CHANGELOG.md**：把变更写进对应版本段（不要长期留在 Unreleased）  
 3. **文档版本指针**：README / PRODUCT / USER_GUIDE / Apps/Mac/README 等里的版本号对齐  
-4. **打包**：`cd Apps/Mac && ./scripts/package-release.sh`  
-5. **上传 GitHub Release**（Tag `vX.Y.Z` + ASCII 名 dmg/pkg）  
-6. **提交仓库**：源码、CHANGELOG、SHA256、LATEST 指针一并 push `main`  
+4. **开源治理检查**：运行 `./scripts/check-open-source-docs.sh`，核对 LICENSE、NOTICE、Package.resolved、相对链接、版本和敏感信息
+5. **打包**：`cd Apps/Mac && ./scripts/package-release.sh`
+6. **上传 GitHub Release**（Tag `vX.Y.Z` + ASCII 名 dmg/pkg）
+7. **提交仓库**：源码、CHANGELOG、SHA256、LATEST 指针和治理文档一并通过普通 PR 合并；发布工作流不得自动向 main 推送源码变更，二进制不入库
 
 > 不要「只 push 代码不升版本」——已装旧版的用户无法在软件内更新到你的修复。
 
@@ -103,7 +106,7 @@ gh release create "v${VER}" \
 ```
 
 最新 Mac 安装包：  
-https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.19
+https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.28
 
 ---
 
@@ -123,8 +126,8 @@ https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.19
 ### 应用内更新（已装旧版）
 
 1. 菜单栏 → 设置 → **检查更新**  
-2. 有新版本时自动下载 dmg，打开后拖到 Applications  
-3. 覆盖后重新打开智额  
+2. 应用访问 GitHub 公共 Releases API；用户主动触发后优先选择 `.pkg`，没有可用 pkg 时回退到 `.dmg`
+3. 当前发布实现可能在用户一次点击后继续下载并安装；这不等于后台自动更新，更新失败必须保留当前版本并记录可读错误
 
 ### 系统要求
 
@@ -200,3 +203,13 @@ rm -rf /Applications/智额.app
 
 见 [`WINDOWS.md`](./WINDOWS.md)。  
 Setup.exe 在 **Windows** 上 `npm run tauri:build` 产出，上传到同一仓库的 Release（资产名 ASCII，如 `SmartQuota-Setup-0.1.0-x64.exe`）。
+
+## 十、Apache-2.0 与 Release 归档
+
+每个公开 Release 必须让使用者能够同时取得：
+
+1. `LICENSE`（仓库自有内容的 Apache-2.0 正文）。
+2. `NOTICE`（第三方依赖、版本、版权、许可证、商标和资源边界）。
+3. 对应版本的 CHANGELOG/Release Notes，以及真实的签名、公证和安装状态。
+
+不得把 ad-hoc 包写成已公证包，不得把第三方依赖写成 Apache-2.0，也不得在 Release Notes 或安装包中带入真实账号、密钥、Cookie、Keychain 内容或私有路径。

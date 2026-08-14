@@ -2,7 +2,7 @@
 
 macOS **菜单栏**应用。  
 技术：**Swift / SwiftUI / Tuist**  
-当前版本：**0.3.26**（build 29）
+当前源码版本：**0.3.29**（build 32，待发布）
 
 与 [`../Windows`](../Windows/) **平级**。
 
@@ -16,7 +16,7 @@ macOS **菜单栏**应用。
 | 核心四会员 | Codex / Kimi / MiniMax / Grok（默认开） |
 | 扩展会员 | Claude / Gemini / Copilot / Cursor 等（默认关） |
 | 额度 | **5H · 7D · 总额**；状态阈值；续费日着色 |
-| 检查更新 | GitHub Releases → 下载 dmg → 打开（手动触发） |
+| 检查更新 | GitHub Releases → 用户主动触发 → pkg 优先、dmg 回退 |
 | 密钥 | macOS Keychain |
 | 配置 | `~/.smartquota/` |
 | 多语言 | 10 种（设置内切换） |
@@ -66,8 +66,8 @@ Apps/Mac/
 1. 改 `Sources/App/Info.plist` 版本与 build  
 2. `./scripts/package-release.sh`  
 3. 上传 GitHub：资产名 **SmartQuota-x.y.z.dmg / .pkg**（ASCII）  
-4. 更新根 `CHANGELOG.md`、`releases/Mac/LATEST*`  
+4. 更新根 `CHANGELOG.md`、`releases/Mac/LATEST*` 和许可证/第三方文档
 
-详见 [`docs/DISTRIBUTION.md`](../../docs/DISTRIBUTION.md)。
+发版前从仓库根目录运行 `./scripts/check-open-source-docs.sh`；详见 [`docs/DISTRIBUTION.md`](../../docs/DISTRIBUTION.md)。
 
 更多：[`docs/DEVELOPER.md`](../../docs/DEVELOPER.md)、[`docs/USER_GUIDE.md`](../../docs/USER_GUIDE.md)。
