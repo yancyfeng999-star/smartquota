@@ -126,7 +126,7 @@ https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.19
 3. 你在更新区域确认后才下载；系统版本不够则不下载  
 4. 有合法 PKG + 校验：下载到临时文件（有大小上限、超时、可取消、失败清理），退出后替换  
 5. 没有 PKG 时打开 DMG，由你拖到 Applications；**不会**把当前版本标成已更新  
-6. 缺少 PKG/DMG 或 SHA256 时显示资产异常，并打开 GitHub Release 页面  
+6. 缺少 PKG/DMG 或 SHA256 时显示资产异常，**可打开** GitHub Release 页面手动下载  
 7. 安装失败保留当前可启动的 App，不删除当前版本  
 
 默认只检查**稳定版**。自动更新调度不属于本路径。

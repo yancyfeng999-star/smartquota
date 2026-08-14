@@ -48,8 +48,8 @@ public enum SupportCopy: Sendable {
         ),
         "help.topic.check_updates.title": ("检查更新", "Check for updates"),
         "help.topic.check_updates.body": (
-            "在设置中点「检查更新」，会显示当前版本、新版本、日期、说明、安装包大小和最低 macOS。确认后才下载。优先 PKG，没有 PKG 时打开 DMG。缺少资产或校验时打开 Release 页。默认 ad-hoc 签名，首次打开请右键打开。不会静默自动更新。",
-            "Tap Check for Updates in Settings to see the current version, new version, date, notes, installer size, and minimum macOS. Download starts only after you confirm. PKG is preferred; DMG is the fallback. Missing assets or checksums open the Release page. Default signing is ad-hoc — Control-click to open the first time. There is no silent auto-update."
+            "在设置中点「检查更新」，会显示当前版本、新版本、日期、说明、安装包大小和最低 macOS。确认后才下载。优先 PKG，没有 PKG 时打开 DMG。缺少资产或校验时可打开 Release 页。默认 ad-hoc 签名，首次打开请右键打开。不会静默自动更新。",
+            "Tap Check for Updates in Settings to see the current version, new version, date, notes, installer size, and minimum macOS. Download starts only after you confirm. PKG is preferred; DMG is the fallback. If assets or checksums are missing, you can open the Release page. Default signing is ad-hoc — Control-click to open the first time. There is no silent auto-update."
         ),
         "help.topic.log_location.title": ("日志位置", "Log location"),
         "help.topic.log_location.body": (

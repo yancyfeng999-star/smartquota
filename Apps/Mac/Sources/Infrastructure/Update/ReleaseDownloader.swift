@@ -29,6 +29,7 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
 
     private struct SessionState {
         var cancelled = false
+        var aborted = false
         var progressHandler: (@Sendable (Double) -> Void)?
         var continuation: CheckedContinuation<URL, Error>?
         var destinationURL: URL?
@@ -55,11 +56,12 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
     }
 
     public func cancel() {
-        let task = state.withLock { current -> URLSessionDownloadTask? in
-            current.cancelled = true
-            return current.downloadTask
-        }
-        task?.cancel()
+        abortInFlight(with: .downloadCancelled)
+    }
+
+    /// True while a live `URLSession` download is still registered.
+    var hasActiveSession: Bool {
+        state.withLock { $0.session != nil || $0.downloadTask != nil }
     }
 
     /// Downloads `url` into a unique temp file. Cleans up on timeout, cancel, or failure.
@@ -77,7 +79,10 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
             throw ManualUpdateError.downloadTooLarge(maxBytes: maxBytes)
         }
 
-        state.withLock { $0.cancelled = false }
+        state.withLock { current in
+            current.cancelled = false
+            current.aborted = false
+        }
 
         let work = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         do {
@@ -93,8 +98,8 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
                 to: dest,
                 onProgress: onProgress
             )
-            if isCancelled {
-                throw ManualUpdateError.downloadCancelled
+            if isCancelled || isAborted {
+                throw isCancelled ? ManualUpdateError.downloadCancelled : ManualUpdateError.downloadTimeout
             }
             let size = try fileSize(at: dest)
             if size > maxBytes {
@@ -159,6 +164,32 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
         state.withLock { $0.cancelled }
     }
 
+    private var isAborted: Bool {
+        state.withLock { $0.aborted }
+    }
+
+    /// Cancel the in-flight URLSession (not only a sleeper task) and drop the dest so a late finish cannot copy.
+    private func abortInFlight(with error: ManualUpdateError) {
+        let snapshot = state.withLock { current -> (URLSession?, URLSessionDownloadTask?, CheckedContinuation<URL, Error>?) in
+            current.aborted = true
+            if error == .downloadCancelled {
+                current.cancelled = true
+            }
+            current.destinationURL = nil
+            current.progressHandler = nil
+            let session = current.session
+            let task = current.downloadTask
+            let cont = current.continuation
+            current.session = nil
+            current.downloadTask = nil
+            current.continuation = nil
+            return (session, task, cont)
+        }
+        snapshot.1?.cancel()
+        snapshot.0?.invalidateAndCancel()
+        snapshot.2?.resume(throwing: error)
+    }
+
     private func downloadWithTimeout(
         from url: URL,
         to dest: URL,
@@ -171,6 +202,8 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
             group.addTask {
                 let nanos = UInt64(max(self.timeout, 0.01) * 1_000_000_000)
                 try await Task.sleep(nanoseconds: nanos)
+                try Task.checkCancellation()
+                self.abortInFlight(with: .downloadTimeout)
                 throw ManualUpdateError.downloadTimeout
             }
             do {
@@ -214,20 +247,28 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
         onProgress: (@Sendable (Double) -> Void)?
     ) async throws {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<URL, Error>) in
-            state.withLock { current in
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = timeout
+            // Resource timeout is a backstop; the sleeper must invalidate the session itself.
+            config.timeoutIntervalForResource = timeout + 30
+            let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+            let task = session.downloadTask(with: request)
+            let shouldStart = state.withLock { current -> ManualUpdateError? in
+                if current.aborted {
+                    return current.cancelled ? .downloadCancelled : .downloadTimeout
+                }
                 current.continuation = cont
                 current.progressHandler = onProgress
                 current.destinationURL = destination
-            }
-
-            let config = URLSessionConfiguration.ephemeral
-            config.timeoutIntervalForRequest = timeout
-            config.timeoutIntervalForResource = timeout
-            let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
-            let task = session.downloadTask(with: request)
-            state.withLock { current in
                 current.session = session
                 current.downloadTask = task
+                return nil
+            }
+            if let error = shouldStart {
+                task.cancel()
+                session.invalidateAndCancel()
+                cont.resume(throwing: error)
+                return
             }
             task.resume()
         }
@@ -288,9 +329,9 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
             finish(.failure(ManualUpdateError.downloadTooLarge(maxBytes: maxBytes)))
             return
         }
-        if isCancelled {
+        if isCancelled || isAborted {
             downloadTask.cancel()
-            finish(.failure(ManualUpdateError.downloadCancelled))
+            finish(.failure(isCancelled ? ManualUpdateError.downloadCancelled : ManualUpdateError.downloadTimeout))
             return
         }
         let handler = state.withLock { $0.progressHandler }
@@ -308,17 +349,24 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
         downloadTask: URLSessionDownloadTask,
         didFinishDownloadingTo location: URL
     ) {
-        let dest = state.withLock { $0.destinationURL }
-        guard let dest else {
-            finish(.failure(ManualUpdateError.network("Missing download destination")))
-            return
+        let dest = state.withLock { current -> URL? in
+            if current.aborted { return nil }
+            return current.destinationURL
         }
+        guard let dest else { return }
         do {
             try fileManager.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
             if fileManager.fileExists(atPath: dest.path) {
                 try fileManager.removeItem(at: dest)
             }
             try fileManager.copyItem(at: location, to: dest)
+            let keep = state.withLock { current in
+                !current.aborted && current.destinationURL == dest
+            }
+            if !keep {
+                try? fileManager.removeItem(at: dest)
+                return
+            }
             state.withLock { $0.progressHandler }?(1)
             finish(.success(dest))
         } catch {
@@ -331,18 +379,25 @@ public final class ReleaseDownloader: NSObject, URLSessionDownloadDelegate, @unc
         task: URLSessionTask,
         didCompleteWithError error: Error?
     ) {
-        if let error {
+        if let error, !isAborted {
             finish(.failure(mapDownloadError(error)))
         }
-        session.finishTasksAndInvalidate()
+        if !isAborted {
+            session.finishTasksAndInvalidate()
+        }
         state.withLock { current in
-            current.session = nil
+            if current.session === session {
+                current.session = nil
+            }
             current.downloadTask = nil
         }
     }
 
     private func finish(_ result: Result<URL, Error>) {
         let cont = state.withLock { current -> CheckedContinuation<URL, Error>? in
+            if current.aborted, case .success = result {
+                return nil
+            }
             let pending = current.continuation
             current.continuation = nil
             return pending

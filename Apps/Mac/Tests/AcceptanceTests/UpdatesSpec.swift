@@ -1,6 +1,8 @@
 import Testing
 import Foundation
 import Mockable
+import Network
+import os
 @testable import Domain
 @testable import Infrastructure
 
@@ -141,6 +143,30 @@ struct UpdatesSpec {
     }
 
     @Test
+    func `production timeout invalidates URLSession and leaves no file`() async throws {
+        let server = HangingHTTPServer()
+        try server.start()
+        defer { server.stop() }
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("updates-session-timeout-\(UUID().uuidString)", isDirectory: true)
+        let downloader = ReleaseDownloader(
+            directory: dir,
+            maxBytes: 1_024,
+            timeout: 0.2
+        )
+        do {
+            _ = try await downloader.download(
+                from: URL(string: "http://127.0.0.1:\(server.port)/SmartQuota-0.3.29.pkg")!
+            )
+            Issue.record("expected timeout")
+        } catch let error as ManualUpdateError {
+            #expect(error == .downloadTimeout)
+        }
+        #expect(remainingFiles(in: dir).isEmpty)
+        #expect(!downloader.hasActiveSession)
+    }
+
+    @Test
     func `cancel download cleans temp file`() async throws {
         let transport = ScriptedReleaseDownloadTransport(behavior: .hang)
         let dir = FileManager.default.temporaryDirectory
@@ -258,6 +284,44 @@ struct UpdatesSpec {
         ]
         try (plist as NSDictionary).write(to: contents.appendingPathComponent("Info.plist"))
         return app
+    }
+}
+
+private final class HangingHTTPServer: @unchecked Sendable {
+    private var listener: NWListener?
+    private(set) var port: UInt16 = 0
+    private let readyError = OSAllocatedUnfairLock<Error?>(initialState: nil)
+
+    func start() throws {
+        let listener = try NWListener(using: .tcp, on: .any)
+        let ready = DispatchSemaphore(value: 0)
+        listener.stateUpdateHandler = { [readyError] state in
+            switch state {
+            case .ready:
+                ready.signal()
+            case .failed(let error):
+                readyError.withLock { $0 = error }
+                ready.signal()
+            default:
+                break
+            }
+        }
+        listener.newConnectionHandler = { connection in
+            connection.start(queue: .global())
+        }
+        listener.start(queue: .global())
+        ready.wait()
+        if let error = readyError.withLock({ $0 }) { throw error }
+        guard let value = listener.port?.rawValue else {
+            throw ManualUpdateError.network("hanging server has no port")
+        }
+        port = value
+        self.listener = listener
+    }
+
+    func stop() {
+        listener?.cancel()
+        listener = nil
     }
 }
 

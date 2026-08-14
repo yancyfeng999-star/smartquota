@@ -202,8 +202,8 @@ final class L10n {
         "settings.updates": [.zhHans: "软件更新", .en: "Updates", .ja: "アップデート", .ko: "업데이트", .ru: "Обновления", .ar: "التحديثات", .fr: "Mises à jour", .de: "Updates", .es: "Actualizaciones", .pt: "Atualizações"],
         "settings.updates_version_fmt": [.zhHans: "当前版本 %@", .en: "Current version %@", .ja: "現在のバージョン %@", .ko: "현재 버전 %@", .ru: "Текущая версия %@", .ar: "الإصدار الحالي %@", .fr: "Version actuelle %@", .de: "Aktuelle Version %@", .es: "Versión actual %@", .pt: "Versão atual %@"],
         "settings.updates_manual_help": [
-            .zhHans: "先检查并阅读说明，再在更新区域确认下载。优先 .pkg，无包或无校验时打开 Release 页。.dmg 为回退。默认 ad-hoc 签名。",
-            .en: "Check first, read the notes, then confirm download in this card. Prefers .pkg. Missing assets or checksums open the Release page. .dmg is fallback. Default signing is ad-hoc.",
+            .zhHans: "先检查并阅读说明，再在更新区域确认下载。优先 .pkg，无包或无校验时可打开 Release 页。.dmg 为回退。默认 ad-hoc 签名。",
+            .en: "Check first, read the notes, then confirm download in this card. Prefers .pkg. If assets or checksums are missing, you can open the Release page. .dmg is fallback. Default signing is ad-hoc.",
             .ja: "1回で .pkg を展開し終了後に置換。確認も管理者パスワードも不要（書込権限が必要）。",
             .ko: "한 번 탭: .pkg 해제 후 종료·교체. 확인/관리자 암호 없음(쓰기 권한 필요).",
             .ru: "Один раз: .pkg, распаковка и замена после выхода. Без пароля (нужна запись).",
@@ -226,14 +226,6 @@ final class L10n {
         "settings.updates_relaunching": [
             .zhHans: "已安排替换，正在退出以便写入新版本…",
             .en: "Replacement scheduled — quitting so the new version can be written…",
-            .ja: "インストール完了。再起動します…",
-            .ko: "설치 완료 · 다시 실행…",
-            .ru: "Установлено — перезапуск…",
-            .ar: "تم التثبيت — جارٍ إعادة التشغيل…",
-            .fr: "Installé — relance…",
-            .de: "Installiert — Neustart…",
-            .es: "Instalado — reiniciando…",
-            .pt: "Instalado — reabrindo…",
         ],
         "settings.updates_progress_fmt": [.zhHans: "已下载 %d%%", .en: "Downloaded %d%%", .ja: "%d%% 完了", .ko: "%d%% 완료", .ru: "Скачано %d%%", .ar: "تم تنزيل %d٪", .fr: "%d %% téléchargé", .de: "%d %% geladen", .es: "Descargado %d%%", .pt: "Baixado %d%%"],
         "settings.updates_opening": [.zhHans: "正在打开安装包…", .en: "Opening installer…", .ja: "インストーラを開いています…", .ko: "설치 파일 여는 중…", .ru: "Открытие…", .ar: "جارٍ الفتح…", .fr: "Ouverture…", .de: "Wird geöffnet…", .es: "Abriendo…", .pt: "Abrindo…"],
@@ -1202,8 +1194,8 @@ final class L10n {
         ],
         "help.topic.check_updates.title": [.zhHans: "检查更新", .en: "Check for updates"],
         "help.topic.check_updates.body": [
-            .zhHans: "在设置中点「检查更新」，会显示当前版本、新版本、日期、说明、安装包大小和最低 macOS。确认后才下载。优先 PKG，没有 PKG 时打开 DMG。缺少资产或校验时打开 Release 页。默认 ad-hoc 签名，首次打开请右键打开。不会静默自动更新。",
-            .en: "Tap Check for Updates in Settings to see the current version, new version, date, notes, installer size, and minimum macOS. Download starts only after you confirm. PKG is preferred; DMG is the fallback. Missing assets or checksums open the Release page. Default signing is ad-hoc — Control-click to open the first time. There is no silent auto-update.",
+            .zhHans: "在设置中点「检查更新」，会显示当前版本、新版本、日期、说明、安装包大小和最低 macOS。确认后才下载。优先 PKG，没有 PKG 时打开 DMG。缺少资产或校验时可打开 Release 页。默认 ad-hoc 签名，首次打开请右键打开。不会静默自动更新。",
+            .en: "Tap Check for Updates in Settings to see the current version, new version, date, notes, installer size, and minimum macOS. Download starts only after you confirm. PKG is preferred; DMG is the fallback. If assets or checksums are missing, you can open the Release page. Default signing is ad-hoc — Control-click to open the first time. There is no silent auto-update.",
         ],
         "help.topic.log_location.title": [.zhHans: "日志位置", .en: "Log location"],
         "help.topic.log_location.body": [
