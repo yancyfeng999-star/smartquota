@@ -14,7 +14,7 @@
 本地读取各 AI 客户端 / CLI 的登录态与公开额度 API，在菜单栏（Mac）或托盘（Windows）汇总展示。  
 **不建云账号、不上报密钥与用量、不后台静默更新**（用户点「检查更新」后可一键装 pkg）。
 
-> **当前状态（2026-08）**：Mac 源码版本为 v0.3.29（build 32），最后一个已发布 Release 为 v0.3.28；仓库可日常使用，通用能力（迁移、备份、诊断、无障碍和恢复）仍在持续完善。源码、文档和 Release 状态以实际证据为准。
+> **当前状态（2026-08-14）**：Mac v0.3.29（build 32）已发布。此版本补齐首次引导、手动刷新与取消、诊断、设置导入导出、备份恢复、兼容性、无障碍、帮助和安全模式恢复等通用能力；源码、文档和 Release 状态以实际证据为准。
 
 ---
 
@@ -22,14 +22,14 @@
 
 ### macOS 最新已发布版本
 
-**Release：** [v0.3.28](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.28)
+**Release：** [v0.3.29](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.29)
 
-源码当前版本为 v0.3.29；v0.3.29 Release 资产将在发布流程完成后替换下面的下载入口。
+当前发布包为 v0.3.29（build 32）。
 
 | 文件 | 用法 |
 |------|------|
-| [SmartQuota-0.3.28.dmg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.28/SmartQuota-0.3.28.dmg) | 打开后把 **智额.app** 拖到 Applications（推荐） |
-| [SmartQuota-0.3.28.pkg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.28/SmartQuota-0.3.28.pkg) | 双击安装向导 / 应用内一键静默更新 |
+| [SmartQuota-0.3.29.dmg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.29/SmartQuota-0.3.29.dmg) | 打开后把 **智额.app** 拖到 Applications（推荐） |
+| [SmartQuota-0.3.29.pkg](https://github.com/yancyfeng999-star/smartquota/releases/download/v0.3.29/SmartQuota-0.3.29.pkg) | 双击安装向导 / 应用内一键静默更新 |
 
 - 系统：**macOS 15.0+**
 - 首次打开若提示「无法验证开发者」：**Control + 点击 → 打开**，或 **系统设置 → 隐私与安全性 → 仍要打开**
