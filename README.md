@@ -22,7 +22,7 @@
 
 ### macOS 最新版
 
-**本机最新包：** `releases/Mac/v0.3.28/`（远端 Release 仍以已上传的 tag 为准）
+**Release：** [v0.3.28](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.28)
 
 | 文件 | 用法 |
 |------|------|
