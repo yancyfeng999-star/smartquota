@@ -86,6 +86,90 @@ struct BackupManagerTests {
     }
 
     @Test
+    func `backup allowlist drops unknown extra keys from fixture`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        let fixture = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/settings/unknown-fields-settings.json")
+        try FileManager.default.copyItem(at: fixture, to: env.settingsURL)
+
+        let manager = BackupManager(configRoot: env.configRoot, appVersion: "0.3.28")
+        _ = try manager.createPreMutationBackup()
+
+        let backup = try storeDictionary(at: try backupFileURL(root: env.configRoot, named: "settings.json"))
+        let keys = allKeys(backup)
+        #expect(!keys.contains("legacyRootKey"))
+        #expect(!keys.contains("futureFeatureFlag"))
+        #expect(!keys.contains("experimentalLayout"))
+        #expect(!keys.contains("unknownProviderMeta"))
+        #expect(backup["legacyRootKey"] == nil)
+
+        #expect(SettingsJSON.intValue(backup["schemaVersion"]) == 0)
+        let app = try #require(backup["app"] as? [String: Any])
+        #expect(app["themeMode"] as? String == "system")
+        #expect(app["language"] as? String == "en")
+        #expect(app["usageDisplayMode"] as? String == "remaining")
+        #expect(app["futureFeatureFlag"] == nil)
+        #expect(app["experimentalLayout"] == nil)
+
+        let claude = try #require((backup["providers"] as? [String: Any])?["claude"] as? [String: Any])
+        #expect(claude["isEnabled"] as? Bool == true)
+        #expect(claude["planLabel"] as? String == "Pro")
+        #expect(claude["renewalDate"] as? String == "2026-12-01")
+        #expect(claude["unknownProviderMeta"] == nil)
+
+        let live = try storeDictionary(at: env.settingsURL)
+        #expect(live["legacyRootKey"] as? String == "must-survive-migration")
+    }
+
+    @Test
+    func `backup keeps cookieSource enums and drops actual cookies tokens passwords and api keys`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        let json = """
+        {
+          "schemaVersion": 1,
+          "app": { "themeMode": "dark" },
+          "mimo": { "cookieSource": "auto" },
+          "alibaba": { "cookieSource": "manual", "region": "international" },
+          "claude": { "probeMode": "cli" },
+          "copilotToken": "ghp_should-not-be-backed-up",
+          "sessionCookie": "cookie-secret",
+          "apiKey": "sk-secret",
+          "password": "hunter2"
+        }
+        """
+        try json.write(to: env.settingsURL, atomically: true, encoding: .utf8)
+
+        let manager = BackupManager(configRoot: env.configRoot, appVersion: "0.3.28")
+        _ = try manager.createPreMutationBackup()
+
+        let backup = try storeDictionary(at: try backupFileURL(root: env.configRoot, named: "settings.json"))
+        #expect((backup["mimo"] as? [String: Any])?["cookieSource"] as? String == "auto")
+        #expect((backup["alibaba"] as? [String: Any])?["cookieSource"] as? String == "manual")
+        #expect((backup["alibaba"] as? [String: Any])?["region"] as? String == "international")
+        #expect((backup["claude"] as? [String: Any])?["probeMode"] as? String == "cli")
+
+        let copied = try String(
+            contentsOf: try backupFileURL(root: env.configRoot, named: "settings.json"),
+            encoding: .utf8
+        )
+        #expect(!copied.contains("ghp_should-not-be-backed-up"))
+        #expect(!copied.contains("cookie-secret"))
+        #expect(!copied.contains("sk-secret"))
+        #expect(!copied.contains("hunter2"))
+        #expect(backup["copilotToken"] == nil)
+        #expect(backup["sessionCookie"] == nil)
+        #expect(backup["apiKey"] == nil)
+        #expect(backup["password"] == nil)
+    }
+
+    @Test
     func `backup omits secrets tokens cookies and does not copy logs or snapshots`() throws {
         let env = try makeEnv()
         defer { env.cleanup() }
@@ -230,6 +314,21 @@ struct BackupManagerTests {
         let data = try Data(contentsOf: url)
         let json = try JSONSerialization.jsonObject(with: data)
         return try #require(json as? [String: Any])
+    }
+
+    private func allKeys(_ value: Any) -> Set<String> {
+        if let dict = value as? [String: Any] {
+            return dict.keys.reduce(into: Set<String>()) { result, key in
+                result.insert(key)
+                result.formUnion(allKeys(dict[key] as Any))
+            }
+        }
+        if let array = value as? [Any] {
+            return array.reduce(into: Set<String>()) { result, item in
+                result.formUnion(allKeys(item))
+            }
+        }
+        return []
     }
 }
 

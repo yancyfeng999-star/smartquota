@@ -90,7 +90,11 @@ public final class BackupManager: BackupManaging, @unchecked Sendable {
                     options: [.prettyPrinted, .sortedKeys]
                 )
             } else {
-                payload = raw
+                // Unreadable JSON cannot be allowlisted; do not copy raw bytes.
+                payload = try JSONSerialization.data(
+                    withJSONObject: [String: Any](),
+                    options: [.prettyPrinted, .sortedKeys]
+                )
             }
 
             try fileIO.writeAtomically(payload, backupDir.appendingPathComponent("settings.json"))

@@ -105,56 +105,171 @@ public enum SettingsJSON: Sendable {
 public enum SettingsBackupPolicy: Sendable {
     public static let includedRelativePaths = ["settings.json"]
 
-    public static func isSensitiveKey(_ key: String) -> Bool {
-        let lowered = key.lowercased()
-        let banned = [
-            "token",
-            "cookie",
-            "password",
-            "secret",
-            "keychain",
-            "authorization",
-            "apikey",
-            "api_key",
-            "api-key",
-            "access_token",
-            "refresh_token",
-        ]
-        return banned.contains { lowered.contains($0) }
-    }
+    public static let appKeys: Set<String> = [
+        "themeMode",
+        "language",
+        "userHasChosenTheme",
+        "usageDisplayMode",
+        "menuBarPercentageEnabled",
+        "menuBarStatusIconEnabled",
+        "menuBarDurationEnabled",
+        "menuBarStackedEnabled",
+        "menuBarStackedSize",
+        "menuBarPercentageProviderId",
+        "menuBarPercentageQuotaKey",
+        "menuBarSecondaryQuotaKey",
+        "showDailyUsageCards",
+        "overviewModeEnabled",
+        "overviewMode",
+        "membershipOrder",
+        "backgroundSyncEnabled",
+        "backgroundSyncInterval",
+        "claudeApiBudgetEnabled",
+        "claudeApiBudget",
+        "burnRateWarningEnabled",
+        "burnRateThreshold",
+        "quotaThresholdAlertsEnabled",
+        "sessionAlertThreshold",
+        "weeklyAlertThreshold",
+        "nearResetAlertHours",
+        "underuseAlertRemaining",
+        "receiveBetaUpdates",
+    ]
 
+    public static let providerEntryKeys: Set<String> = [
+        "isEnabled",
+        "customCardURL",
+        "planLabel",
+        "renewalDate",
+        "accounts",
+        "selectedAccountId",
+    ]
+
+    public static let accountSettingKeys: Set<String> = [
+        "planLabel",
+        "renewalDate",
+    ]
+
+    public static let accountConfigKeys: Set<String> = [
+        "accountId",
+        "label",
+        "organization",
+    ]
+
+    public static let claudeKeys: Set<String> = ["probeMode", "cliFallbackEnabled"]
+    public static let codexKeys: Set<String> = ["probeMode"]
+    public static let kimiKeys: Set<String> = ["probeMode"]
+    public static let zaiKeys: Set<String> = ["configPath", "glmAuthEnvVar"]
+    public static let copilotKeys: Set<String> = [
+        "probeMode",
+        "authEnvVar",
+        "monthlyLimit",
+        "manualUsageValue",
+        "manualUsageIsPercent",
+        "manualOverrideEnabled",
+        "apiReturnedEmpty",
+        "lastUsagePeriodMonth",
+        "lastUsagePeriodYear",
+    ]
+    public static let bedrockKeys: Set<String> = ["awsProfile", "regions", "dailyBudget"]
+    public static let mimoKeys: Set<String> = ["cookieSource"]
+    public static let alibabaKeys: Set<String> = ["region", "cookieSource"]
+    public static let minimaxKeys: Set<String> = ["region", "authEnvVar"]
+    public static let hookKeys: Set<String> = ["enabled", "port"]
+
+    /// Copies only allowlisted settings. Unknown keys and secrets are omitted.
     public static func sanitizeDictionary(_ dict: [String: Any]) -> [String: Any] {
-        sanitize(dict) as? [String: Any] ?? [:]
+        var output: [String: Any] = [:]
+
+        if let version = dict[SettingsSchema.versionKey] {
+            output[SettingsSchema.versionKey] = version
+        }
+        if let app = dict["app"] as? [String: Any] {
+            let filtered = pick(app, allowed: appKeys)
+            if !filtered.isEmpty {
+                output["app"] = filtered
+            }
+        }
+        if let providers = dict["providers"] as? [String: Any] {
+            let filtered = allowlistProviders(providers)
+            if !filtered.isEmpty {
+                output["providers"] = filtered
+            }
+        }
+
+        let providerRoots: [(String, Set<String>)] = [
+            ("claude", claudeKeys),
+            ("codex", codexKeys),
+            ("kimi", kimiKeys),
+            ("zai", zaiKeys),
+            ("copilot", copilotKeys),
+            ("bedrock", bedrockKeys),
+            ("mimo", mimoKeys),
+            ("alibaba", alibabaKeys),
+            ("minimax", minimaxKeys),
+            ("hook", hookKeys),
+        ]
+        for (root, keys) in providerRoots {
+            guard let nested = dict[root] as? [String: Any] else { continue }
+            let filtered = pick(nested, allowed: keys)
+            if !filtered.isEmpty {
+                output[root] = filtered
+            }
+        }
+
+        return output
     }
 
-    public static func sanitize(_ value: Any) -> Any? {
-        if let dict = value as? [String: Any] {
-            var output: [String: Any] = [:]
-            for (key, child) in dict {
-                if isSensitiveKey(key) { continue }
-                if key == "accounts", let base64 = child as? String {
-                    if let sanitized = sanitizeAccountsBlob(base64) {
-                        output[key] = sanitized
+    private static func pick(_ dict: [String: Any], allowed: Set<String>) -> [String: Any] {
+        var output: [String: Any] = [:]
+        for key in allowed {
+            if let value = dict[key] {
+                output[key] = value
+            }
+        }
+        return output
+    }
+
+    private static func allowlistProviders(_ providers: [String: Any]) -> [String: Any] {
+        var output: [String: Any] = [:]
+        for (providerId, raw) in providers {
+            guard let entry = raw as? [String: Any] else { continue }
+            var kept: [String: Any] = [:]
+            for (key, value) in entry {
+                if providerEntryKeys.contains(key) {
+                    if key == "accounts" {
+                        if let accounts = allowlistAccounts(value) {
+                            kept[key] = accounts
+                        }
+                    } else {
+                        kept[key] = value
                     }
-                    continue
-                }
-                if let cleaned = sanitize(child) {
-                    output[key] = cleaned
+                } else if let nested = value as? [String: Any] {
+                    let account = pick(nested, allowed: accountSettingKeys)
+                    if !account.isEmpty {
+                        kept[key] = account
+                    }
                 }
             }
-            return output
+            if !kept.isEmpty {
+                output[providerId] = kept
+            }
         }
-        if let array = value as? [Any] {
-            return array.compactMap { sanitize($0) }
-        }
-        return value
+        return output
     }
 
-    private static func sanitizeAccountsBlob(_ base64: String) -> String? {
-        guard let data = Data(base64Encoded: base64),
-              let json = try? JSONSerialization.jsonObject(with: data),
-              let cleaned = sanitize(json),
-              JSONSerialization.isValidJSONObject(cleaned),
+    private static func allowlistAccounts(_ value: Any) -> String? {
+        guard let base64 = value as? String,
+              let data = Data(base64Encoded: base64),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [Any] else {
+            return nil
+        }
+        let cleaned: [[String: Any]] = json.compactMap { item in
+            guard let account = item as? [String: Any] else { return nil }
+            let picked = pick(account, allowed: accountConfigKeys)
+            return picked.isEmpty ? nil : picked
+        }
+        guard JSONSerialization.isValidJSONObject(cleaned),
               let encoded = try? JSONSerialization.data(withJSONObject: cleaned) else {
             return nil
         }
