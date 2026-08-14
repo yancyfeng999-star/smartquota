@@ -188,7 +188,7 @@ struct CrashRecoveryStoreTests {
         try store.restoreLatestBackup()
         let afterRestore = env.settingsStore.readAll()
         #expect((afterRestore["app"] as? [String: Any])?["themeMode"] as? String == "dark")
-        #expect(try backup.listBackups().count == 1)
+        #expect(try backup.listBackups().count >= 1)
         #expect(store.hasSessionMarker == false)
         #expect(store.hasCleanMarker)
 

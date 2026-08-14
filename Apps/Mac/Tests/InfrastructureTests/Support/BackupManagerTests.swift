@@ -260,6 +260,85 @@ struct BackupManagerTests {
     }
 
     @Test
+    func `restore verifies in a temp directory then atomically replaces live settings`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        let original = """
+        {"schemaVersion":1,"app":{"themeMode":"dark","language":"en"}}
+        """
+        try original.write(to: env.settingsURL, atomically: true, encoding: .utf8)
+
+        let manager = BackupManager(configRoot: env.configRoot, appVersion: "0.3.28")
+        let manifest = try manager.createPreMutationBackup()
+
+        try #"{"schemaVersion":1,"app":{"themeMode":"light"}}"#
+            .write(to: env.settingsURL, atomically: true, encoding: .utf8)
+        let liveBeforeRestore = try Data(contentsOf: env.settingsURL)
+
+        try manager.restore(manifest)
+
+        let restored = try storeDictionary(at: env.settingsURL)
+        #expect((restored["app"] as? [String: Any])?["themeMode"] as? String == "dark")
+        #expect((restored["app"] as? [String: Any])?["language"] as? String == "en")
+        #expect(try Data(contentsOf: env.settingsURL) != liveBeforeRestore)
+
+        let listed = try manager.listBackups()
+        #expect(listed.count >= 2)
+    }
+
+    @Test
+    func `restore failure after temp verification leaves live bytes unchanged`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try #"{"schemaVersion":1,"app":{"themeMode":"dark"}}"#
+            .write(to: env.settingsURL, atomically: true, encoding: .utf8)
+        let manager = BackupManager(configRoot: env.configRoot, appVersion: "0.3.28")
+        let manifest = try manager.createPreMutationBackup()
+
+        try #"{"schemaVersion":1,"app":{"themeMode":"light"}}"#
+            .write(to: env.settingsURL, atomically: true, encoding: .utf8)
+        let liveBytes = try Data(contentsOf: env.settingsURL)
+
+        let backupSettings = try backupFileURL(root: env.configRoot, named: "settings.json")
+        try "not-valid-json".write(to: backupSettings, atomically: true, encoding: .utf8)
+
+        let error = #expect(throws: SettingsPersistenceError.self) {
+            try manager.restore(manifest)
+        }
+        #expect(error != nil)
+        #expect(try Data(contentsOf: env.settingsURL) == liveBytes)
+    }
+
+    @Test
+    func `inspectBackups reports time version files and checksum status`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try #"{"schemaVersion":1,"app":{"themeMode":"dark"}}"#
+            .write(to: env.settingsURL, atomically: true, encoding: .utf8)
+        let manager = BackupManager(configRoot: env.configRoot, appVersion: "0.3.28")
+        let valid = try manager.createPreMutationBackup()
+
+        let inspections = try manager.inspectBackups()
+        #expect(inspections.count == 1)
+        let first = try #require(inspections.first)
+        #expect(first.manifest.appVersion == "0.3.28")
+        #expect(first.manifest.schemaVersion == 1)
+        #expect(first.manifest.includedFiles == ["settings.json"])
+        #expect(first.manifest.createdAt == valid.createdAt)
+        #expect(first.checksumValid)
+        #expect(first.failureReason == nil)
+
+        let backupSettings = try backupFileURL(root: env.configRoot, named: "settings.json")
+        try "tampered".write(to: backupSettings, atomically: true, encoding: .utf8)
+        let afterTamper = try manager.inspectBackups()
+        #expect(afterTamper.first?.checksumValid == false)
+        #expect(afterTamper.first?.failureReason?.isEmpty == false)
+    }
+
+    @Test
     func `backup root is the injected config root not the user home`() throws {
         let env = try makeEnv()
         defer { env.cleanup() }

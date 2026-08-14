@@ -263,6 +263,11 @@ public enum SettingsBackupPolicy: Sendable {
 
     /// Copies only allowlisted settings. Unknown keys and secrets are omitted.
     public static func sanitizeDictionary(_ dict: [String: Any]) -> [String: Any] {
+        sanitizeDictionary(dict, includeEmail: false)
+    }
+
+    /// Same allowlist as backup/export. Email is copied only when `includeEmail` is true.
+    public static func sanitizeDictionary(_ dict: [String: Any], includeEmail: Bool) -> [String: Any] {
         var output: [String: Any] = [:]
 
         if let version = dict[SettingsSchema.versionKey] {
@@ -275,7 +280,7 @@ public enum SettingsBackupPolicy: Sendable {
             }
         }
         if let providers = dict["providers"] as? [String: Any] {
-            let filtered = allowlistProviders(providers)
+            let filtered = allowlistProviders(providers, includeEmail: includeEmail)
             if !filtered.isEmpty {
                 output["providers"] = filtered
             }
@@ -314,7 +319,7 @@ public enum SettingsBackupPolicy: Sendable {
         return output
     }
 
-    private static func allowlistProviders(_ providers: [String: Any]) -> [String: Any] {
+    private static func allowlistProviders(_ providers: [String: Any], includeEmail: Bool) -> [String: Any] {
         var output: [String: Any] = [:]
         for (providerId, raw) in providers {
             guard let entry = raw as? [String: Any] else { continue }
@@ -322,7 +327,7 @@ public enum SettingsBackupPolicy: Sendable {
             for (key, value) in entry {
                 if providerEntryKeys.contains(key) {
                     if key == "accounts" {
-                        if let accounts = allowlistAccounts(value) {
+                        if let accounts = allowlistAccounts(value, includeEmail: includeEmail) {
                             kept[key] = accounts
                         }
                     } else {
@@ -342,15 +347,19 @@ public enum SettingsBackupPolicy: Sendable {
         return output
     }
 
-    private static func allowlistAccounts(_ value: Any) -> String? {
+    private static func allowlistAccounts(_ value: Any, includeEmail: Bool) -> String? {
         guard let base64 = value as? String,
               let data = Data(base64Encoded: base64),
               let json = try? JSONSerialization.jsonObject(with: data) as? [Any] else {
             return nil
         }
+        var allowed = accountConfigKeys
+        if includeEmail {
+            allowed.insert("email")
+        }
         let cleaned: [[String: Any]] = json.compactMap { item in
             guard let account = item as? [String: Any] else { return nil }
-            let picked = pick(account, allowed: accountConfigKeys)
+            let picked = pick(account, allowed: allowed)
             return picked.isEmpty ? nil : picked
         }
         guard JSONSerialization.isValidJSONObject(cleaned),

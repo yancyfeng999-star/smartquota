@@ -80,7 +80,16 @@ public final class BackupManager: BackupManaging, @unchecked Sendable {
     public func createPreMutationBackup() throws -> BackupManifest {
         lock.lock()
         defer { lock.unlock() }
+        return try createPreMutationBackupUnlocked()
+    }
 
+    public func inspectBackups() throws -> [BackupInspection] {
+        lock.lock()
+        defer { lock.unlock() }
+        return try listBackupsUnlocked().map { inspectUnlocked($0) }
+    }
+
+    private func createPreMutationBackupUnlocked() throws -> BackupManifest {
         let createdAt = Date(timeIntervalSince1970: now().timeIntervalSince1970.rounded(.down))
         let backupDir = backupsRoot.appendingPathComponent(folderName(for: createdAt), isDirectory: true)
         try FileManager.default.createDirectory(at: backupDir, withIntermediateDirectories: true)
@@ -137,7 +146,10 @@ public final class BackupManager: BackupManaging, @unchecked Sendable {
     public func listBackups() throws -> [BackupManifest] {
         lock.lock()
         defer { lock.unlock() }
+        return try listBackupsUnlocked()
+    }
 
+    private func listBackupsUnlocked() throws -> [BackupManifest] {
         let root = backupsRoot
         guard FileManager.default.fileExists(atPath: root.path) else { return [] }
 
@@ -173,22 +185,78 @@ public final class BackupManager: BackupManaging, @unchecked Sendable {
             throw SettingsPersistenceError.backupNotFound
         }
 
+        let staging = FileManager.default.temporaryDirectory
+            .appendingPathComponent("smartquota-restore-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+
         var verified: [(String, Data)] = []
         for file in backup.includedFiles {
             guard SettingsBackupPolicy.includedRelativePaths.contains(file) else {
                 throw SettingsPersistenceError.restoreRejected("\(file) is not allowlisted")
             }
-            let data = try Data(contentsOf: directory.appendingPathComponent(file))
+            let source = directory.appendingPathComponent(file)
+            let staged = staging.appendingPathComponent(file)
+            do {
+                try FileManager.default.copyItem(at: source, to: staged)
+            } catch {
+                throw SettingsPersistenceError.restoreRejected("could not stage \(file): \(error.localizedDescription)")
+            }
+            let data = try Data(contentsOf: staged)
             let digest = SettingsJSON.sha256Hex(data)
             guard digest == backup.sha256[file] else {
                 throw SettingsPersistenceError.checksumMismatch(file: file)
             }
+            if file == "settings.json" {
+                do {
+                    let json = try JSONSerialization.jsonObject(with: data)
+                    guard json is [String: Any] else {
+                        throw SettingsPersistenceError.restoreRejected("settings.json is not an object")
+                    }
+                } catch let error as SettingsPersistenceError {
+                    throw error
+                } catch {
+                    throw SettingsPersistenceError.restoreRejected("settings.json failed validation in the staging directory")
+                }
+            }
             verified.append((file, data))
         }
+
+        _ = try createPreMutationBackupUnlocked()
 
         for (file, data) in verified {
             try fileIO.writeAtomically(data, configRoot.appendingPathComponent(file))
         }
+    }
+
+    private func inspectUnlocked(_ backup: BackupManifest) -> BackupInspection {
+        guard let directory = try? findDirectory(matching: backup) else {
+            return BackupInspection(manifest: backup, checksumValid: false, failureReason: SettingsPersistenceError.backupNotFound.code)
+        }
+        for file in backup.includedFiles {
+            if !SettingsBackupPolicy.includedRelativePaths.contains(file) {
+                return BackupInspection(
+                    manifest: backup,
+                    checksumValid: false,
+                    failureReason: SettingsPersistenceError.restoreRejected("\(file) is not allowlisted").code
+                )
+            }
+            guard let data = try? Data(contentsOf: directory.appendingPathComponent(file)) else {
+                return BackupInspection(
+                    manifest: backup,
+                    checksumValid: false,
+                    failureReason: SettingsPersistenceError.restoreRejected("missing \(file)").code
+                )
+            }
+            if SettingsJSON.sha256Hex(data) != backup.sha256[file] {
+                return BackupInspection(
+                    manifest: backup,
+                    checksumValid: false,
+                    failureReason: SettingsPersistenceError.checksumMismatch(file: file).code
+                )
+            }
+        }
+        return BackupInspection(manifest: backup, checksumValid: true, failureReason: nil)
     }
 
     private var backupsRoot: URL {

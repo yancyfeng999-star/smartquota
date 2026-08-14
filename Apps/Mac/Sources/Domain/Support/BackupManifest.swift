@@ -22,6 +22,18 @@ public struct BackupManifest: Codable, Equatable, Sendable {
     }
 }
 
+public struct BackupInspection: Equatable, Sendable {
+    public let manifest: BackupManifest
+    public let checksumValid: Bool
+    public let failureReason: String?
+
+    public init(manifest: BackupManifest, checksumValid: Bool, failureReason: String?) {
+        self.manifest = manifest
+        self.checksumValid = checksumValid
+        self.failureReason = failureReason
+    }
+}
+
 public protocol BackupManaging: Sendable {
     func createPreMutationBackup() throws -> BackupManifest
     func listBackups() throws -> [BackupManifest]

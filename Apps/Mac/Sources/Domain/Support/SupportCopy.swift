@@ -198,6 +198,18 @@ public enum SupportCopy: Sendable {
             "请另选可写位置再导出。导出文件不会包含密钥。",
             "Choose a writable location and export again. The file never includes secrets."
         ),
+        "error.importFailed.what": (
+            "导入设置没有完成。",
+            "Importing settings did not finish."
+        ),
+        "error.importFailed.kept": (
+            "当前设置、钥匙串和外部登录态均未改动。",
+            "Current settings, Keychain items, and external logins were left unchanged."
+        ),
+        "error.importFailed.next": (
+            "请检查文件是否为智额导出的 JSON，再选择合并或覆盖。",
+            "Check that the file is a SmartQuota export, then choose merge or overwrite."
+        ),
         "error.migrationFailed.what": (
             "设置迁移失败，没有采用不完整的新配置。",
             "Settings migration failed. An incomplete new configuration was not applied."

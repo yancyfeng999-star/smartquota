@@ -43,6 +43,8 @@ public enum AccessibilityChrome: Sendable {
         public static let menuShare = "menu.share"
         public static let settingsBack = "settings.back"
         public static let settingsOpenDiagnostics = "settings.open_diagnostics"
+        public static let settingsOpenTransfer = "settings.open_transfer"
+        public static let settingsOpenBackups = "settings.open_backups"
         public static let settingsOpenHelp = "settings.open_help"
         public static let settingsOpenLogs = "settings.open_logs"
         public static let settingsCheckUpdates = "settings.check_updates"
@@ -53,6 +55,11 @@ public enum AccessibilityChrome: Sendable {
         public static let helpBack = "help.back"
         public static let diagRun = "diag.run"
         public static let diagCopy = "diag.copy"
+        public static let transferExport = "transfer.export"
+        public static let transferImport = "transfer.import"
+        public static let backupRestore = "backup.restore"
+        public static let backupRestoreDefaults = "backup.restore_defaults"
+        public static let backupClearAll = "backup.clear_all"
         public static let recoveryExport = "recovery.export"
         public static let recoveryReset = "recovery.reset"
         public static let accountDelete = "account.delete"
@@ -132,6 +139,8 @@ public enum AccessibilityChrome: Sendable {
         AccessibilityKeyboardControl(id: ID.menuHelp, shortcut: "?"),
         AccessibilityKeyboardControl(id: ID.settingsBack, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.settingsOpenDiagnostics, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.settingsOpenTransfer, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.settingsOpenBackups, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.settingsOpenHelp, shortcut: "?"),
         AccessibilityKeyboardControl(id: ID.settingsOpenLogs, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.settingsCheckUpdates, shortcut: nil),
@@ -141,6 +150,11 @@ public enum AccessibilityChrome: Sendable {
         AccessibilityKeyboardControl(id: ID.helpOpenUserGuide, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.helpBack, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.diagRun, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.transferExport, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.transferImport, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.backupRestore, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.backupRestoreDefaults, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.backupClearAll, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.recoveryExport, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.recoveryReset, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.accountDelete, shortcut: nil),

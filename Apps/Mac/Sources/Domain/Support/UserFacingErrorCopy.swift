@@ -13,6 +13,7 @@ public enum SupportErrorKind: String, CaseIterable, Sendable {
     case settingsSaveFailed
     case backupRestoreFailed
     case exportFailed
+    case importFailed
     case migrationFailed
     case settingsCorrupt
 

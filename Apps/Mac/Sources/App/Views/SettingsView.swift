@@ -68,6 +68,8 @@ struct SettingsContentView: View {
                     thresholdAlertCard
                     launchAtLoginCard
                     DiagnosticsSettingsCard(monitor: monitor)
+                    SettingsTransferCard()
+                    BackupRestoreCard()
                     HelpSettingsCard(monitor: monitor)
                     logsCard
                     updatesCard
