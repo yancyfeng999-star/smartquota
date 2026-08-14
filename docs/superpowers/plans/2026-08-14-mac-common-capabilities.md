@@ -13,7 +13,7 @@
 - 本计划只覆盖 `Apps/Mac`，不修改 Windows，不改变具体 Provider 的额度算法。
 - 默认 `local-only`：设置、账号备注、缓存和诊断均留在本机；不得上传密钥、Cookie、OAuth 文件、完整邮箱、原始日志或额度明细。
 - 智额是公开开源仓库：仓库自有代码、文档、脚本、示例数据、品牌素材和发布物必须明确许可证与归属；第三方代码、依赖、商标、截图和服务条款不得被误写成 MIT 内容。
-- `LICENSE` 是仓库自有代码和文档授权的主入口；当前计划保持 MIT，不擅自改成其他许可证，也不在没有单独决策和文本的情况下引入 CLA 或额外授权条件。
+- `LICENSE` 是仓库自有代码和文档授权的主入口；根据已确认的发布决策采用 Apache-2.0，不引入未定义的 CLA 或额外授权条件。
 - `NOTICE` 必须以实际依赖清单、锁定版本、打包内容和品牌/商标使用情况为依据；不能只凭记忆手写依赖许可，也不能遗漏随 App 发布的第三方组件或资源。
 - 导出和备份使用显式 allowlist；任何未列入 allowlist 的字段不得进入导出文件。
 - 导出、备份、迁移和恢复都不得包含 API Key、Token、Cookie、密码、Keychain 内容或认证文件原文。
@@ -91,7 +91,7 @@
 当前仓库已经存在以下公开入口：
 
 - `README.md`：项目介绍、隐私原则、功能入口、文档导航和许可证链接。
-- `LICENSE`：当前为 MIT License。
+- `LICENSE`：当前为 Apache License 2.0。
 - `NOTICE`：第三方 Swift 包、商标和本地隐私边界声明。
 - `SECURITY.md`：安全/隐私边界、网络出口、本地存储和漏洞报告说明。
 - `CONTRIBUTING.md`：开发流程、隐私红线、Pull Request 和贡献授权说明。
@@ -103,7 +103,7 @@
 ### 1.5.2 必须达到的开源标准
 
 1. **许可证边界清晰**
-   - `LICENSE` 保持完整、可读的 MIT 正文，并写明实际版权归属主体；代码、文档和脚本的授权范围不得与 README 或贡献指南矛盾。
+   - `LICENSE` 保持完整、可读的 Apache License 2.0 正文，并写明实际版权归属主体；代码、文档和脚本的授权范围不得与 README 或贡献指南矛盾。
    - `README.md`、`docs/README.md`、`CONTRIBUTING.md` 和发布说明都能直接链接到 `LICENSE` 和 `NOTICE`。
    - 贡献代码的授权方式与 `CONTRIBUTING.md` 一致；当前不设置未定义的 CLA、商业附加条款或“提交即转让全部权利”的隐含表述。
    - 第三方代码、生成文件、图标、字体、截图、示例数据和品牌名称逐项标注来源、许可证或使用限制；无法确认来源的内容不得进入发布包。
@@ -364,7 +364,7 @@ xcodebuild -workspace SmartQuota.xcworkspace -scheme SmartQuota \
 - Read: `Apps/Mac/Tuist/Package.resolved`
 - Read: `Apps/Mac/Sources/App/Info.plist`
 - Modify: `README.md`
-- Modify: `LICENSE` — 仅在 MIT 正文、版权主体或公开归属核对不完整时修改；不改变许可证类型。
+- Modify: `LICENSE` — 保持完整 Apache License 2.0 正文，并核对版权主体和公开归属。
 - Modify: `NOTICE`
 - Modify: `SECURITY.md`
 - Modify: `CONTRIBUTING.md`
@@ -387,9 +387,9 @@ xcodebuild -workspace SmartQuota.xcworkspace -scheme SmartQuota \
 - Produces: 一份公开文档矩阵，列明每个文档的读者、唯一来源、允许承诺、禁止承诺和更新触发条件。
 - Produces: 一份由实际依赖清单和发布内容生成的 `NOTICE` 核对表，包含组件、版本、来源 URL、许可证和分发要求。
 - Produces: `scripts/check-open-source-docs.sh`，无网络依赖即可返回 0/非 0；失败时只输出文件和规则，不输出疑似密钥或用户数据。
-- Preserves: 当前 MIT License 和本机优先隐私原则；不引入云同步、遥测、CLA、商业附加条款或未授权的维护者联系方式。
+- Preserves: 当前 Apache-2.0 License 和本机优先隐私原则；不引入云同步、遥测、CLA、商业附加条款或未授权的维护者联系方式。
 
-- [ ] 对照 `LICENSE` 核对完整 MIT 正文、版权主体、年份和仓库实际权利归属；若版权主体尚未确认，先列为发布阻塞项，不擅自填入个人姓名或公司名称。
+- [ ] 对照 `LICENSE` 核对完整 Apache License 2.0 正文、版权主体、年份和仓库实际权利归属；若版权主体尚未确认，先列为发布阻塞项，不擅自填入个人姓名或公司名称。
 - [ ] 在 `README.md` 和 `docs/README.md` 建立稳定的“许可证 / 第三方声明 / 安全报告 / 贡献指南 / 用户文档 / 开发文档 / 发布说明”入口，所有相对链接指向仓库内真实文件。
 - [ ] 从 `Apps/Mac/Tuist/Package.swift`、`Apps/Mac/Tuist/Package.resolved` 和实际 App 包内容核对 `NOTICE`；为每个随 App 分发的第三方组件补齐锁定版本或版本范围、来源 URL、许可证类型、版权/归属要求和用途。
 - [ ] 检查资源目录、图标、字体、截图、示例 JSON、脚本和生成文件的来源；没有许可证或来源证据的内容不得纳入公开仓库或 Release 资产。
@@ -399,7 +399,7 @@ xcodebuild -workspace SmartQuota.xcworkspace -scheme SmartQuota \
 - [ ] 校准 `docs/USER_GUIDE.md`、`docs/DEVELOPER.md`、`docs/DISTRIBUTION.md`、`docs/REPO_LAYOUT.md`，让安装、手动更新、构建、签名/公证和 Mac/Windows 目录边界与实际状态一致。
 - [ ] 以 `Apps/Mac/Sources/App/Info.plist` 为版本唯一来源，统一 README、产品文档、项目状态、CHANGELOG、Release 说明中的版本、最低系统和已实现能力；未验证的签名、公证、安装和上报能力不得写成已完成。
 - [ ] 补齐 Bug/Feature/PR 模板：要求版本、系统架构、复现步骤、脱敏日志、测试结果、文档影响和依赖/许可证影响；明确禁止粘贴 Token、Cookie、Keychain、真实邮箱和额度截图。
-- [ ] 实现公开文档检查脚本：验证必需文件存在且非空、仓库内相对链接可解析、MIT/NOTICE/SECURITY/CONTRIBUTING 入口存在、版本字段不冲突，并扫描密钥/凭证/真实本机路径模式；测试样例中的假数据必须有明确 allowlist。
+- [ ] 实现公开文档检查脚本：验证必需文件存在且非空、仓库内相对链接可解析、Apache-2.0/NOTICE/SECURITY/CONTRIBUTING 入口存在、版本字段不冲突，并扫描密钥/凭证/真实本机路径模式；测试样例中的假数据必须有明确 allowlist。
 - [ ] 将开源文档检查加入本地发布前门禁和 GitHub CI；依赖发生增删、许可证变化、网络出口变化、数据字段变化或 P2 上报能力变化时，必须同步更新 `NOTICE`、`SECURITY.md`、用户文档和 CHANGELOG。
 
 **验证：**
@@ -896,7 +896,7 @@ P1 只有同时满足以下条件才可进入 Release：
 - 安全模式能从损坏设置恢复。
 - 更新说明、资产命名、最低系统要求和 Release Notes 一致。
 - `LICENSE`、`NOTICE`、`SECURITY.md`、`CONTRIBUTING.md`、README 文档入口和仓库文档检查脚本通过校验。
-- 所有第三方依赖、随包资源和商标声明均有来源与许可证证据；没有把第三方内容误纳入 MIT 授权范围。
+- 所有第三方依赖、随包资源和商标声明均有来源与许可证证据；没有把第三方内容误纳入 Apache-2.0 授权范围。
 - 发布包、截图、示例和日志中没有真实密钥、Cookie、OAuth 文件、邮箱、账号 ID、额度明细或私有路径。
 - 本地 Build、Package、运行时安装验证分别有证据。
 - 未把 ad-hoc 包描述为 Developer ID 签名或已公证包。
@@ -951,7 +951,7 @@ P2 自动更新和崩溃上报必须单独版本、单独 Release Notes、单独
 
 ### 开源仓库文档与许可证
 
-- [ ] `LICENSE` 保持完整 MIT 正文，版权主体已确认，README、文档目录、贡献指南和发布说明均能访问许可证入口。
+- [ ] `LICENSE` 保持完整 Apache License 2.0 正文，版权主体已确认，README、文档目录、贡献指南和发布说明均能访问许可证入口。
 - [ ] `NOTICE` 根据 `Apps/Mac/Tuist/Package.swift`、`Package.resolved`、实际 App 包和仓库资源完成依赖、版权、许可证、商标和分发要求核对。
 - [ ] README 可独立说明项目用途、支持范围、安装/构建、隐私边界、网络出口、更新方式、已知限制、第三方服务责任、贡献入口和安全报告入口。
 - [ ] `CONTRIBUTING.md` 明确开发/测试/PR 流程、文档同步、依赖许可证核对和禁止提交真实凭证的隐私红线。

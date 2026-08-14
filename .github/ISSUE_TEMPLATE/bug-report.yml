@@ -13,8 +13,8 @@ body:
     id: version
     attributes:
       label: 智额版本与构建号
-      description: 例如 0.3.28 (31)
-      placeholder: 0.3.28 (31)
+      description: 例如 0.3.29 (32)
+      placeholder: 0.3.29 (32)
     validations:
       required: true
   - type: input

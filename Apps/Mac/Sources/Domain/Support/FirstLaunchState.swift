@@ -111,7 +111,7 @@ public enum OnboardingFollowUp: Sendable {
 }
 
 /// Inputs captured before launch mutation (migrate / beginLaunch) so existing
-/// 0.3.28 installs can be grandfathered without treating a just-written
+/// 0.3.29 installs can be grandfathered without treating a just-written
 /// `settings.json` as a prior install.
 public struct FirstLaunchSignals: Sendable, Equatable {
     public var recordExists: Bool
