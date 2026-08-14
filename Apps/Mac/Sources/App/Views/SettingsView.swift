@@ -67,6 +67,7 @@ struct SettingsContentView: View {
                     backgroundSyncCard
                     thresholdAlertCard
                     launchAtLoginCard
+                    DiagnosticsSettingsCard(monitor: monitor)
                     logsCard
                     updatesCard
                     securityCard
