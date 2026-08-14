@@ -1,102 +1,175 @@
-# 智额 · SmartQuota — 安全与隐私说明
+# 智额 · SmartQuota — 安全说明
 
-智额是本机优先的额度监控工具。本文档描述当前仓库和默认 Mac 构建的安全边界，不是对任意第三方服务、用户设备或未来构建的绝对安全保证。实现、测试和发布状态以源码、CI 和 Release 证据为准。
+开源、本机运行的额度监控工具。**不向任何第三方上报用量、密钥或设备信息。**  
+仓库中**不包含**任何真实用户账户、会员档位或 API 密钥。
 
-当前公开基线：Mac `0.3.28`（build 31）。发现安全边界、网络出口、依赖、更新方式或诊断数据变化时，必须同步更新本文档、[NOTICE](./NOTICE)、用户文档和 [CHANGELOG.md](./CHANGELOG.md)。
+## 审计结论（2026-08-04）
 
-## 当前默认行为
+| 类别 | 结论 |
+|------|------|
+| 后门 / 隐蔽上报 | **未发现** |
+| 远程自动更新 | **已移除**（不再链接 Sparkle；设置里可**手动**查 GitHub 公开 Release 版本，不自动下载安装） |
+| 硬编码密钥 / 私有 token | **未发现**（测试仅用假数据） |
+| 硬编码个人会员档位 | **已清空**（`defaultPlanLabels` 为空；套餐由用户本机填写） |
+| 混淆 / 动态下载执行 | **未发现** |
+| 网络出口 | 仅各 AI 厂商公开额度/OAuth API + 用户配置的扩展健康检查 |
 
-| 项目 | 当前状态 | 证据边界 |
-|---|---|---|
-| 数据上传 | 默认不向智额自有服务器上传用量、密钥或设备信息 | 内置探针、日志和网络代码；用户配置的扩展 URL 除外 |
-| 更新检查 | 用户主动点击后访问 GitHub 公共 Releases API | `GitHubReleaseChecker`、`ReleaseDownloader`、发布工作流 |
-| 自动更新 | 默认 Mac Tuist 目标未启用 Sparkle，也未链接 Sparkle 依赖 | 源码仍保留 `#if ENABLE_SPARKLE` 条件路径；在未完成审查前不得启用 |
-| 遥测/崩溃上报 | 当前未配置 Sentry、Firebase、Crashlytics 或作者自有上报服务 | 未来接入必须先增加明确同意、脱敏、删除和停止上传机制 |
-| 远程服务 | 内置 Provider 官方端点、用户配置的健康检查 URL、用户主动触发的 GitHub API | 具体 URL 以 Provider 实现和设置为准 |
+## 网络会连哪里
 
-“没有默认上传”不等于“第三方服务不会收到请求”：用户开启某个会员探针后，数据会按该服务自己的 API 和服务条款发送到对应官方端点。
+应用**只**访问用于查额度 / 刷新用户自己 token 的官方端点，例如：
 
-## 网络与本地数据边界
+- OpenAI / ChatGPT usage、token refresh  
+- Anthropic OAuth usage  
+- xAI / Grok billing  
+- Kimi、MiniMax、阿里云百炼、GitHub Copilot、Cursor、Gemini 等对应官方 API  
+- 用户在「扩展」里配置的 **http(s)** 健康检查 URL  
 
-### 可能访问的网络
+**不会**连接：统计 SDK、Sentry/Firebase、作者自有服务器、Sparkle 更新 feed。  
 
-- 各内置 Provider 用于读取用户自己额度或刷新用户自己登录态的官方端点。
-- 用户在扩展设置中主动配置的 `http`/`https` 健康检查地址。
-- 用户点击「检查更新」时访问 GitHub 公共 Releases API；下载 Release 资产时访问 GitHub 资产 URL。
-- 本地 Hook 服务只监听 `127.0.0.1`，不对局域网开放。
+可选：用户在设置中点击「检查更新」时，会请求 GitHub 公开 API 比对版本。若发现新版，优先下载 `.pkg` 到「下载」文件夹，**本地解包 + 退出后 ditto 覆盖**（用户级替换，**不弹管理员密码**、不打开 Installer.app）。目标目录当前用户不可写时，仅在设置页显示错误，**不会**走 `sudo`/`osascript` 鉴权。日志：`~/Library/Logs/SmartQuota/update.log`。无后台无人点击自动更新。
 
-应用不会把用量、密钥、Cookie、OAuth 文件或完整日志发送到智额维护者的服务器。网络失败时，应用应保留最后成功快照并显示失败状态，不把错误当成新额度。
+本地 Hook 服务只监听 **`127.0.0.1`（loopback）**，接收 Claude Code 的 hook 事件。
 
-### 本地存储
+## 本地读写
 
-| 数据 | 位置 | 处理边界 |
-|---|---|---|
-| 普通设置、账号备注、套餐标签、续费日期 | `~/.smartquota/settings.json` | 本机保存；不进入导出/备份中的敏感字段 |
-| 额度快照 | `~/.smartquota/account-snapshots.json` | 本机缓存；读不到时保留旧快照并显示未登录/连接失败 |
-| API Key、Cookie、PAT | macOS Keychain | 通过 `KeychainSecretStore` 保存；不得写入日志或仓库 |
-| OAuth 登录文件 | 各工具自己的 `~/.codex/`、`~/.claude/`、`~/.grok/` 等 | 智额按需只读，不复制到自己的配置目录 |
-| 日志 | `~/Library/Logs/SmartQuota/` | 本地轮换；分享前必须脱敏 |
-| Release 下载文件 | `~/Downloads/` | 用户主动检查更新后产生；失败时应清理或明确提示 |
+| 路径 | 用途 |
+|------|------|
+| `~/.smartquota/` | 本应用配置、扩展、主题（**勿提交进 git**） |
+| `~/.smartquota/account-snapshots.json` | 账号额度快照缓存（权限 `0600`，原子写入） |
+| Keychain（本 App） | GitHub / MiniMax / 阿里云等密钥 |
+| Keychain（账号级） | `provider:<id>:account:<accountId>:api-key` 格式 |
+| `~/.claude/`、`~/.codex/`、`~/.grok/` 等 | **只读**读取各 CLI 已有登录态（查额度） |
+| 浏览器 Cookie（可选） | 阿里云 / 部分探测在用户开启时读取 |
+| `~/Library/Logs/SmartQuota/` | 本地日志，不上云 |
 
-多账号只记录必要的邮箱或外部账号 ID 以匹配历史账号；邮箱、额度、账号备注、续费日期和快照不上传。删除账号时清理智额自己的配置、快照和账号级密钥，不删除外部 CLI 或浏览器的登录态。
+## 已加固项
 
-## 凭证和生物识别
+1. **移除 Sparkle 依赖** — 不再嵌入自动更新框架，杜绝远程投毒更新包  
+2. **收紧 entitlements** — 去掉 `allow-unsigned-executable-memory`、`disable-library-validation`  
+3. **扩展脚本** — 只允许执行 `~/.smartquota/extensions/<id>/` 目录内脚本，禁止绝对路径逃逸  
+4. **健康检查 / 自定义 Web 卡片** — 仅 `http`/`https`，拒绝 `file://`、`javascript:` 等  
+5. **Info.plist** — `SUEnableAutomaticChecks = false`（即使将来误加 feed 也不会自动检查）  
+6. **开源默认套餐** — 不在源码中写入个人会员名称或开通日  
 
-- 普通 Provider 密钥由 Keychain 包装器保存，服务名使用应用 Bundle ID，账号名按 Provider/用途区分。
-- 生物识别路径使用 macOS LocalAuthentication；系统负责 Touch ID/Face ID 模板和设备认证。智额不读取或保存生物识别模板。
-- `SecureKeychainStore` 可使用 `SecAccessControl` 配置 `biometryCurrentSet` / `userPresence`，但认证策略的部分观察状态目前由应用内存维护；不要把“设置界面显示需要生物识别”当成跨重启的独立安全证明。
-- Keychain 内容、OAuth 文件、Cookie 和认证响应不得进入导出、备份、诊断包、日志、截图或 Issue。
-- 任何新增凭证来源必须说明读取路径、权限、生命周期、删除路径和失败降级方式，并补充测试。
+## 你需要知道的信任边界
 
-## 信任边界
+1. **内置探测代码**会启动本机已安装的 CLI（`claude`、`codex`、`kimi` 等）并解析输出 — 这是功能本身，不是后门。
+2. **用户自己放入** `~/.smartquota/extensions/` 的脚本会被执行；只安装你信任的扩展。
+3. **OAuth client_id**（Claude Code / Codex CLI 公开 client id）写死在代码里，用于刷新**用户自己的** token，不是维护者的密钥。
+4. **AWS SDK** 字符串中可能出现 `169.254.169.254`（实例元数据）— 来自 AWS SDK，本机 Mac 桌面通常不会用到。
+5. 第三方依赖（AWS SDK、SwiftTerm、Mockable、MenuBarExtraAccess、SweetCookieKit）为开源库；升级时请核对其发布渠道。
 
-1. 内置探针会启动本机已安装的 CLI、读取用户配置文件或访问 Provider API；这是额度监控功能的一部分。
-2. 用户自己安装到 `~/.smartquota/extensions/` 的脚本可能被执行；只安装信任的扩展，并检查其 manifest、路径和网络行为。
-3. 用户配置的健康检查 URL 可能收到请求；不要配置包含 Token、Cookie 或私密路径的 URL。
-4. OAuth `client_id` 或 Provider endpoint 可能出现在源码中；这不等于仓库包含维护者的私钥或用户凭证。
-5. 第三方 Swift 包受各自许可证和上游安全政策约束；依赖清单和锁定版本见 [NOTICE](./NOTICE)。
-6. GitHub Release、第三方 API 和用户本机 CLI 都可能返回错误、过期登录态或不完整数据；应用不能把外部成功响应当成绝对可信身份。
+---
 
-## 公共仓库红线
+## 生物识别安全
 
-禁止提交：
+### 支持的认证方式
 
-- API Key、Token、Cookie、OAuth refresh token、Keychain dump、认证 JSON 和 `.env`。
-- 真实邮箱、手机号、账号 ID、套餐、账单、额度、日志和屏幕截图。
-- `.p12`、`.pem`、私钥、公证日志私密字段和 CI secret。
-- 没有许可证/来源的图标、字体、截图、代码或生成资源。
-- 未经核对的网络出口、自动更新、遥测、签名、公证和“安全审计通过”结论。
+| 认证方式 | 说明 | 适用场景 |
+|----------|------|----------|
+| Touch ID | 指纹识别 | MacBook、Magic Keyboard |
+| Face ID | 面容识别 | 不支持（macOS 限制） |
+| 密码 | 系统密码回退 | 生物识别不可用时 |
 
-仓库使用 `scripts/check-open-source-docs.sh` 做本地和 CI 预检。该检查只报告文件名和规则，不打印疑似密钥内容；它不能代替人工安全审查、依赖上游公告审查或真实设备验证。
+### 密钥保护机制
 
-## 自查命令
+- **Secure Enclave**：生物识别模板存储在设备安全芯片中，永不离开设备
+- **Keychain 访问控制**：敏感密钥使用 `kSecAttrAccessControl` 保护
+- **用户存在验证**：每次访问敏感密钥都需要用户交互
 
-在仓库根目录执行：
+### 存储隔离
+
+| 数据类型 | 存储位置 | 访问控制 | 删除时清理 |
+|----------|----------|----------|------------|
+| 生物识别模板 | Secure Enclave | 系统级保护 | 设备重置时 |
+| API 密钥（普通） | Keychain | 应用级 | 删除账号时 |
+| API 密钥（安全） | Keychain + 访问控制 | 生物识别 + 用户存在 | 删除账号时 |
+| 认证状态 | 内存 | 应用级 | 应用关闭时 |
+
+### 权限说明
+
+| 权限 | 用途 | 拒绝后降级 |
+|------|------|------------|
+| 生物识别 | 访问敏感密钥 | 使用密码回退 |
+| Keychain | 安全存储 | 使用普通存储 |
+
+### 威胁模型
+
+| 威胁 | 控制 | 残余风险 |
+|------|------|----------|
+| 设备解锁后未授权访问 | 生物识别验证 | 低 |
+| 物理设备被盗 | Keychain 加密 + 生物识别 | 极低 |
+| 绕过验证 | LocalAuthentication 框架 | 极低 |
+| 密钥泄露 | 访问控制 + 加密 | 极低 |
+
+---
+
+## 多账号隐私边界
+
+### 存储隔离
+
+| 数据类型 | 存储位置 | 是否上传 | 删除时清理 |
+|----------|----------|----------|------------|
+| 邮箱 | `settings.json` | 否 | 删除账号时清理 |
+| 额度快照 | `account-snapshots.json` | 否 | 删除账号时清理 |
+| 账号配置（套餐、续费日） | `settings.json` | 否 | 删除账号时清理 |
+| API Key / Token | Keychain（账号级） | 否 | 删除账号时清理 |
+| OAuth 凭证 | 各工具自己的文件 | 否 | 智额不复制，无需清理 |
+
+### 不等于托管多份 OAuth
+
+智额**不**复制或托管 OAuth 登录凭证：
+
+- OAuth、CLI、浏览器登录型会员只读取本机当前登录态
+- 不创建 OAuth 文件副本
+- 切换账号需在外部工具中操作
+- 智额只记录检测到的邮箱或账号 ID
+
+### 只有当前本机账号会刷新
+
+- 后台刷新只更新当前本机登录的账号
+- 其他账号保留最后一次成功快照
+- 快照包含更新时间，用户可判断是否过期
+
+### 历史快照不参与告警
+
+- 未登录账号的快照仅作历史参考
+- 过期快照不触发额度告警
+- 只有 `signedIn` + `fresh` 的快照参与告警计算
+
+### 账号删除流程
+
+删除账号时，智额会清理：
+
+1. `settings.json` 中的账号配置
+2. `account-snapshots.json` 中的快照缓存
+3. Keychain 中的账号级密钥（如有）
+
+**不会**清理：
+
+- 外部工具的登录态
+- 其他账号的数据
+- 应用全局设置
+
+## 如何自查
 
 ```bash
-./scripts/check-open-source-docs.sh
+# 二进制内嵌 URL
+strings 智额.app/Contents/MacOS/智额 | grep -E 'https?://' | sort -u
 
-# 检查默认 Mac 目标是否仍然没有启用 Sparkle
-rg -n 'ENABLE_SPARKLE|Sparkle' Apps/Mac/Project.swift Apps/Mac/Tuist/Package.swift Apps/Mac/Sources
+# 不应再有 Sparkle.framework
+ls 智额.app/Contents/Frameworks/
 
-# 检查公开代码中的高风险凭证模式；不要把匹配内容粘到 Issue
-rg -n '-----BEGIN (RSA|EC|OPENSSH|DSA|PRIVATE) PRIVATE KEY-----|ghp_|gho_|github_pat_' \
-  Apps/Mac Apps/Windows Branding scripts --glob '!**/.build/**' || true
+# 源码敏感模式
+rg -n 'Sparkle|SUFeed|telemetry|mixpanel|sentry|firebase' Sources Project.swift Tuist
 
-# 检查运行时配置没有被纳入版本控制
-git ls-files | rg '(^|/)(auth\.json|settings\.json|\.env|.*\.p12|.*\.pem)$' || true
+# 手动检查更新仅允许 GitHub 公开 API（不应出现作者私有更新服）
+rg -n 'github.com|api.github.com' Sources/Domain Sources/Infrastructure/Update
+
+# 确认没有把本机配置带进仓库
+rg -n 'sk-[a-zA-Z0-9]{20,}|ghp_|gho_' --glob '!Tests/**' Sources scripts || true
 ```
 
 ## 报告安全问题
 
-请不要在公开 Issue、Discussion、PR 或截图中披露漏洞细节、真实凭证或用户数据。
-
-优先使用仓库的 [GitHub Security Advisories](https://github.com/yancyfeng999-star/smartquota/security/advisories/new) 私密报告入口；如果该入口对你不可用，请通过维护者可见的私密 GitHub 渠道联系，并只提供脱敏的复现步骤、受影响版本、系统架构和最小必要日志。
-
-报告中请说明：
-
-- 受影响版本、构建号、macOS 版本和 Apple Silicon/Intel 架构。
-- 可重复的最小步骤、影响范围和是否需要本地权限/已登录状态。
-- 已采取的临时缓解措施；不要附加 Token、Cookie、Keychain 内容或完整用户路径。
-
-本项目当前没有承诺固定响应 SLA；维护者会先确认影响范围，再决定修复、公告、回滚或要求升级。安全报告中的个人信息只用于处理问题，不应进入公开变更记录。
+请通过 GitHub Security Advisory（若已启用）或仓库 Issues 私信维护者描述问题，**不要**在公开 issue 中粘贴真实密钥或账户信息。

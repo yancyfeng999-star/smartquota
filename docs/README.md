@@ -16,14 +16,10 @@
 | [../CHANGELOG.md](../CHANGELOG.md) | 全部 | 版本变更 |
 | [../SECURITY.md](../SECURITY.md) | 全部 | 安全与隐私边界 |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献者 | 贡献流程与隐私红线 |
-| [../LICENSE](../LICENSE) | 全部 | Apache-2.0 |
+| [../LICENSE](../LICENSE) | 全部 | MIT |
 | [../NOTICE](../NOTICE) | 全部 | 第三方依赖与商标 |
-| [REPOSITORY_GOVERNANCE.md](./REPOSITORY_GOVERNANCE.md) | 维护者 / 贡献者 | 分支、PR、CI、依赖与发布治理 |
-| [../CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) | 全部 | 社区参与行为准则 |
-| [../scripts/check-open-source-docs.sh](../scripts/check-open-source-docs.sh) | 维护者 / CI | 许可证、链接、版本、依赖和敏感信息检查 |
-| [../.github/PULL_REQUEST_TEMPLATE.md](../.github/PULL_REQUEST_TEMPLATE.md) | 贡献者 | PR 复现、测试、隐私和许可证检查 |
 | [../Apps/Mac/README.md](../Apps/Mac/README.md) | 开发者 | Mac 构建 |
 | [../Apps/Windows/README.md](../Apps/Windows/README.md) | 开发者 | Windows 构建 |
 | [../releases/Mac/README.md](../releases/Mac/README.md) | 维护者 | Mac 版本列表 |
 
-日常以根目录 `README`、`USER_GUIDE`、`DISTRIBUTION`、`DEVELOPER`、`LICENSE`、`NOTICE`、`SECURITY`、`CONTRIBUTING` 为准；版本以 `Apps/Mac/Sources/App/Info.plist` 为唯一来源。
+日常以根目录 `README`、`USER_GUIDE`、`DISTRIBUTION`、`DEVELOPER` 为准。

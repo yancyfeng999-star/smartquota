@@ -6,17 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
-
-## [Mac 0.3.29] — 2026-08-14
-
-### Changed
-- 仓库自有代码、文档和脚本许可证切换为 **Apache-2.0**，保留第三方依赖各自许可证。
-- `NOTICE` 增加 `Package.resolved` 全量依赖、版本、许可证和商标/资源边界。
-- 增加公开仓库文档检查、Issue/PR 模板和 CI/Release 前置治理门禁。
-- 统一 v0.3.29 当前源码版本入口，修正手动更新、Sparkle 条件代码和文档状态的过度表述。
-- 将 MiMo 图标的邮箱样式资源文件名改为中性文件名。
-
 ## [Mac 0.3.28] — 2026-08-14
 
 ### Changed
@@ -370,7 +359,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - 产品全量品牌：**智额 · SmartQuota**（Bundle ID `com.smartquota.app`）
-- 开源文档：`LICENSE`、`NOTICE`、`CONTRIBUTING.md`、`SECURITY.md`
+- 开源文档：`LICENSE`（MIT）、`NOTICE`、`CONTRIBUTING.md`、`SECURITY.md`
 - 配置目录：`~/.smartquota`；密钥写入本机 Keychain
 
 ### Security

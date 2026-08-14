@@ -10,9 +10,6 @@
 
 ## Global Constraints
 
-- 仓库自有代码、文档和脚本采用 Apache-2.0；第三方依赖、资源和商标保留各自声明，统一登记在 NOTICE。
-- 公开仓库必须保留可审计的 LICENSE、NOTICE、SECURITY.md、CONTRIBUTING.md、行为准则、Issue/PR 模板和治理检查；发布前治理检查失败不得创建 Release。
-
 - 本计划只覆盖 `Apps/Mac`，不修改 Windows，不改变具体 Provider 的额度算法。
 - 默认 `local-only`：设置、账号备注、缓存和诊断均留在本机；不得上传密钥、Cookie、OAuth 文件、完整邮箱、原始日志或额度明细。
 - 导出和备份使用显式 allowlist；任何未列入 allowlist 的字段不得进入导出文件。
@@ -82,20 +79,6 @@
 | Beta 更新通道 | Task 11 |
 | 自动更新开关 | Task 12 |
 | 崩溃报告和匿名诊断上报 | Task 13 |
-
----
-
-## 1.5 开源协议、文档与仓库治理（本轮接管）
-
-本轮由当前实施任务接管该板块，范围限定为仓库根目录、公开文档、.github 治理文件、scripts 预检和 Mac 发布工作流，不改变具体 Provider 的额度逻辑。
-
-- [x] 根目录许可证切换为 Apache-2.0，并同步 App 版权字段、README、文档索引和贡献说明。
-- [x] NOTICE 登记 Package.resolved 中的依赖 identity、锁定版本、许可证和上游地址，保留第三方许可证边界。
-- [x] 将 Apps/Mac/Tuist/Package.resolved 纳入版本控制，防止依赖解析结果漂移。
-- [x] 增加安全说明、贡献指南、行为准则、仓库治理文档和 Issue/PR 模板，明确真实账号/凭证/日志不得进入公开仓库。
-- [x] 增加本地治理检查，并接入 Mac build、test、App Store 和 Release 工作流。
-- [x] 发布工作流改为不自动修改或推送 main；遗留 Sparkle Appcast 默认关闭，默认构建不因治理文档而启用自动更新。
-- [ ] GitHub Ruleset、Required checks、维护者权限、Actions Secrets/Variables 最小权限需由仓库管理员在 GitHub 设置页完成并留存截图或导出证据。
 
 ---
 

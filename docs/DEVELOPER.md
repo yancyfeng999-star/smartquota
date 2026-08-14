@@ -1,6 +1,6 @@
 # 智额 · 开发者文档
 
-面向在本仓库上改功能、加会员、打包的人。仓库自有代码、文档和脚本采用 [Apache License 2.0](../LICENSE)；第三方依赖和资源边界见 [NOTICE](../NOTICE)。
+面向在本仓库上改功能、加会员、打包的人。
 
 ---
 
@@ -33,7 +33,7 @@ CONFIG=Release Apps/Mac/scripts/build-test-app.sh
 
 Scheme：`SmartQuota`（产物显示名「智额」）。
 
-当前 Mac 源码版本：`0.3.29`（build `32`，待发布）。最后已发布 Release：v0.3.28。版本号唯一来源：`Sources/App/Info.plist`
+版本号：`Sources/App/Info.plist`
 
 - `CFBundleShortVersionString`：用户可见版本（如 `0.2.0`）  
 - `CFBundleVersion`：构建号（如 `2`）
@@ -62,15 +62,7 @@ Infrastructure
 - **`ProviderConfigRegistry`**（App）：设置页「额度检测」卡片映射  
 - **`L10n` / `AppLanguage`**：运行时多语言  
 - **`JSONSettingsRepository`**：`~/.smartquota/settings.json`  
-- **`KeychainSecretStore`**：敏感密钥
-
-### 开源与依赖治理
-
-- `Apps/Mac/Tuist/Package.swift` 是直接依赖声明，`Apps/Mac/Tuist/Package.resolved` 是提交到仓库的解析锁文件。
-- 依赖、传递依赖、许可证和上游链接必须登记在根目录 `NOTICE`；新增或升级依赖不能只改 `Package.swift`。
-- 仓库自有代码/文档/脚本使用 Apache-2.0，不覆盖第三方包、字体、图标、截图、商标或用户连接的第三方服务。
-- 新增资源必须在 PR 中提供来源和许可证证据；无法确认许可的资源不得进入源码或 Release。
-- 提交前从仓库根目录运行 `./scripts/check-open-source-docs.sh`；它会检查公开入口、相对链接、锁文件、NOTICE、版本、邮箱样式文件名和高置信度凭证模式。
+- **`KeychainSecretStore`**：敏感密钥  
 
 ### 关键 App 文件
 
@@ -253,14 +245,6 @@ xcodebuild -workspace SmartQuota.xcworkspace -scheme Domain \
 
 也可在 Xcode 中跑 `Domain` / `Infrastructure` / `AcceptanceTests` scheme。
 
-仓库治理检查：
-
-```bash
-cd ../..
-./scripts/check-open-source-docs.sh
-git diff --check
-```
-
 无 UI 的四家 live 探测：
 
 ```bash
@@ -276,7 +260,7 @@ python3 scripts/probe_four_providers.py
 - Logo：`Branding/` 与 `Assets.xcassets`  
 - 正式分发：Release 构建 + 可选 Developer ID 签名/公证（见 [DISTRIBUTION.md](./DISTRIBUTION.md)）  
 
-当前默认 Mac Tuist 目标不启用 Sparkle；正常公开构建使用用户主动触发的 GitHub Release 检查路径。源码仍保留 `#if ENABLE_SPARKLE` 条件代码，除非完成单独的更新、签名、回退和隐私审查，否则不得启用该编译条件。
+本产品**不**使用远程自动更新。
 
 ---
 

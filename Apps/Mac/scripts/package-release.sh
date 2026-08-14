@@ -77,11 +77,6 @@ printf '%s\n' "==> [3/5] stage app + sign  (${VERSION} build ${BUILD})"
 rm -rf "$STAGE"
 mkdir -p "$STAGE" "$WORK/app"
 
-# Keep the repository license and third-party notices next to local release
-# assets so a binary distribution does not lose its attribution documents.
-cp "$REPO_ROOT/LICENSE" "$STAGE/LICENSE"
-cp "$REPO_ROOT/NOTICE" "$STAGE/NOTICE"
-
 ditto --norsrc --noextattr --noqtn "$APP_SRC" "$WORK/app/${APP_NAME}.app"
 xattr -cr "$WORK/app/${APP_NAME}.app" 2>/dev/null || true
 
@@ -224,10 +219,6 @@ ${SIGN_NOTE}
 ## 系统
 
 macOS 15.0 或更高。
-
-## 许可证
-
-仓库自有内容采用 Apache-2.0，详见 LICENSE；第三方依赖、资源和商标声明详见 NOTICE。
 EOF
 
 (
