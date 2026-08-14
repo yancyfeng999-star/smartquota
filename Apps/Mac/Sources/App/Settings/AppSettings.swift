@@ -167,12 +167,19 @@ public final class AppSettings {
     /// Pre-migration backup folder when the last migrateIfNeeded() failed.
     public private(set) var lastMigrationBackupPath: String?
 
+    /// True when first-launch onboarding can be resumed from Settings.
+    public private(set) var canContinueOnboarding: Bool = false
+
     public func updateCompatibilityReport(_ report: CompatibilityReport) {
         lastCompatibilityReport = report
     }
 
     public func updateMigrationBackupPath(_ path: String?) {
         lastMigrationBackupPath = path
+    }
+
+    public func syncFirstLaunch(_ state: FirstLaunchState) {
+        canContinueOnboarding = state.canContinueFromSettings
     }
 
     // MARK: - Membership card order

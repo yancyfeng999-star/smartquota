@@ -54,6 +54,11 @@ struct SettingsContentView: View {
                 VStack(spacing: 12) {
                     themeCard
                     LanguageSettingsCard()
+                    if settings.canContinueOnboarding {
+                        ContinueOnboardingCard {
+                            OnboardingWindowController.shared.continueFromSettings()
+                        }
+                    }
                     simpleDisplayModeCard
                     menuBarStatusIconCard
                     // 1) Toggle memberships on/off

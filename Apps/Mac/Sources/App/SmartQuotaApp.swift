@@ -35,6 +35,9 @@ struct SmartQuotaApp: App {
     /// Session markers + Safe Mode recovery. Injected only via `configRoot` in tests.
     private let crashRecoveryStore: CrashRecoveryStore
 
+    /// First-launch step completion. Production path is `AppIdentity.ensureConfigDirectory()`.
+    private let firstLaunchStore: FirstLaunchStore
+
     /// Decided before providers, extensions, refresh, or hooks start.
     @State private var launchMode: AppLaunchMode
 
@@ -87,6 +90,7 @@ struct SmartQuotaApp: App {
             settingsStore: .shared
         )
         self.crashRecoveryStore = recovery
+        self.firstLaunchStore = FirstLaunchStore.usingAppIdentity(configRoot)
         let runner = SettingsMigrationRunner(
             store: .shared,
             backupManager: BackupManager(configRoot: configRoot)
@@ -186,6 +190,7 @@ struct SmartQuotaApp: App {
             didStartNormalServices = true
             startDeferredNormalServices()
         }
+        OnboardingWindowController.shared.presentIfNeeded(launchMode: .normal)
     }
 
     private func startDeferredNormalServices() {
@@ -308,6 +313,12 @@ struct SmartQuotaApp: App {
             .onAppear {
                 appDelegate.crashRecoveryStore = crashRecoveryStore
                 statusItemDriver.reassertPresentation()
+                OnboardingWindowController.shared.configure(
+                    store: firstLaunchStore,
+                    monitor: monitor
+                )
+                // Safe Mode must never present first-launch onboarding.
+                OnboardingWindowController.shared.presentIfNeeded(launchMode: launchMode)
                 Task {
                     let checker = CompatibilityChecker(
                         store: .shared,

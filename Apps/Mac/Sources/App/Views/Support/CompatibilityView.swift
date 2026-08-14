@@ -7,10 +7,21 @@ import Infrastructure
 /// Does not install third-party CLIs.
 struct CompatibilityView: View {
     let report: CompatibilityReport
+    var missingCredential: Bool = false
     var onRecheck: (() -> Void)?
+    var onOpenConfiguration: (() -> Void)?
+    var onViewHelp: (() -> Void)?
 
     @Environment(\.appTheme) private var theme
     private var l10n: L10n { L10n.shared }
+
+    private var followUpActions: [OnboardingFollowUpAction] {
+        OnboardingFollowUp.actions(
+            report: report,
+            missingCredential: missingCredential,
+            outcome: nil
+        )
+    }
 
     var body: some View {
         let _ = l10n.revision
@@ -65,7 +76,24 @@ struct CompatibilityView: View {
                 .buttonStyle(.plain)
             }
 
-            if let onRecheck {
+            if !followUpActions.isEmpty {
+                HStack(spacing: 10) {
+                    if followUpActions.contains(.openConfiguration), let onOpenConfiguration {
+                        Button(l10n.t("onboard.action.open_config"), action: onOpenConfiguration)
+                            .buttonStyle(.plain)
+                    }
+                    if followUpActions.contains(.viewHelp), let onViewHelp {
+                        Button(l10n.t("onboard.action.view_help"), action: onViewHelp)
+                            .buttonStyle(.plain)
+                    }
+                    if followUpActions.contains(.recheck), let onRecheck {
+                        Button(l10n.t("onboard.action.recheck"), action: onRecheck)
+                            .buttonStyle(.plain)
+                    }
+                }
+                .font(.system(size: 12, weight: .semibold, design: theme.fontDesign))
+                .foregroundStyle(theme.accentPrimary)
+            } else if let onRecheck {
                 Button(l10n.t("compat.action.recheck"), action: onRecheck)
                     .buttonStyle(.plain)
             }
