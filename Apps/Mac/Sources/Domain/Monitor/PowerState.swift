@@ -27,20 +27,35 @@ public protocol PowerStateProvider: Sendable {
     /// the loop stretches its cadence to reduce drain.
     var isOnBattery: Bool { get }
 
+    /// Whether the login screen / screen lock is showing. Pauses background refresh.
+    var isScreenLocked: Bool { get }
+
+    /// Whether Low Power Mode is on. Pauses non-essential background refresh.
+    var isLowPowerMode: Bool { get }
+
     /// A stream of sleep/wake transitions, used to wake the paused loop the
     /// instant the display/system comes back so the menu-bar number refreshes
     /// promptly. Implementations MUST update `isDisplayAsleep` to reflect the new
     /// state before (or as) they emit the corresponding event, so a loop that
     /// re-checks `isDisplayAsleep` after each event sees a consistent value.
+    /// Lock and Low Power Mode map onto the same pause/resume events.
     func events() -> AsyncStream<PowerEvent>
+
+    /// Combined pause policy for background vs manual refresh.
+    func refreshPausePolicy() -> RefreshPausePolicy
 }
 
 public extension PowerStateProvider {
-    /// Sleep pauses background polling only. Manual refresh stays user-triggered.
+    var isScreenLocked: Bool { false }
+    var isLowPowerMode: Bool { false }
+
+    /// Sleep, lock, and Low Power Mode pause background polling only.
+    /// Manual refresh stays user-triggered.
     func refreshPausePolicy() -> RefreshPausePolicy {
-        RefreshPausePolicy(
-            pauseBackgroundRefresh: isDisplayAsleep,
-            allowManualRefresh: true
+        .forSystemConditions(
+            displayAsleep: isDisplayAsleep,
+            screenLocked: isScreenLocked,
+            lowPowerMode: isLowPowerMode
         )
     }
 }

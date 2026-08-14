@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import Observation
 import Mockable
 @testable import Domain
 @testable import Infrastructure
@@ -229,6 +230,284 @@ struct RefreshCoordinatorTests {
         #expect(monitor.connectedAccountSnapshot(providerId: "claude") == nil)
     }
 
+    @Test
+    func `background loop is owned by the coordinator and stops without leaking tasks`() async {
+        let clock = GateClock()
+        let probe = ControllableProbe(providerId: "claude", script: [
+            .value(percent: 11), .value(percent: 22), .value(percent: 33)
+        ])
+        let settings = Self.makeSettings()
+        let provider = ClaudeProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        var policy = RefreshExecutionPolicy.background
+        policy.requestTimeout = nil
+        policy.mergeWindow = nil
+        let coordinator = RefreshCoordinator(monitor: monitor, clock: clock, backgroundPolicy: policy)
+
+        coordinator.setBackgroundRefresh(enabled: true, interval: .seconds(300), providerIds: ["claude"])
+        await coordinator.waitUntilBackgroundTickCount(1)
+
+        #expect(coordinator.isBackgroundRefreshRunning)
+        #expect(await probe.startCount() == 1)
+        #expect(provider.snapshot?.quotas.first?.percentRemaining == 11)
+
+        await clock.waitUntilSleepCount(1)
+        clock.releaseOne()
+        await coordinator.waitUntilBackgroundTickCount(2)
+        #expect(await probe.startCount() == 2)
+
+        coordinator.stopBackgroundRefresh()
+        #expect(coordinator.isBackgroundRefreshRunning == false)
+        #expect(coordinator.performance.snapshot.inFlightCount == 0)
+        #expect(clock.durations.contains(.seconds(300)))
+    }
+
+    @Test
+    func `sleep lock and low power pause background and wake coalesces to one refresh`() async {
+        let power = ControllablePowerState()
+        let clock = GateClock()
+        let started = ProbeStartGate()
+        let probe = ControllableProbe(
+            providerId: "claude",
+            script: [.value(percent: 10), .value(percent: 20), .value(percent: 30)],
+            onStart: { await started.mark("claude") }
+        )
+        let settings = Self.makeSettings()
+        let provider = ClaudeProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        var policy = RefreshExecutionPolicy.background
+        policy.requestTimeout = nil
+        policy.mergeWindow = nil
+        let coordinator = RefreshCoordinator(monitor: monitor, powerState: power, clock: clock, backgroundPolicy: policy)
+
+        power.setLocked(true)
+        coordinator.applyPowerEvent(.willSleep)
+        #expect(coordinator.pausePolicy.pauseBackgroundRefresh)
+        #expect(coordinator.pausePolicy.allowManualRefresh)
+
+        coordinator.setBackgroundRefresh(enabled: true, interval: .seconds(300), providerIds: ["claude"])
+        #expect(await probe.startCount() == 0)
+        #expect(coordinator.isBackgroundRefreshRunning == false)
+
+        power.setLocked(false)
+        coordinator.applyPowerEvent(.didWake)
+        coordinator.applyPowerEvent(.didWake)
+        coordinator.applyPowerEvent(.didWake)
+        await started.wait(untilCount: 1)
+        await coordinator.waitUntilBackgroundTickCount(1)
+        #expect(await probe.startCount() == 1)
+
+        power.setLowPower(true)
+        coordinator.applyPowerEvent(.willSleep)
+        let afterLowPower = await probe.startCount()
+        #expect(coordinator.pausePolicy.pauseBackgroundRefresh)
+        #expect(afterLowPower == 1)
+
+        power.setLowPower(false)
+        coordinator.applyPowerEvent(.didWake)
+        await started.wait(untilCount: 2)
+        await coordinator.waitUntilBackgroundTickCount(2)
+        #expect(await probe.startCount() == 2)
+
+        coordinator.stopBackgroundRefresh()
+    }
+
+    @Test
+    func `connection failures retry with backoff and stop after the attempt cap`() async {
+        let clock = GateClock()
+        let probe = ControllableProbe(
+            providerId: "claude",
+            script: [
+                .error(ProbeError.timeout),
+                .error(ProbeError.timeout),
+                .error(ProbeError.timeout),
+                .value(percent: 88)
+            ]
+        )
+        let settings = Self.makeSettings()
+        let provider = ClaudeProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        var policy = RefreshExecutionPolicy.background
+        policy.requestTimeout = nil
+        let coordinator = RefreshCoordinator(
+            monitor: monitor,
+            clock: clock,
+            backgroundPolicy: policy,
+            interactivePolicy: policy
+        )
+
+        let run = Task { await coordinator.refresh(.provider("claude"), policy: policy) }
+        await clock.waitUntilSleepCount(1)
+        clock.releaseOne()
+        await clock.waitUntilSleepCount(2)
+        clock.releaseOne()
+        await run.value
+
+        #expect(await probe.startCount() == 3)
+        #expect(await coordinator.state == .completed(successCount: 0, failureCount: 1))
+        #expect(provider.snapshot == nil)
+        #expect((provider.lastError as? ProbeError) == .timeout)
+        #expect(clock.durations.filter { $0 == .milliseconds(250) || $0 == .milliseconds(500) }.count == 2)
+        #expect(coordinator.performance.snapshot.connectionFailedCount == 1)
+        #expect(await probe.startCount() == 3)
+    }
+
+    @Test
+    func `authentication failure is not retried`() async {
+        let clock = GateClock()
+        let probe = ControllableProbe(
+            providerId: "claude",
+            script: [.error(ProbeError.authenticationRequired), .value(percent: 99)]
+        )
+        let settings = Self.makeSettings()
+        let provider = ClaudeProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        var policy = RefreshExecutionPolicy.background
+        policy.requestTimeout = nil
+        let coordinator = RefreshCoordinator(monitor: monitor, clock: clock)
+
+        await coordinator.refresh(.provider("claude"), policy: policy)
+
+        #expect(await probe.startCount() == 1)
+        #expect(RefreshFailureClassifier.classify(provider.lastError!) == .notLoggedIn)
+        #expect(coordinator.performance.snapshot.notLoggedInCount == 1)
+        #expect(clock.durations.isEmpty)
+    }
+
+    @Test
+    func `request timeout counts as a connection failure and increments cancel`() async {
+        let hold = ReleaseGate()
+        let probe = ControllableProbe(
+            providerId: "claude",
+            script: [.wait(hold, then: .success(percent: 40))]
+        )
+        let settings = Self.makeSettings()
+        let provider = ClaudeProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        var policy = RefreshExecutionPolicy.interactive
+        policy.requestTimeout = .milliseconds(1)
+        let coordinator = RefreshCoordinator(
+            monitor: monitor,
+            clock: ImmediateClock(),
+            interactivePolicy: policy
+        )
+
+        let run = Task { await coordinator.refresh(.provider("claude"), policy: policy) }
+        await run.value
+        await hold.release()
+
+        #expect(await coordinator.state == .completed(successCount: 0, failureCount: 1))
+        #expect(coordinator.performance.snapshot.cancelCount >= 1)
+        #expect(coordinator.performance.snapshot.connectionFailedCount >= 1)
+        #expect(coordinator.performance.snapshot.logLine.contains("duration_ms="))
+        #expect(coordinator.performance.snapshot.logLine.contains("cancels="))
+        #expect(!coordinator.performance.snapshot.logLine.contains("sk-"))
+        #expect(!coordinator.performance.snapshot.logLine.contains("Bearer"))
+    }
+
+    @Test
+    func `historical snapshot display does not probe the network`() async {
+        let probe = ControllableProbe(
+            providerId: "codex",
+            script: [.value(percent: 42, capturedAt: Date(timeIntervalSince1970: 50))]
+        )
+        let settings = Self.makeSettings()
+        let multi = InMemoryMultiAccountSettings()
+        let provider = CodexProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        let accounts = ProviderAccountCoordinator(providerId: "codex", settingsRepository: multi)
+        monitor.registerCoordinator(accounts)
+        let coordinator = RefreshCoordinator(monitor: monitor)
+
+        await coordinator.refresh(.provider("codex"))
+        #expect(await probe.startCount() == 1)
+        let accountId = accounts.activeAccountId
+        accounts.process(.signOut(accountId: accountId ?? ""))
+
+        let displayed = coordinator.historicalSnapshot(providerId: "codex", accountId: accountId)
+        #expect(displayed?.quotas.first?.percentRemaining == 42)
+        #expect(await probe.startCount() == 1)
+        #expect(monitor.historicalSnapshot(providerId: "codex")?.quotas.first?.percentRemaining == 42)
+    }
+
+    @Test
+    func `disabled memberships are not refreshed when twenty extension providers are registered`() async {
+        let settings = Self.makeSettings()
+        var probes: [ControllableProbe] = []
+        var providers: [any AIProvider] = []
+        for index in 0..<20 {
+            let probe = ControllableProbe(providerId: "ext-\(index)", script: [.value(percent: Double(index))])
+            probes.append(probe)
+            let enabled = index < 3
+            providers.append(ConfigurableQuotaProvider(id: "ext-\(index)", probe: probe, enabled: enabled))
+        }
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: providers),
+            clock: ImmediateClock()
+        )
+        let coordinator = RefreshCoordinator(monitor: monitor, maxConcurrent: 2)
+
+        await coordinator.refresh(.allEnabledProviders)
+
+        #expect(await coordinator.state == .completed(successCount: 3, failureCount: 0))
+        #expect(await probes[0].startCount() == 1)
+        #expect(await probes[1].startCount() == 1)
+        #expect(await probes[2].startCount() == 1)
+        for index in 3..<20 {
+            #expect(await probes[index].startCount() == 0)
+        }
+        #expect(coordinator.performance.snapshot.taskCount == 3)
+        #expect(coordinator.performance.snapshot.inFlightCount == 0)
+    }
+
+    @Test
+    func `thirty simulated minutes of background ticks leave no in-flight work`() async {
+        let clock = GateClock()
+        let probe = ControllableProbe(providerId: "claude", script: [])
+        let settings = Self.makeSettings()
+        let provider = ClaudeProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        var policy = RefreshExecutionPolicy.background
+        policy.requestTimeout = nil
+        policy.mergeWindow = nil
+        let coordinator = RefreshCoordinator(monitor: monitor, clock: clock, backgroundPolicy: policy)
+        coordinator.setBackgroundRefresh(enabled: true, interval: .seconds(300), providerIds: ["claude"])
+        await coordinator.waitUntilBackgroundTickCount(1)
+
+        for step in 1...6 {
+            await clock.waitUntilSleepCount(step)
+            clock.releaseOne()
+            await coordinator.waitUntilBackgroundTickCount(step + 1)
+        }
+
+        #expect(await probe.startCount() == 7)
+        coordinator.stopBackgroundRefresh()
+        #expect(coordinator.isBackgroundRefreshRunning == false)
+        #expect(coordinator.performance.snapshot.inFlightCount == 0)
+        #expect(clock.durations.filter { $0 == .seconds(300) }.count >= 6)
+    }
+
     // MARK: - Harness
 
     private struct ImmediateClock: Clock {
@@ -393,6 +672,8 @@ private final class ControllableProbe: UsageProbe, @unchecked Sendable {
 private final class ControllablePowerState: PowerStateProvider, @unchecked Sendable {
     private let lock = NSLock()
     private var asleep = false
+    private var locked = false
+    private var lowPower = false
     private var continuations: [UUID: AsyncStream<PowerEvent>.Continuation] = [:]
 
     var isDisplayAsleep: Bool {
@@ -400,6 +681,14 @@ private final class ControllablePowerState: PowerStateProvider, @unchecked Senda
     }
 
     var isOnBattery: Bool { false }
+
+    var isScreenLocked: Bool {
+        lock.withLock { locked }
+    }
+
+    var isLowPowerMode: Bool {
+        lock.withLock { lowPower }
+    }
 
     func events() -> AsyncStream<PowerEvent> {
         AsyncStream { continuation in
@@ -416,12 +705,170 @@ private final class ControllablePowerState: PowerStateProvider, @unchecked Senda
     }
 
     func setAsleep(_ value: Bool) {
+        emit(asleep: value, locked: nil, lowPower: nil)
+    }
+
+    func setLocked(_ value: Bool) {
+        emit(asleep: nil, locked: value, lowPower: nil)
+    }
+
+    func setLowPower(_ value: Bool) {
+        emit(asleep: nil, locked: nil, lowPower: value)
+    }
+
+    private func emit(asleep: Bool?, locked: Bool?, lowPower: Bool?) {
         lock.lock()
-        asleep = value
+        if let asleep { self.asleep = asleep }
+        if let locked { self.locked = locked }
+        if let lowPower { self.lowPower = lowPower }
+        let paused = self.asleep || self.locked || self.lowPower
         let listeners = Array(continuations.values)
         lock.unlock()
         for continuation in listeners {
-            continuation.yield(value ? .willSleep : .didWake)
+            continuation.yield(paused ? .willSleep : .didWake)
         }
     }
+}
+
+private final class GateClock: Clock, @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [Duration] = []
+    private var waiters: [(UUID, CheckedContinuation<Void, Error>)] = []
+    private var sleepWaiters: [CheckedContinuation<Void, Never>] = []
+
+    var durations: [Duration] {
+        lock.withLock { recorded }
+    }
+
+    func sleep(for duration: Duration) async throws {
+        try Task.checkCancellation()
+        let sleepReady = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            recorded.append(duration)
+            let pending = sleepWaiters
+            sleepWaiters.removeAll()
+            return pending
+        }
+        sleepReady.forEach { $0.resume() }
+
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                let cancelled = lock.withLock { () -> Bool in
+                    if Task.isCancelled { return true }
+                    waiters.append((id, cont))
+                    return false
+                }
+                if cancelled { cont.resume(throwing: CancellationError()) }
+            }
+        } onCancel: { [self] in
+            let pending = lock.withLock { () -> CheckedContinuation<Void, Error>? in
+                guard let index = waiters.firstIndex(where: { $0.0 == id }) else { return nil }
+                return waiters.remove(at: index).1
+            }
+            pending?.resume(throwing: CancellationError())
+        }
+    }
+
+    func sleep(nanoseconds: UInt64) async throws {
+        try await sleep(for: .nanoseconds(Int64(nanoseconds)))
+    }
+
+    func waitUntilSleepCount(_ count: Int) async {
+        while true {
+            if lock.withLock({ recorded.count >= count }) { return }
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                let already = lock.withLock { () -> Bool in
+                    if recorded.count >= count { return true }
+                    sleepWaiters.append(cont)
+                    return false
+                }
+                if already { cont.resume() }
+            }
+        }
+    }
+
+    func releaseOne() {
+        let waiter = lock.withLock { waiters.isEmpty ? nil : waiters.removeFirst().1 }
+        waiter?.resume()
+    }
+
+    func releaseAll() {
+        let pending = lock.withLock { () -> [CheckedContinuation<Void, Error>] in
+            let current = waiters.map(\.1)
+            waiters.removeAll()
+            return current
+        }
+        pending.forEach { $0.resume() }
+    }
+}
+
+@MainActor
+@Observable
+private final class ConfigurableQuotaProvider: AIProvider {
+    let id: String
+    let name: String
+    let cliCommand = ""
+    var dashboardURL: URL? { nil }
+    var isEnabled: Bool
+    private(set) var isSyncing = false
+    private(set) var snapshot: UsageSnapshot?
+    private(set) var lastError: Error?
+    private let probe: any UsageProbe
+
+    init(id: String, probe: any UsageProbe, enabled: Bool = true) {
+        self.id = id
+        self.name = id
+        self.probe = probe
+        self.isEnabled = enabled
+    }
+
+    func isAvailable() async -> Bool { await probe.isAvailable() }
+
+    func refresh() async throws -> UsageSnapshot {
+        isSyncing = true
+        defer { isSyncing = false }
+        do {
+            let next = try await probe.probe()
+            snapshot = next
+            lastError = nil
+            return next
+        } catch {
+            lastError = error
+            throw error
+        }
+    }
+}
+
+private final class InMemoryMultiAccountSettings: ProviderSettingsRepository, MultiAccountSettingsRepository, @unchecked Sendable {
+    private var enabledStates: [String: Bool] = [:]
+    private var accountsByProvider: [String: [ProviderAccountConfig]] = [:]
+    private var activeAccountIds: [String: String] = [:]
+
+    func isEnabled(forProvider id: String, defaultValue: Bool) -> Bool { enabledStates[id] ?? defaultValue }
+    func isEnabled(forProvider id: String) -> Bool { enabledStates[id] ?? true }
+    func setEnabled(_ enabled: Bool, forProvider id: String) { enabledStates[id] = enabled }
+    func customCardURL(forProvider id: String) -> String? { nil }
+    func setCustomCardURL(_ url: String?, forProvider id: String) {}
+    func accounts(forProvider id: String) -> [ProviderAccountConfig] { accountsByProvider[id] ?? [] }
+    func addAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accountsByProvider[id] ?? []
+        if !existing.contains(where: { $0.accountId == config.accountId }) {
+            existing.append(config)
+            accountsByProvider[id] = existing
+        }
+    }
+    func removeAccount(accountId: String, forProvider id: String) {
+        var existing = accountsByProvider[id] ?? []
+        existing.removeAll { $0.accountId == accountId }
+        accountsByProvider[id] = existing
+    }
+    func updateAccount(_ config: ProviderAccountConfig, forProvider id: String) {
+        var existing = accountsByProvider[id] ?? []
+        if let index = existing.firstIndex(where: { $0.accountId == config.accountId }) {
+            existing[index] = config
+            accountsByProvider[id] = existing
+        }
+    }
+    func activeAccountId(forProvider id: String) -> String? { activeAccountIds[id] }
+    func setActiveAccountId(_ accountId: String?, forProvider id: String) { activeAccountIds[id] = accountId }
 }

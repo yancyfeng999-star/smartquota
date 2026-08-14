@@ -65,4 +65,44 @@ struct RefreshStateTests {
         #expect(RefreshPausePolicy.asleep.pauseBackgroundRefresh)
         #expect(RefreshPausePolicy.asleep.allowManualRefresh)
     }
+
+    @Test
+    func `lock and low power pause background the same way sleep does`() {
+        #expect(RefreshPausePolicy.locked.pauseBackgroundRefresh)
+        #expect(RefreshPausePolicy.locked.allowManualRefresh)
+        #expect(RefreshPausePolicy.lowPower.pauseBackgroundRefresh)
+        #expect(RefreshPausePolicy.lowPower.allowManualRefresh)
+
+        #expect(RefreshPausePolicy.forSystemConditions(
+            displayAsleep: false, screenLocked: false, lowPowerMode: false
+        ) == .active)
+        #expect(RefreshPausePolicy.forSystemConditions(
+            displayAsleep: true, screenLocked: false, lowPowerMode: false
+        ).pauseBackgroundRefresh)
+        #expect(RefreshPausePolicy.forSystemConditions(
+            displayAsleep: false, screenLocked: true, lowPowerMode: false
+        ).pauseBackgroundRefresh)
+        #expect(RefreshPausePolicy.forSystemConditions(
+            displayAsleep: false, screenLocked: false, lowPowerMode: true
+        ).pauseBackgroundRefresh)
+        let paused = RefreshPausePolicy.forSystemConditions(
+            displayAsleep: true, screenLocked: true, lowPowerMode: true
+        )
+        #expect(paused.pauseBackgroundRefresh)
+        #expect(paused.allowManualRefresh)
+    }
+
+    @Test
+    func `retry policy backs off and never retries forever`() {
+        #expect(RefreshExecutionPolicy.interactive.maxAttempts == 1)
+        #expect(RefreshExecutionPolicy.background.maxAttempts == 3)
+        #expect(RefreshExecutionPolicy.background.kind == .background)
+        #expect(RefreshExecutionPolicy.background.mergeWindow == 45)
+
+        let policy = RefreshExecutionPolicy.background
+        #expect(policy.backoff(forAttempt: 1) == .milliseconds(250))
+        #expect(policy.backoff(forAttempt: 2) == .milliseconds(500))
+        #expect(policy.backoff(forAttempt: 3) == .milliseconds(1000))
+        #expect(policy.maxAttempts < 10)
+    }
 }

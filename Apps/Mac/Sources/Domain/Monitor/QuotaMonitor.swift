@@ -89,6 +89,40 @@ public final class QuotaMonitor {
         accountCoordinators[coordinator.providerId] = coordinator
     }
 
+    /// Reads a stored snapshot for display. Never starts a probe or network request.
+    /// Prefer a disconnected account's last snapshot when showing history; otherwise
+    /// the provider's last captured snapshot.
+    public func historicalSnapshot(providerId: String, accountId: String? = nil) -> UsageSnapshot? {
+        if let coordinator = accountCoordinators[providerId] {
+            if let accountId,
+               let account = coordinator.accounts.first(where: { $0.id == accountId }) {
+                return account.lastSnapshot
+            }
+            if let disconnected = coordinator.accounts.first(where: {
+                $0.connectionState == .disconnected && $0.lastSnapshot != nil
+            }) {
+                return disconnected.lastSnapshot
+            }
+            if let stored = coordinator.accounts.first(where: { $0.lastSnapshot != nil }) {
+                return stored.lastSnapshot
+            }
+        }
+        return providers.provider(id: providerId)?.snapshot
+    }
+
+    /// Cancels in-flight provider refresh tasks so a timeout or user cancel can
+    /// release work. The task is left in the map until it finishes so a racing
+    /// caller still awaits the same attempt.
+    public func cancelInFlightRefreshes(providerId: String? = nil) {
+        if let providerId {
+            inFlightRefreshes[providerId]?.cancel()
+            return
+        }
+        for task in inFlightRefreshes.values {
+            task.cancel()
+        }
+    }
+
     /// Returns the snapshot for the active connected account, if a coordinator
     /// is registered and the active account is in an active state (connected or
     /// pending confirmation). Falls back to the provider's own snapshot when no

@@ -28,7 +28,7 @@ struct SmartQuotaApp: App {
     /// permanently stop re-evaluating after system sleep (issue #192).
     private let statusItemDriver: StatusItemLabelDriver
 
-    /// User-triggered refresh, cancel, and success/failure counts.
+    /// User-triggered and background refresh, cancel, and success/failure counts.
     private let refreshCoordinator: RefreshCoordinator
 
     /// Binding required by `.menuBarExtraAccess`; also enables programmatic
