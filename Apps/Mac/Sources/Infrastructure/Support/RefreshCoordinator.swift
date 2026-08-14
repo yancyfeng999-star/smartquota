@@ -34,6 +34,7 @@ public final class RefreshCoordinator: RefreshCoordinating {
     private var backgroundInterval: Duration = .seconds(900)
     private var backgroundProviderIds: [String]?
     private var backgroundLoopGeneration = 0
+    private var runGeneration = 0
 
     public init(
         monitor: QuotaMonitor,
@@ -77,7 +78,7 @@ public final class RefreshCoordinator: RefreshCoordinating {
             } else {
                 pausePolicy = .asleep
             }
-            stopBackgroundLoop()
+            stopBackgroundLoop(cancelInFlight: true)
         case .didWake:
             pausePolicy = powerState?.refreshPausePolicy() ?? .active
             guard backgroundEnabled, !pausePolicy.pauseBackgroundRefresh else { return }
@@ -94,7 +95,7 @@ public final class RefreshCoordinator: RefreshCoordinating {
         backgroundInterval = interval
         backgroundProviderIds = providerIds
         if !enabled || pausePolicy.pauseBackgroundRefresh {
-            stopBackgroundLoop()
+            stopBackgroundLoop(cancelInFlight: true)
             return
         }
         restartBackgroundLoop()
@@ -102,7 +103,7 @@ public final class RefreshCoordinator: RefreshCoordinating {
 
     public func stopBackgroundRefresh() {
         backgroundEnabled = false
-        stopBackgroundLoop()
+        stopBackgroundLoop(cancelInFlight: true)
     }
 
     public func waitUntilBackgroundTickCount(_ count: Int) async {
@@ -122,7 +123,7 @@ public final class RefreshCoordinator: RefreshCoordinating {
     }
 
     public func refresh(_ scope: RefreshScope, policy: RefreshExecutionPolicy) async {
-        if let runTask {
+        if let runTask, !runTask.isCancelled {
             switch state {
             case let .running(current, _):
                 if scope.shouldReuse(existing: current) {
@@ -140,14 +141,16 @@ public final class RefreshCoordinator: RefreshCoordinating {
         startedProviderIds.removeAll()
         lastSuccessCount = 0
         lastFailureCount = 0
+        runGeneration += 1
+        let generation = runGeneration
         state = .running(scope: scope, startedAt: Date())
 
         let task = Task { @MainActor in
-            await self.perform(scope: scope, ids: nil, policy: policy)
+            await self.perform(scope: scope, ids: nil, policy: policy, generation: generation)
         }
         runTask = task
         await task.value
-        if !state.isBusy {
+        if runGeneration == generation, !state.isBusy {
             runTask = nil
         }
     }
@@ -163,7 +166,7 @@ public final class RefreshCoordinator: RefreshCoordinating {
     // MARK: - Background loop
 
     private func restartBackgroundLoop() {
-        stopBackgroundLoop()
+        stopBackgroundLoop(cancelInFlight: true)
         startBackgroundLoopIfNeeded()
     }
 
@@ -178,11 +181,19 @@ public final class RefreshCoordinator: RefreshCoordinating {
         }
     }
 
-    private func stopBackgroundLoop() {
+    private func stopBackgroundLoop(cancelInFlight: Bool) {
         backgroundLoopGeneration += 1
         backgroundLoopTask?.cancel()
         backgroundLoopTask = nil
         isBackgroundRefreshRunning = false
+        guard cancelInFlight else { return }
+        runGeneration += 1
+        runTask?.cancel()
+        runTask = nil
+        if state.isBusy {
+            state = .cancelled(completedCount: lastSuccessCount + lastFailureCount)
+        }
+        monitor.cancelInFlightRefreshes()
     }
 
     private func runBackgroundLoop(generation: Int) async {
@@ -213,19 +224,21 @@ public final class RefreshCoordinator: RefreshCoordinating {
             return
         }
         let scope: RefreshScope = ids.count == 1 ? .provider(ids[0]) : .allEnabledProviders
-        if let runTask, state.isBusy {
+        if let runTask, !runTask.isCancelled, state.isBusy {
             if case let .running(current, _) = state, scope.shouldReuse(existing: current) {
                 await runTask.value
             }
             noteBackgroundTick()
             return
         }
-        await refresh(scope: scope, ids: ids, policy: backgroundPolicy)
+        await ProbeExecutionContext.$qualityOfService.withValue(.utility) {
+            await self.refresh(scope: scope, ids: ids, policy: backgroundPolicy)
+        }
         noteBackgroundTick()
     }
 
     private func refresh(scope: RefreshScope, ids: [String], policy: RefreshExecutionPolicy) async {
-        if let runTask, state.isBusy {
+        if let runTask, !runTask.isCancelled, state.isBusy {
             if case let .running(current, _) = state, scope.shouldReuse(existing: current) {
                 await runTask.value
             }
@@ -235,13 +248,15 @@ public final class RefreshCoordinator: RefreshCoordinating {
         startedProviderIds.removeAll()
         lastSuccessCount = 0
         lastFailureCount = 0
+        runGeneration += 1
+        let generation = runGeneration
         state = .running(scope: scope, startedAt: Date())
         let task = Task { @MainActor in
-            await self.perform(scope: scope, ids: ids, policy: policy)
+            await self.perform(scope: scope, ids: ids, policy: policy, generation: generation)
         }
         runTask = task
         await task.value
-        if !state.isBusy {
+        if runGeneration == generation, !state.isBusy {
             runTask = nil
         }
     }
@@ -279,7 +294,23 @@ public final class RefreshCoordinator: RefreshCoordinating {
     private func perform(
         scope: RefreshScope,
         ids: [String]?,
-        policy: RefreshExecutionPolicy
+        policy: RefreshExecutionPolicy,
+        generation: Int
+    ) async {
+        if policy.kind == .background {
+            await ProbeExecutionContext.$qualityOfService.withValue(.utility) {
+                await self.executeWaves(scope: scope, ids: ids, policy: policy, generation: generation)
+            }
+        } else {
+            await executeWaves(scope: scope, ids: ids, policy: policy, generation: generation)
+        }
+    }
+
+    private func executeWaves(
+        scope: RefreshScope,
+        ids: [String]?,
+        policy: RefreshExecutionPolicy,
+        generation: Int
     ) async {
         let startedAt = ContinuousClock.now
         let providerIds = (ids ?? providerIds(for: scope)).filter { id in
@@ -291,7 +322,7 @@ public final class RefreshCoordinator: RefreshCoordinating {
         performance.setInFlight(0)
 
         while index < providerIds.count {
-            if cancelRequested || Task.isCancelled { break }
+            if cancelRequested || Task.isCancelled || runGeneration != generation { break }
             let end = min(index + maxConcurrent, providerIds.count)
             let wave = Array(providerIds[index..<end])
             index = end
@@ -313,6 +344,7 @@ public final class RefreshCoordinator: RefreshCoordinating {
             }
         }
 
+        guard runGeneration == generation else { return }
         lastSuccessCount = success
         lastFailureCount = failure
         performance.setInFlight(0)

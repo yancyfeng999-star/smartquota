@@ -56,6 +56,10 @@ public final class QuotaMonitor {
     /// the same probe instead of starting another account of the same provider.
     private var inFlightRefreshes: [String: Task<ProviderRefreshResult, Never>] = [:]
 
+    /// Identifies the current in-flight task so a cancelled entry's `defer`
+    /// cannot wipe a replacement attempt.
+    private var inFlightTokens: [String: UUID] = [:]
+
     /// Whether monitoring is active
     public private(set) var isMonitoring: Bool = false
 
@@ -110,17 +114,22 @@ public final class QuotaMonitor {
         return providers.provider(id: providerId)?.snapshot
     }
 
-    /// Cancels in-flight provider refresh tasks so a timeout or user cancel can
-    /// release work. The task is left in the map until it finishes so a racing
-    /// caller still awaits the same attempt.
+    /// Cancels in-flight provider refresh tasks and drops them from the map so
+    /// the next refresh starts a new attempt instead of awaiting a cancelled
+    /// (zombie) probe. Callers already awaiting the old task still receive its
+    /// result when it finishes.
     public func cancelInFlightRefreshes(providerId: String? = nil) {
         if let providerId {
             inFlightRefreshes[providerId]?.cancel()
+            inFlightRefreshes[providerId] = nil
+            inFlightTokens[providerId] = nil
             return
         }
         for task in inFlightRefreshes.values {
             task.cancel()
         }
+        inFlightRefreshes.removeAll()
+        inFlightTokens.removeAll()
     }
 
     /// Returns the snapshot for the active connected account, if a coordinator
@@ -292,10 +301,22 @@ public final class QuotaMonitor {
     /// A second overlapping refresh of the same provider awaits the in-flight task.
     public func refreshResult(providerId: String, kind: RefreshKind = .interactive) async -> ProviderRefreshResult {
         if let existing = inFlightRefreshes[providerId] {
-            return await existing.value
+            if existing.isCancelled {
+                inFlightRefreshes[providerId] = nil
+                inFlightTokens[providerId] = nil
+            } else {
+                return await existing.value
+            }
         }
+        let token = UUID()
+        inFlightTokens[providerId] = token
         let task = Task { @MainActor in
-            defer { self.inFlightRefreshes[providerId] = nil }
+            defer {
+                if self.inFlightTokens[providerId] == token {
+                    self.inFlightRefreshes[providerId] = nil
+                    self.inFlightTokens[providerId] = nil
+                }
+            }
             guard let provider = self.providers.provider(id: providerId) else {
                 return ProviderRefreshResult.skipped
             }

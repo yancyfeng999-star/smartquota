@@ -421,6 +421,100 @@ struct RefreshCoordinatorTests {
     }
 
     @Test
+    func `background ticks run probes at utility QoS and interactive stays default`() async {
+        let clock = GateClock()
+        let probe = ControllableProbe(providerId: "claude", script: [.value(percent: 15), .value(percent: 25)])
+        let settings = Self.makeSettings()
+        let provider = ClaudeProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        var policy = RefreshExecutionPolicy.background
+        policy.requestTimeout = nil
+        policy.mergeWindow = nil
+        let coordinator = RefreshCoordinator(monitor: monitor, clock: clock, backgroundPolicy: policy)
+
+        coordinator.setBackgroundRefresh(enabled: true, interval: .seconds(300), providerIds: ["claude"])
+        await coordinator.waitUntilBackgroundTickCount(1)
+        #expect(await probe.recordedQoS() == .utility)
+
+        coordinator.stopBackgroundRefresh()
+        await coordinator.refresh(.provider("claude"))
+        #expect(await probe.recordedQoS() == .default)
+    }
+
+    @Test
+    func `timeout does not leave a zombie in-flight task for the next refresh`() async {
+        let hold = ReleaseGate()
+        let probe = ControllableProbe(
+            providerId: "claude",
+            script: [
+                .wait(hold, then: .success(percent: 10)),
+                .value(percent: 77)
+            ]
+        )
+        let settings = Self.makeSettings()
+        let provider = ClaudeProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        var policy = RefreshExecutionPolicy.interactive
+        policy.requestTimeout = .milliseconds(1)
+        let coordinator = RefreshCoordinator(
+            monitor: monitor,
+            clock: ImmediateClock(),
+            interactivePolicy: policy
+        )
+
+        await coordinator.refresh(.provider("claude"), policy: policy)
+        #expect(await probe.startCount() == 1)
+
+        await coordinator.refresh(.provider("claude"), policy: policy)
+        #expect(await probe.startCount() == 2)
+        #expect(provider.snapshot?.quotas.first?.percentRemaining == 77)
+
+        await hold.release()
+    }
+
+    @Test
+    func `sleep and stop cancel in-flight work so the next refresh is a new attempt`() async {
+        let hold = ReleaseGate()
+        let started = ProbeStartGate()
+        let probe = ControllableProbe(
+            providerId: "claude",
+            script: [
+                .wait(hold, then: .success(percent: 10)),
+                .value(percent: 88)
+            ],
+            onStart: { await started.mark("claude") }
+        )
+        let settings = Self.makeSettings()
+        let provider = ClaudeProvider(probe: probe, settingsRepository: settings)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: ImmediateClock()
+        )
+        var policy = RefreshExecutionPolicy.background
+        policy.requestTimeout = nil
+        policy.mergeWindow = nil
+        let coordinator = RefreshCoordinator(monitor: monitor, backgroundPolicy: policy)
+
+        let first = Task { await coordinator.refresh(.provider("claude"), policy: policy) }
+        await started.wait(untilCount: 1)
+        coordinator.applyPowerEvent(.willSleep)
+
+        await coordinator.refresh(.provider("claude"), policy: policy)
+        #expect(await probe.startCount() == 2)
+        #expect(provider.snapshot?.quotas.first?.percentRemaining == 88)
+
+        coordinator.stopBackgroundRefresh()
+        await hold.release()
+        await first.value
+    }
+
+    @Test
     func `historical snapshot display does not probe the network`() async {
         let probe = ControllableProbe(
             providerId: "codex",
@@ -624,6 +718,7 @@ private final class ControllableProbe: UsageProbe, @unchecked Sendable {
     private let lock = NSLock()
     private var script: [Step]
     private var starts = 0
+    private var lastQoS: QualityOfService?
     private let onStart: (@Sendable () async -> Void)?
 
     init(providerId: String, script: [Step], onStart: (@Sendable () async -> Void)? = nil) {
@@ -636,9 +731,14 @@ private final class ControllableProbe: UsageProbe, @unchecked Sendable {
         lock.withLock { starts }
     }
 
+    func recordedQoS() async -> QualityOfService? {
+        lock.withLock { lastQoS }
+    }
+
     func probe() async throws -> UsageSnapshot {
         let step = lock.withLock { () -> Step in
             starts += 1
+            lastQoS = ProbeExecutionContext.qualityOfService
             return script.isEmpty ? Step.value(percent: 0) : script.removeFirst()
         }
         if let onStart { await onStart() }
