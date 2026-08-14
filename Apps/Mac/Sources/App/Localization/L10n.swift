@@ -1141,6 +1141,7 @@ final class L10n {
         "a11y.back.value": [.zhHans: "设置已打开", .en: "Settings open"],
         "a11y.account_delete.hint": [.zhHans: "删除后只清理智额本地记录，不会登出外部 CLI。可按键盘确认或取消。", .en: "Deletes only SmartQuota’s local record, not the external CLI login. Confirm or cancel with the keyboard."],
         "status.info": [.zhHans: "提示", .en: "Info"],
+        "status.severity.warning": [.zhHans: "警告", .en: "Warning"],
 
     ]
 }

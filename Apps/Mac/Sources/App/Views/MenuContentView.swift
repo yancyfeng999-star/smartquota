@@ -735,7 +735,7 @@ struct MenuContentView: View {
     }
 
     private func compactErrorState(provider: any AIProvider) -> some View {
-        let kind = SupportErrorCatalog.classify(provider.lastError)
+        let kind = SupportErrorCatalog.classify(provider.lastError, providerId: provider.id)
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -976,7 +976,7 @@ struct MenuContentView: View {
                 .untruncatedSupportText()
 
             UnifiedErrorBlock(
-                kind: SupportErrorCatalog.classify(selectedProvider?.lastError),
+                kind: SupportErrorCatalog.classify(selectedProvider?.lastError, providerId: selectedProviderId),
                 theme: theme
             )
             .multilineTextAlignment(.center)

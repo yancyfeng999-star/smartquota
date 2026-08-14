@@ -33,7 +33,7 @@ enum SemanticStatusKind: String, Sendable {
     var labelKey: String {
         switch self {
         case .success: "common.success"
-        case .warning: "status.warning"
+        case .warning: "status.severity.warning"
         case .failure: "common.failure"
         case .info: "status.info"
         }

@@ -58,10 +58,18 @@ public enum SupportErrorCatalog: Sendable {
         SupportErrorKind.allCases.flatMap(\.l10nKeys)
     }
 
-    public static func classify(_ error: Error?) -> SupportErrorKind {
+    public static func classify(_ error: Error?, providerId: String? = nil) -> SupportErrorKind {
         if let probe = error as? ProbeError {
             switch probe {
             case .authenticationRequired, .sessionExpired:
+                if let providerId,
+                   DiagnosticClassification.credential(
+                       providerId: providerId,
+                       available: false,
+                       lastError: error
+                   ) == .missingKey {
+                    return .refreshMissingKey
+                }
                 return .refreshNotLoggedIn
             case .cliNotFound:
                 return .refreshMissingCLI

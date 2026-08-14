@@ -98,12 +98,37 @@ struct AccessibilitySpec {
         #expect(SupportErrorCatalog.classify(ProbeError.rateLimited(retryAt: Date())) == .refreshServiceRejected)
         #expect(SupportErrorCatalog.classify(ManualUpdateError.network("offline")) == .updateCheckFailed)
         #expect(SupportErrorCatalog.classify(URLError(.notConnectedToInternet)) == .refreshNetwork)
+        #expect(
+            SupportErrorCatalog.classify(ProbeError.authenticationRequired, providerId: "claude")
+                == .refreshNotLoggedIn
+        )
+        #expect(
+            SupportErrorCatalog.classify(ProbeError.authenticationRequired, providerId: "copilot")
+                == .refreshMissingKey
+        )
+        #expect(
+            SupportErrorCatalog.classify(ProbeError.sessionExpired(), providerId: "minimax")
+                == .refreshMissingKey
+        )
 
         let login = SupportErrorCatalog.copy(for: .refreshNotLoggedIn, language: .zhHans)
         let network = SupportErrorCatalog.copy(for: .refreshNetwork, language: .zhHans)
+        let missingKey = SupportErrorCatalog.copy(for: .refreshMissingKey, language: .zhHans)
         #expect(login.whatHappened != network.whatHappened)
+        #expect(login.whatHappened != missingKey.whatHappened)
         #expect(login.whatHappened.contains("登录") || login.whatHappened.contains("登录态"))
         #expect(network.whatHappened.contains("网络"))
+        #expect(missingKey.whatHappened.contains("密钥") || missingKey.whatHappened.contains("凭证"))
+    }
+
+    @Test
+    func `diagnostic warning label is not the quota-low string`() {
+        let zh = SupportCopy.text("status.severity.warning", .zhHans)
+        let en = SupportCopy.text("status.severity.warning", .en)
+        #expect(zh == "警告")
+        #expect(en == "Warning")
+        #expect(!zh.contains("偏低"))
+        #expect(AccessibilityChrome.requiredStringKeys.contains("status.severity.warning"))
     }
 
     @Test

@@ -137,6 +137,7 @@ public enum AccessibilityChrome: Sendable {
     public static var requiredStringKeys: [String] {
         var keys = Set(iconButtons.flatMap(\.allKeys))
         keys.insert("status.info")
+        keys.insert("status.severity.warning")
         return keys.sorted()
     }
 }

@@ -248,5 +248,6 @@ public enum SupportCopy: Sendable {
         "a11y.back.hint": ("返回菜单栏主面板。", "Return to the menu-bar panel."),
         "a11y.back.value": ("设置已打开", "Settings open"),
         "status.info": ("提示", "Info"),
+        "status.severity.warning": ("警告", "Warning"),
     ]
 }
