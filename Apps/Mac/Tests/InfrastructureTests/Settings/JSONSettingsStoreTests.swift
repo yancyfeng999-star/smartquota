@@ -245,6 +245,24 @@ struct JSONSettingsStoreTests {
     }
 
     @Test
+    func `corrupt JSON is copied under recovery without changing the original file`() throws {
+        let (store, dir) = try makeStore(initialJSON: "not valid json {{{")
+        defer { cleanup(dir) }
+
+        let settingsURL = dir.appendingPathComponent("settings.json")
+        let original = try Data(contentsOf: settingsURL)
+
+        #expect(throws: SettingsPersistenceError.self) {
+            try store.readAllThrowing()
+        }
+
+        #expect(try Data(contentsOf: settingsURL) == original)
+        let copy = try #require(store.lastCorruptCopyURL)
+        #expect(try Data(contentsOf: copy) == original)
+        #expect(copy.path.contains("/recovery/corrupt/"))
+    }
+
+    @Test
     func `schemaVersion is zero when key is absent`() throws {
         let json = """
         { "app": { "themeMode": "dark" } }

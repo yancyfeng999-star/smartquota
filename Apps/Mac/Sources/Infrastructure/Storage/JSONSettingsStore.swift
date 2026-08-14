@@ -14,6 +14,7 @@ public final class JSONSettingsStore: @unchecked Sendable {
     public let fileURL: URL
     private let lock = NSLock()
     private var _lastError: SettingsPersistenceError?
+    private var _lastCorruptCopyURL: URL?
 
     /// Creates a store backed by a JSON file.
     /// - Parameter fileURL: Path to settings file. Defaults to `~/.smartquota/settings.json`.
@@ -26,6 +27,13 @@ public final class JSONSettingsStore: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _lastError
+    }
+
+    /// Sidecar copy of the last unreadable `settings.json` bytes.
+    public var lastCorruptCopyURL: URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _lastCorruptCopyURL
     }
 
     // MARK: - Public API
@@ -58,6 +66,7 @@ public final class JSONSettingsStore: @unchecked Sendable {
         switch loadUnsafe() {
         case .corrupt(let error):
             _lastError = error
+            preserveCorruptCopyIfNeeded()
             return
         case .missing, .empty:
             _lastError = nil
@@ -91,6 +100,7 @@ public final class JSONSettingsStore: @unchecked Sendable {
             return dict
         case .corrupt(let error):
             _lastError = error
+            preserveCorruptCopyIfNeeded()
             throw error
         }
     }
@@ -141,6 +151,7 @@ public final class JSONSettingsStore: @unchecked Sendable {
             return dict
         case .corrupt(let error):
             _lastError = error
+            preserveCorruptCopyIfNeeded()
             return [:]
         }
     }
@@ -180,6 +191,24 @@ public final class JSONSettingsStore: @unchecked Sendable {
         }
         let data = try JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys])
         try SettingsFileIO.performAtomicWrite(data, to: fileURL)
+    }
+
+    /// Must be called while holding the lock.
+    private func preserveCorruptCopyIfNeeded() {
+        if _lastCorruptCopyURL != nil { return }
+        guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else { return }
+        let destDir = fileURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(CrashRecoveryMarker.directoryName, isDirectory: true)
+            .appendingPathComponent(CrashRecoveryMarker.corruptDirectoryName, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
+            let dest = destDir.appendingPathComponent("settings.json")
+            try SettingsFileIO.performAtomicWrite(data, to: dest)
+            _lastCorruptCopyURL = dest
+        } catch {
+            // Original bytes stay in place even if the sidecar copy cannot be written.
+        }
     }
 
     // MARK: - Key Path Resolution
