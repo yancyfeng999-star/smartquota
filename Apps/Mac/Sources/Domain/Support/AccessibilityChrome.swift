@@ -48,6 +48,9 @@ public enum AccessibilityChrome: Sendable {
         public static let settingsOpenHelp = "settings.open_help"
         public static let settingsOpenLogs = "settings.open_logs"
         public static let settingsCheckUpdates = "settings.check_updates"
+        public static let settingsDownloadUpdate = "settings.download_update"
+        public static let settingsCancelUpdate = "settings.cancel_update"
+        public static let settingsOpenRelease = "settings.open_release"
         public static let helpOpenLogs = "help.open_logs"
         public static let helpOpenDiagnostics = "help.open_diagnostics"
         public static let helpOpenReleases = "help.open_releases"
@@ -144,6 +147,9 @@ public enum AccessibilityChrome: Sendable {
         AccessibilityKeyboardControl(id: ID.settingsOpenHelp, shortcut: "?"),
         AccessibilityKeyboardControl(id: ID.settingsOpenLogs, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.settingsCheckUpdates, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.settingsDownloadUpdate, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.settingsCancelUpdate, shortcut: nil),
+        AccessibilityKeyboardControl(id: ID.settingsOpenRelease, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.helpOpenLogs, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.helpOpenDiagnostics, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.helpOpenReleases, shortcut: nil),

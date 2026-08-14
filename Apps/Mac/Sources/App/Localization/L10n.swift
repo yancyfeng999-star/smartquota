@@ -202,8 +202,8 @@ final class L10n {
         "settings.updates": [.zhHans: "软件更新", .en: "Updates", .ja: "アップデート", .ko: "업데이트", .ru: "Обновления", .ar: "التحديثات", .fr: "Mises à jour", .de: "Updates", .es: "Actualizaciones", .pt: "Atualizações"],
         "settings.updates_version_fmt": [.zhHans: "当前版本 %@", .en: "Current version %@", .ja: "現在のバージョン %@", .ko: "현재 버전 %@", .ru: "Текущая версия %@", .ar: "الإصدار الحالي %@", .fr: "Version actuelle %@", .de: "Aktuelle Version %@", .es: "Versión actual %@", .pt: "Versão atual %@"],
         "settings.updates_manual_help": [
-            .zhHans: "点一次检查更新：优先 .pkg，解包后退出替换（无确认框、无管理员密码）。需对应用程序目录可写。",
-            .en: "One tap: prefer .pkg, unpack & replace after quit. No confirm / no admin password. Needs write access to the app folder.",
+            .zhHans: "先检查并阅读说明，再在更新区域确认下载。优先 .pkg，无包或无校验时打开 Release 页。.dmg 为回退。默认 ad-hoc 签名。",
+            .en: "Check first, read the notes, then confirm download in this card. Prefers .pkg. Missing assets or checksums open the Release page. .dmg is fallback. Default signing is ad-hoc.",
             .ja: "1回で .pkg を展開し終了後に置換。確認も管理者パスワードも不要（書込権限が必要）。",
             .ko: "한 번 탭: .pkg 해제 후 종료·교체. 확인/관리자 암호 없음(쓰기 권한 필요).",
             .ru: "Один раз: .pkg, распаковка и замена после выхода. Без пароля (нужна запись).",
@@ -224,8 +224,8 @@ final class L10n {
         "settings.updates_installing": [.zhHans: "正在安装，请稍候…", .en: "Installing…", .ja: "インストール中…", .ko: "설치 중…", .ru: "Установка…", .ar: "جارٍ التثبيت…", .fr: "Installation…", .de: "Installieren…", .es: "Instalando…", .pt: "Instalando…"],
         "settings.updates_installing_btn": [.zhHans: "安装中…", .en: "Installing…", .ja: "インストール中…", .ko: "설치 중…", .ru: "Установка…", .ar: "جارٍ التثبيت…", .fr: "Installation…", .de: "Installieren…", .es: "Instalando…", .pt: "Instalando…"],
         "settings.updates_relaunching": [
-            .zhHans: "安装完成，正在重启…",
-            .en: "Installed — relaunching…",
+            .zhHans: "已安排替换，正在退出以便写入新版本…",
+            .en: "Replacement scheduled — quitting so the new version can be written…",
             .ja: "インストール完了。再起動します…",
             .ko: "설치 완료 · 다시 실행…",
             .ru: "Установлено — перезапуск…",
@@ -255,6 +255,48 @@ final class L10n {
         "settings.updates_failed_fmt": [.zhHans: "检查失败：%@", .en: "Check failed: %@", .ja: "確認失敗：%@", .ko: "확인 실패: %@", .ru: "Ошибка: %@", .ar: "فشل الفحص: %@", .fr: "Échec : %@", .de: "Fehler: %@", .es: "Error: %@", .pt: "Falha: %@"],
         "settings.updates_failed_version": [.zhHans: "无法识别当前版本号", .en: "Could not read the current version", .ja: "現在のバージョンを読めません", .ko: "현재 버전을 읽을 수 없습니다", .ru: "Не удалось прочитать версию", .ar: "تعذّر قراءة الإصدار الحالي", .fr: "Version actuelle illisible", .de: "Aktuelle Version unlesbar", .es: "No se pudo leer la versión", .pt: "Não foi possível ler a versão"],
         "settings.updates_failed_none": [.zhHans: "未找到可用的 Mac 发布包", .en: "No Mac release found", .ja: "Mac 用リリースが見つかりません", .ko: "Mac 릴리스를 찾지 못했습니다", .ru: "Mac-релиз не найден", .ar: "لم يُعثر على إصدار Mac", .fr: "Aucune release Mac trouvée", .de: "Kein Mac-Release gefunden", .es: "No hay release de Mac", .pt: "Nenhum release Mac encontrado"],
+        "settings.updates_current_fmt": [.zhHans: "当前版本 %@", .en: "Current version %@"],
+        "settings.updates_latest_fmt": [.zhHans: "新版本 %@", .en: "New version %@"],
+        "settings.updates_published_fmt": [.zhHans: "发布日期 %@", .en: "Published %@"],
+        "settings.updates_notes": [.zhHans: "变更说明", .en: "Release notes"],
+        "settings.updates_size_fmt": [.zhHans: "安装包 %@", .en: "Installer %@"],
+        "settings.updates_min_os_fmt": [.zhHans: "最低 macOS %@", .en: "Minimum macOS %@"],
+        "settings.updates_os_blocked_fmt": [
+            .zhHans: "此版本需要 macOS %@，当前系统是 %@，不会下载。",
+            .en: "This update needs macOS %@. This Mac is running %@, so it will not download.",
+        ],
+        "settings.updates_asset_error": [
+            .zhHans: "发布资产异常：缺少合法的 PKG/DMG 或校验信息。当前版本未改动。可打开 Release 页面手动下载。",
+            .en: "Release assets are invalid: a PKG/DMG or checksum is missing. The installed version is unchanged. Open the Release page to download manually.",
+        ],
+        "settings.updates_open_release": [.zhHans: "打开 Release 页面", .en: "Open Release page"],
+        "settings.updates_confirm_install": [.zhHans: "下载并安装", .en: "Download and install"],
+        "settings.updates_cancel": [.zhHans: "取消下载", .en: "Cancel download"],
+        "settings.updates_timeout": [
+            .zhHans: "下载超时，已清理临时文件。当前版本未改动。",
+            .en: "The download timed out. Temporary files were removed. The installed version is unchanged.",
+        ],
+        "settings.updates_cancelled": [
+            .zhHans: "已取消下载并清理临时文件。当前版本未改动。",
+            .en: "Download cancelled. Temporary files were removed. The installed version is unchanged.",
+        ],
+        "settings.updates_install_failed": [
+            .zhHans: "安装失败，当前应用仍可启动，没有写成新版本。",
+            .en: "Install failed. The current app is still launchable and was not marked as updated.",
+        ],
+        "settings.updates_not_newer": [
+            .zhHans: "目标版本不高于当前版本，已取消安装。",
+            .en: "The target is not newer than the installed version. Install was skipped.",
+        ],
+        "settings.updates_pkg_note": [
+            .zhHans: "应用内更新优先 PKG；没有 PKG 时回退打开 DMG，由你拖到「应用程序」。不会静默自动更新。",
+            .en: "In-app update prefers PKG. If there is no PKG, a DMG is opened so you can drag it to Applications. There is no silent auto-update.",
+        ],
+        "settings.updates_signing_note": [
+            .zhHans: "默认是临时签名（ad-hoc），通常未公证。其他 Mac 首次打开请 Control-点击 → 打开。有 Developer ID 的包才是正式签名。",
+            .en: "Default builds are ad-hoc signed and usually not notarized. On another Mac, Control-click → Open the first time. Only Developer ID builds are formally signed.",
+        ],
+        "settings.updates_channel_stable": [.zhHans: "当前检查稳定版", .en: "Checking the stable channel"],
         "status.critical": [.zhHans: "紧张", .en: "Low", .ja: "低下", .ko: "부족", .ru: "Мало", .ar: "منخفض", .fr: "Bas", .de: "Niedrig", .es: "Bajo", .pt: "Baixo"],
         "status.depleted": [.zhHans: "用尽", .en: "Empty", .ja: "枯渇", .ko: "소진", .ru: "Исчерпано", .ar: "نافد", .fr: "Épuisé", .de: "Leer", .es: "Agotado", .pt: "Esgotado"],
         "status.error": [.zhHans: "错误", .en: "Error", .ja: "エラー", .ko: "오류", .ru: "Ошибка", .ar: "خطأ", .fr: "Erreur", .de: "Fehler", .es: "Error", .pt: "Erro"],
@@ -1160,8 +1202,8 @@ final class L10n {
         ],
         "help.topic.check_updates.title": [.zhHans: "检查更新", .en: "Check for updates"],
         "help.topic.check_updates.body": [
-            .zhHans: "在设置中点「检查更新」。应用只访问公开的 GitHub Releases，不会默认静默安装。有新版本时由你触发下载与安装；也可打开项目 Release 页面手动下载。",
-            .en: "Tap Check for Updates in Settings. The app only reads public GitHub Releases and does not silently install. You trigger download and install; you can also open the project Release page.",
+            .zhHans: "在设置中点「检查更新」，会显示当前版本、新版本、日期、说明、安装包大小和最低 macOS。确认后才下载。优先 PKG，没有 PKG 时打开 DMG。缺少资产或校验时打开 Release 页。默认 ad-hoc 签名，首次打开请右键打开。不会静默自动更新。",
+            .en: "Tap Check for Updates in Settings to see the current version, new version, date, notes, installer size, and minimum macOS. Download starts only after you confirm. PKG is preferred; DMG is the fallback. Missing assets or checksums open the Release page. Default signing is ad-hoc — Control-click to open the first time. There is no silent auto-update.",
         ],
         "help.topic.log_location.title": [.zhHans: "日志位置", .en: "Log location"],
         "help.topic.log_location.body": [
