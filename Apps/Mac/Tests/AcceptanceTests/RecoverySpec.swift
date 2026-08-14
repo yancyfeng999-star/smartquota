@@ -104,10 +104,25 @@ struct RecoverySpec {
 
         let store = CrashRecoveryStore(configRoot: env.configRoot)
         #expect(store.beginLaunch() == .safeMode(reason: .settingsDecodeFailed))
+
+        let repo = JSONSettingsRepository(store: env.settingsStore)
+        let staleLaunchCache = (
+            themeMode: repo.themeMode(),
+            language: repo.appLanguage()
+        )
+        #expect(staleLaunchCache.themeMode == "system")
+        #expect(staleLaunchCache.language == "zh-Hans")
+
         try store.restoreLatestBackup()
+        #expect(store.hasSessionMarker == false)
         #expect(store.retryNormalLaunch() == .normal)
+
+        let reloaded = JSONSettingsRepository(store: env.settingsStore)
+        #expect(reloaded.themeMode() == "cli")
+        #expect(reloaded.appLanguage() == "zh-Hans")
         #expect((env.settingsStore.readAll()["app"] as? [String: Any])?["themeMode"] as? String == "cli")
         #expect(try BackupManager(configRoot: env.configRoot).listBackups().isEmpty == false)
+        #expect(CrashRecoveryStore(configRoot: env.configRoot).beginLaunch() == .normal)
     }
 
     @Test

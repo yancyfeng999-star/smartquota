@@ -148,6 +148,7 @@ struct SafeModeView: View {
     private func restoreBackup() {
         do {
             try store.restoreLatestBackup()
+            AppSettings.shared.reloadFromDisk()
             statusIsError = false
             statusText = l10n.t("recovery.status.restore_ok")
         } catch {
@@ -159,6 +160,7 @@ struct SafeModeView: View {
     private func performReset() {
         do {
             try store.resetAppSettings()
+            AppSettings.shared.reloadFromDisk()
             statusIsError = false
             statusText = l10n.t("recovery.status.reset_ok")
         } catch {

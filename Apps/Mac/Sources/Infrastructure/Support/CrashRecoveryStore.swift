@@ -60,11 +60,10 @@ public final class CrashRecoveryStore: @unchecked Sendable {
         defer { lock.unlock() }
 
         let leftover = fileExists(sessionURL) && !fileExists(cleanURL)
-        let arrivedClean = fileExists(cleanURL)
         var count = readFailureCount()
-        // Count every launch that did not follow a clean quit so three
-        // interrupted starts escalate. A clean marker resets and must not increment.
-        if leftover || !arrivedClean {
+        // Only a leftover session is an unclean failure. A first-ever launch
+        // (no prior session, no clean marker) must not increment.
+        if leftover {
             count += 1
             writeFailureCount(count)
         }
@@ -124,6 +123,7 @@ public final class CrashRecoveryStore: @unchecked Sendable {
         }
         try backupManager.restore(latest)
         removeFile(migrationFailedURL)
+        markRecoverySucceeded()
     }
 
     public func resetAppSettings() throws {
@@ -134,7 +134,7 @@ public final class CrashRecoveryStore: @unchecked Sendable {
             SettingsSchema.versionKey: SettingsSchema.currentVersion,
         ])
         removeFile(migrationFailedURL)
-        writeFailureCount(0)
+        markRecoverySucceeded()
     }
 
     public func exportAllowlistedSettings(to url: URL) throws {
@@ -167,6 +167,9 @@ public final class CrashRecoveryStore: @unchecked Sendable {
             )
         ).launchMode
         _lastLaunchMode = mode
+        if !AppRecoveryState(launchMode: mode).isSafeMode {
+            markRecoverySucceeded()
+        }
         return mode
     }
 
@@ -245,5 +248,13 @@ public final class CrashRecoveryStore: @unchecked Sendable {
 
     private func removeFile(_ url: URL) {
         try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Successful restore/reset/retry: next process start must not see a leftover session.
+    private func markRecoverySucceeded() {
+        writeMarker(cleanURL)
+        removeFile(sessionURL)
+        removeFile(readyURL)
+        writeFailureCount(0)
     }
 }

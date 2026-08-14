@@ -278,6 +278,7 @@ public final class AppSettings {
     /// Whether to receive beta updates (default: false)
     public var receiveBetaUpdates: Bool {
         didSet {
+            guard !isInitializing else { return }
             repository.setReceiveBetaUpdates(receiveBetaUpdates)
             NotificationCenter.default.post(name: .betaUpdatesSettingChanged, object: nil)
         }
@@ -355,6 +356,47 @@ public final class AppSettings {
         self.isInitializing = false
         // Apply language after full init (didSet is skipped during init).
         L10n.shared.language = AppLanguage.resolve(languageCode)
+    }
+
+    /// Re-read `settings.json` after Safe Mode restore/reset so leaveSafeMode
+    /// does not persist launch-time defaults onto the recovered file.
+    public func reloadFromDisk() {
+        isInitializing = true
+        appLanguage = repository.appLanguage()
+        themeMode = repository.themeMode()
+        userHasChosenTheme = repository.userHasChosenTheme()
+        claudeApiBudgetEnabled = repository.claudeApiBudgetEnabled()
+        claudeApiBudget = Decimal(repository.claudeApiBudget())
+        receiveBetaUpdates = repository.receiveBetaUpdates()
+        burnRateWarningEnabled = repository.burnRateWarningEnabled()
+        burnRateThreshold = repository.burnRateThreshold()
+        showDailyUsageCards = repository.showDailyUsageCards()
+        overviewModeEnabled = repository.overviewModeEnabled()
+        backgroundSyncEnabled = repository.backgroundSyncEnabled()
+        backgroundSyncInterval = repository.backgroundSyncInterval()
+        quotaThresholdAlertsEnabled = repository.quotaThresholdAlertsEnabled()
+        sessionAlertThreshold = repository.sessionAlertThreshold()
+        weeklyAlertThreshold = repository.weeklyAlertThreshold()
+        nearResetAlertHours = repository.nearResetAlertHours()
+        underuseAlertRemaining = repository.underuseAlertRemaining()
+        menuBarPercentageEnabled = repository.menuBarPercentageEnabled()
+        menuBarStatusIconEnabled = repository.menuBarStatusIconEnabled()
+        menuBarDurationEnabled = repository.menuBarDurationEnabled()
+        menuBarStackedEnabled = repository.menuBarStackedEnabled()
+        menuBarStackedSize = MenuBarStackedSize(storedRawValue: repository.menuBarStackedSize())
+        menuBarPercentageProviderId = repository.menuBarPercentageProviderId()
+        menuBarPercentageQuotaKey = repository.menuBarPercentageQuotaKey()
+        menuBarSecondaryQuotaKey = repository.menuBarSecondaryQuotaKey()
+        membershipOrder = repository.membershipOrder()
+        if let mode = UsageDisplayMode(rawValue: repository.usageDisplayMode()) {
+            usageDisplayMode = mode
+        } else {
+            usageDisplayMode = .remaining
+        }
+        isInitializing = false
+        L10n.shared.language = AppLanguage.resolve(appLanguage)
+        planLabelsRevision &+= 1
+        membershipOrderRevision &+= 1
     }
 
     // MARK: - Seasonal Theme

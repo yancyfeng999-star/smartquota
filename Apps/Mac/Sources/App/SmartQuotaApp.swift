@@ -169,6 +169,7 @@ struct SmartQuotaApp: App {
     }
 
     private func leaveSafeMode() {
+        AppSettings.shared.reloadFromDisk()
         launchMode = .normal
         SafeModeWindowController.shared.close()
         if !didStartNormalServices {

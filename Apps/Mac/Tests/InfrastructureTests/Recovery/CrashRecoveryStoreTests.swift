@@ -88,9 +88,23 @@ struct CrashRecoveryStoreTests {
     }
 
     @Test
+    func `first beginLaunch without a prior session does not count as an unclean failure`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        let store = CrashRecoveryStore(configRoot: env.configRoot)
+        #expect(store.beginLaunch() == .normal)
+        #expect(store.startupFailureCount == 0)
+        #expect(store.hasSessionMarker)
+    }
+
+    @Test
     func `three interrupted launches escalate to repeated startup failure`() throws {
         let env = try makeEnv()
         defer { env.cleanup() }
+
+        // First-ever launch is not an unclean failure.
+        #expect(CrashRecoveryStore(configRoot: env.configRoot).beginLaunch() == .normal)
 
         var lastMode: AppLaunchMode = .normal
         for _ in 0..<RecoverySignals.repeatedFailureThreshold {
@@ -175,9 +189,13 @@ struct CrashRecoveryStoreTests {
         let afterRestore = env.settingsStore.readAll()
         #expect((afterRestore["app"] as? [String: Any])?["themeMode"] as? String == "dark")
         #expect(try backup.listBackups().count == 1)
+        #expect(store.hasSessionMarker == false)
+        #expect(store.hasCleanMarker)
 
         #expect(store.retryNormalLaunch() == .normal)
         #expect(store.lastLaunchMode == .normal)
+        #expect(store.hasSessionMarker == false)
+        #expect(CrashRecoveryStore(configRoot: env.configRoot).beginLaunch() == .normal)
     }
 
     @Test
@@ -221,7 +239,48 @@ struct CrashRecoveryStoreTests {
         #expect(reset["app"] == nil)
         #expect(try BackupManager(configRoot: env.configRoot).listBackups().count == 1)
         #expect(try Data(contentsOf: externalAuth) == Data("cli-secret".utf8))
+        #expect(store.hasSessionMarker == false)
         #expect(store.retryNormalLaunch() == .normal)
+        #expect(CrashRecoveryStore(configRoot: env.configRoot).beginLaunch() == .normal)
+    }
+
+    @Test
+    func `leaveSafeMode reloads restored disk values instead of persisting launch defaults`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try """
+        {"app":{"themeMode":"cli","language":"en","membershipOrder":["claude"]},"schemaVersion":1}
+        """.write(to: env.settingsURL, atomically: true, encoding: .utf8)
+        _ = try BackupManager(configRoot: env.configRoot).createPreMutationBackup()
+        try Data("{".utf8).write(to: env.settingsURL)
+
+        let store = CrashRecoveryStore(configRoot: env.configRoot)
+        #expect(store.beginLaunch() == .safeMode(reason: .settingsDecodeFailed))
+
+        let repo = JSONSettingsRepository(store: env.settingsStore)
+        // AppSettings.shared at corrupt launch caches these defaults.
+        let stale = LeaveSafeModeSettingsCache.capture(from: repo)
+        #expect(stale.themeMode == "system")
+        #expect(stale.language == "zh-Hans")
+        #expect(stale.membershipOrder.isEmpty)
+
+        try store.restoreLatestBackup()
+
+        // What leaveSafeMode must do: reload from disk, then any persist uses restored values.
+        let reloaded = LeaveSafeModeSettingsCache.capture(from: repo)
+        #expect(reloaded.themeMode == "cli")
+        #expect(reloaded.language == "en")
+        #expect(reloaded.membershipOrder == ["claude"])
+        reloaded.persist(to: repo)
+        #expect(repo.themeMode() == "cli")
+        #expect(repo.appLanguage() == "en")
+        #expect(repo.membershipOrder() == ["claude"])
+
+        // Persisting the launch-time cache would clobber the restored file.
+        stale.persist(to: repo)
+        #expect(repo.themeMode() == "system")
+        #expect(repo.appLanguage() == "zh-Hans")
     }
 
     @Test
@@ -302,5 +361,27 @@ struct CrashRecoveryStoreTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let settingsURL = root.appendingPathComponent("settings.json")
         return Env(configRoot: root, settingsStore: JSONSettingsStore(fileURL: settingsURL))
+    }
+}
+
+/// Stand-in for `AppSettings` in-memory fields. After a corrupt launch the cache
+/// holds repository defaults; leaveSafeMode must reload from disk before persist.
+private struct LeaveSafeModeSettingsCache {
+    var themeMode: String
+    var language: String
+    var membershipOrder: [String]
+
+    static func capture(from repo: JSONSettingsRepository) -> LeaveSafeModeSettingsCache {
+        LeaveSafeModeSettingsCache(
+            themeMode: repo.themeMode(),
+            language: repo.appLanguage(),
+            membershipOrder: repo.membershipOrder()
+        )
+    }
+
+    func persist(to repo: JSONSettingsRepository) {
+        repo.setThemeMode(themeMode)
+        repo.setAppLanguage(language)
+        repo.setMembershipOrder(membershipOrder)
     }
 }
