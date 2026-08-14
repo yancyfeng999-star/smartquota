@@ -20,6 +20,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate open-source repository
+        run: ./scripts/check-open-source-docs.sh
+        working-directory: .
+
       - name: Get Swift version
         run: swift --version
         working-directory: .

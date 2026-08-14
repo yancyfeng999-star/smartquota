@@ -2,6 +2,8 @@
 
 macOS 安装包目录（类似 GitHub Releases）。
 
+源码当前版本：0.3.29（build 32，待发布）；本目录最新已生成包仍为 v0.3.28。
+
 ## 最新
 
 见 [LATEST.md](./LATEST.md)。
