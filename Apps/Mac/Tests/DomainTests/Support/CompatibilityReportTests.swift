@@ -22,7 +22,7 @@ struct CompatibilityReportTests {
     }
 
     @Test
-    func `report is ready only when OS architecture and app directory pass`() {
+    func `report is ready only when OS architecture writable keychain notifications and CLIs pass`() {
         let ready = makeReport(
             minimumOSSatisfied: true,
             architecture: "arm64",
@@ -53,12 +53,16 @@ struct CompatibilityReportTests {
     @Test
     func `missing keychain or notifications does not pretend the environment is fully ready`() {
         let keychainDown = makeReport(keychainAvailable: false)
-        #expect(keychainDown.isReady)
+        #expect(keychainDown.isReady == false)
         #expect(keychainDown.hasActionableIssues)
 
         let denied = makeReport(notificationStatus: .denied)
+        #expect(denied.isReady == false)
         #expect(denied.hasActionableIssues)
         #expect(denied.issues.contains { $0.kind == .notifications && $0.permissionName == "Notifications" })
+
+        let undetermined = makeReport(notificationStatus: .notDetermined)
+        #expect(undetermined.isReady == false)
     }
 
     @Test
@@ -75,8 +79,25 @@ struct CompatibilityReportTests {
         #expect(check.suggestedAction.installsThirdPartyCLI == false)
 
         let report = makeReport(providerChecks: ["claude": check])
+        #expect(report.isReady == false)
         #expect(report.hasActionableIssues)
         #expect(report.issues.contains { $0.kind == .providerCLI && $0.relatedProviderId == "claude" })
+    }
+
+    @Test
+    func `provider enablement matches app construction defaults`() {
+        #expect(ProviderEnablement.defaultEnabled(for: "codex"))
+        #expect(ProviderEnablement.defaultEnabled(for: "kimi"))
+        #expect(ProviderEnablement.defaultEnabled(for: "minimax"))
+        #expect(ProviderEnablement.defaultEnabled(for: "grok"))
+        #expect(ProviderEnablement.defaultEnabled(for: "claude"))
+        #expect(ProviderEnablement.defaultEnabled(for: "copilot") == false)
+        #expect(ProviderEnablement.defaultEnabled(for: "bedrock") == false)
+        #expect(ProviderEnablement.isEnabled(providerId: "kimi", storedValue: nil))
+        #expect(ProviderEnablement.isEnabled(providerId: "kimi", storedValue: false) == false)
+        #expect(ProviderEnablement.isEnabled(providerId: "copilot", storedValue: nil) == false)
+        #expect(ProviderEnablement.isEnabled(providerId: "copilot", storedValue: true))
+        #expect(ProviderEnablement.coreProviderIDs == Set(["codex", "kimi", "minimax", "grok"]))
     }
 
     @Test

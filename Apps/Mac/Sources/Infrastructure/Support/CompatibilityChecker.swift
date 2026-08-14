@@ -154,11 +154,14 @@ public final class CompatibilityChecker: CompatibilityChecking, Sendable {
         if let override = environment.enabledProviders {
             return override()
         }
-        guard let store else { return [] }
-        let providers = store.readAll()["providers"] as? [String: Any] ?? [:]
-        return providers.keys.sorted().compactMap { id in
-            guard let entry = providers[id] as? [String: Any] else { return nil }
-            guard entry["isEnabled"] as? Bool == true else { return nil }
+        let stored = store?.readAll()["providers"] as? [String: Any] ?? [:]
+        var ids = Set(ProviderEnablement.knownProviderIDs)
+        ids.formUnion(stored.keys)
+        return ids.sorted().compactMap { id in
+            let storedFlag = (stored[id] as? [String: Any]).flatMap { $0["isEnabled"] as? Bool }
+            guard ProviderEnablement.isEnabled(providerId: id, storedValue: storedFlag) else {
+                return nil
+            }
             return EnabledProviderDependency(
                 providerId: id,
                 cliName: ProviderExternalDependency.cliName(for: id)

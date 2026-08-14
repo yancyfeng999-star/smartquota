@@ -52,6 +52,31 @@ public enum CompatibilityAction: String, Codable, Sendable {
     public var installsThirdPartyCLI: Bool { false }
 }
 
+/// Enablement defaults must match each built-in provider's constructor.
+public enum ProviderEnablement: Sendable {
+    public static let knownProviderIDs: [String] = [
+        "codex", "kimi", "minimax", "grok",
+        "claude", "gemini", "copilot", "cursor", "antigravity",
+        "zai", "bedrock", "alibaba", "mimo",
+        "ampcode", "kiro", "mistral", "opencode-go", "omp",
+    ]
+
+    public static let coreProviderIDs: Set<String> = ["codex", "kimi", "minimax", "grok"]
+
+    public static func defaultEnabled(for providerId: String) -> Bool {
+        switch providerId {
+        case "copilot", "bedrock", "alibaba", "mimo", "mistral":
+            return false
+        default:
+            return true
+        }
+    }
+
+    public static func isEnabled(providerId: String, storedValue: Bool?) -> Bool {
+        storedValue ?? defaultEnabled(for: providerId)
+    }
+}
+
 public enum ProviderExternalDependency: Sendable {
     public static func cliName(for providerId: String) -> String? {
         switch providerId {
@@ -223,9 +248,21 @@ public struct CompatibilityReport: Codable, Equatable, Sendable {
         self.issues = issues
     }
 
-    /// System can run 智额. Missing CLI or a denied permission is not “ready”.
+    /// Fully ready only when OS, arch, writable dir, Keychain, notifications,
+    /// and every enabled-provider CLI all pass.
     public var isReady: Bool {
-        minimumOSSatisfied && supportedArchitecture && appDirectoryWritable
+        minimumOSSatisfied
+            && supportedArchitecture
+            && appDirectoryWritable
+            && keychainAvailable
+            && notificationStatus.isGranted
+            && !hasMissingEnabledCLI
+    }
+
+    public var hasMissingEnabledCLI: Bool {
+        providerChecks.values.contains { check in
+            check.enabled && check.cliName != nil && !check.cliInstalled
+        }
     }
 
     public var hasActionableIssues: Bool {

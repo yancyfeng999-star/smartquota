@@ -64,6 +64,7 @@ public final class SettingsMigrationRunner: @unchecked Sendable {
             lastBackupDirectory = manager.directoryURL(for: backup)
         }
 
+        var didReplaceLiveFile = false
         do {
             var working = originalDict
             var version = fromVersion
@@ -112,28 +113,26 @@ public final class SettingsMigrationRunner: @unchecked Sendable {
             let data = try JSONSerialization.data(withJSONObject: working, options: [.prettyPrinted, .sortedKeys])
             do {
                 try fileIO.writeAtomically(data, store.fileURL)
+                didReplaceLiveFile = true
             } catch let error as SettingsPersistenceError {
-                restoreOriginalBytes(originalData)
                 throw annotate(error)
             } catch {
-                restoreOriginalBytes(originalData)
                 throw annotate(SettingsPersistenceError.writeFailed(error.localizedDescription))
             }
 
-            do {
-                try validateFilePermissions()
-            } catch {
-                restoreOriginalBytes(originalData)
-                throw annotate(error as? SettingsPersistenceError ?? .validationFailed("settings file permissions"))
-            }
+            try validateFilePermissions()
             return backup
         } catch let error as SettingsPersistenceError {
-            restoreOriginalBytes(originalData)
-            throw annotate(error)
+            try restoreOrRethrow(
+                originalData,
+                didReplaceLiveFile: didReplaceLiveFile,
+                originalError: error
+            )
         } catch {
-            restoreOriginalBytes(originalData)
-            throw annotate(
-                SettingsPersistenceError.migrationFailed(
+            try restoreOrRethrow(
+                originalData,
+                didReplaceLiveFile: didReplaceLiveFile,
+                originalError: .migrationFailed(
                     from: fromVersion,
                     to: currentVersion,
                     reason: error.localizedDescription
@@ -156,14 +155,28 @@ public final class SettingsMigrationRunner: @unchecked Sendable {
         return error.includingBackupDirectory(path)
     }
 
-    private func restoreOriginalBytes(_ data: Data) {
-        let url = store.fileURL
+    private func restoreOrRethrow(
+        _ originalData: Data,
+        didReplaceLiveFile: Bool,
+        originalError: SettingsPersistenceError
+    ) throws -> Never {
         do {
-            let parent = url.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
-            try data.write(to: url, options: .atomic)
+            try restoreOriginalBytes(originalData)
         } catch {
-            // Best effort: the live file is still the original unless a later write succeeded.
+            if didReplaceLiveFile {
+                let detail = (error as? SettingsPersistenceError)?.errorDescription
+                    ?? error.localizedDescription
+                throw annotate(originalError.includingRestoreFailure(detail))
+            }
+        }
+        throw annotate(originalError)
+    }
+
+    private func restoreOriginalBytes(_ data: Data) throws {
+        try fileIO.writeAtomically(data, store.fileURL)
+        let written = try Data(contentsOf: store.fileURL)
+        guard written == data else {
+            throw SettingsPersistenceError.writeFailed("restored settings bytes do not match the original")
         }
     }
 }

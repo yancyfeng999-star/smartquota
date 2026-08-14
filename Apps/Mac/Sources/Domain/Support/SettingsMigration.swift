@@ -54,6 +54,12 @@ public enum SettingsPersistenceError: Error, Equatable, Sendable, LocalizedError
     /// Machine-readable next step; UI localization happens later.
     public var recoveryHint: String {
         let backupSuffix = backupDirectoryPath.map { " Backup location: \($0)" } ?? ""
+        if claimsRestoreFailed {
+            return "Settings migration failed and the original file could not be restored."
+                + (backupSuffix.isEmpty
+                    ? " Restore the pre-migration backup under backups/."
+                    : backupSuffix)
+        }
         switch self {
         case .corruptJSON:
             return "The settings file is unreadable. Restore a local backup or reset settings. The original file was left unchanged." + backupSuffix
@@ -89,6 +95,31 @@ public enum SettingsPersistenceError: Error, Equatable, Sendable, LocalizedError
             return Self.parseBackupDirectory(from: reason)
         case .migrationFailed(_, _, let reason):
             return Self.parseBackupDirectory(from: reason)
+        }
+    }
+
+    public var claimsRestoreFailed: Bool {
+        switch self {
+        case .validationFailed(let reason), .writeFailed(let reason):
+            return reason.contains("restoreFailed=")
+        case .migrationFailed(_, _, let reason):
+            return reason.contains("restoreFailed=")
+        default:
+            return false
+        }
+    }
+
+    public func includingRestoreFailure(_ detail: String) -> SettingsPersistenceError {
+        let token = "restoreFailed=\(detail)"
+        switch self {
+        case .migrationFailed(let from, let to, let reason):
+            return .migrationFailed(from: from, to: to, reason: reason.contains("restoreFailed=") ? reason : "\(reason); \(token)")
+        case .validationFailed(let reason):
+            return .validationFailed(reason.contains("restoreFailed=") ? reason : "\(reason); \(token)")
+        case .writeFailed(let reason):
+            return .writeFailed(reason.contains("restoreFailed=") ? reason : "\(reason); \(token)")
+        default:
+            return .writeFailed(token)
         }
     }
 

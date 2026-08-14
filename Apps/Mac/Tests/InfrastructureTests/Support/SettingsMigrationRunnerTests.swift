@@ -225,13 +225,19 @@ struct SettingsMigrationRunnerTests {
             #expect(perms?.uint16Value == UInt16(SettingsSchema.posixFilePermission))
 
             try env.backupManager.restore(backup)
+            let restored = env.store.readAll()
+            let restoredVersion = env.store.schemaVersion()
+            #expect(restoredVersion < SettingsSchema.currentVersion)
+
             if name == "empty-settings.json" {
-                let restored = env.store.readAll()
-                #expect(restored.isEmpty || restored[SettingsSchema.versionKey] != nil)
+                #expect(originalBytes.isEmpty)
+                #expect(restored[SettingsSchema.versionKey] == nil)
+                #expect(restoredVersion == 0)
+                #expect(restored["app"] == nil)
+            } else if name == "v1-settings.json" {
+                #expect(restoredVersion == 1)
             } else {
-                let restored = env.store.readAll()
-                #expect(SettingsJSON.intValue(restored[SettingsSchema.versionKey]) ?? 0 < SettingsSchema.currentVersion
-                    || originalBytes.isEmpty)
+                #expect(restoredVersion == 0)
             }
         }
     }
@@ -336,6 +342,42 @@ struct SettingsMigrationRunnerTests {
     }
 
     @Test
+    func `restore failure after replace does not claim the original was restored`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try copyFixture("old-fields-settings.json", to: env.settingsURL)
+        let originalBytes = try Data(contentsOf: env.settingsURL)
+
+        let writes = WriteCounter()
+        var io = SettingsFileIO.live
+        io.writeAtomically = { data, url in
+            writes.count += 1
+            if writes.count == 1 {
+                try SettingsFileIO.performAtomicWrite(data, to: url)
+                return
+            }
+            throw SettingsPersistenceError.writeFailed("restore disk full")
+        }
+        io.posixPermissions = { _ in 0o644 }
+        let runner = SettingsMigrationRunner(
+            store: env.store,
+            backupManager: env.backupManager,
+            fileIO: io
+        )
+
+        let error = #expect(throws: SettingsPersistenceError.self) {
+            try runner.migrateIfNeeded()
+        }
+        let after = try Data(contentsOf: env.settingsURL)
+        #expect(after != originalBytes)
+        #expect(env.store.schemaVersion() == SettingsSchema.currentVersion)
+        #expect(error?.recoveryHint.contains("could not be restored") == true)
+        #expect(error?.recoveryHint.localizedCaseInsensitiveContains("the original file was restored") == false)
+        #expect(error?.backupDirectoryPath != nil)
+    }
+
+    @Test
     func `launch bootstrap records migration failure for Safe Mode`() throws {
         let env = try makeEnv()
         defer { env.cleanup() }
@@ -422,6 +464,10 @@ struct SettingsMigrationRunnerTests {
         if let number = value as? NSNumber { return number.intValue }
         return nil
     }
+}
+
+private final class WriteCounter: @unchecked Sendable {
+    var count = 0
 }
 
 private struct FailingMigrationStep: SettingsMigrationStep {

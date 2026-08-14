@@ -99,6 +99,7 @@ struct CompatibilityCheckerTests {
         let report = await checker.check()
         #expect(report.keychainAvailable == false)
         #expect(report.notificationStatus == .denied)
+        #expect(report.isReady == false)
         let notifications = try #require(report.issues.first { $0.kind == .notifications })
         #expect(notifications.permissionName == "Notifications")
         #expect(notifications.systemSettingsPane?.contains("Notifications") == true)
@@ -134,6 +135,7 @@ struct CompatibilityCheckerTests {
         #expect(claude.cliInstalled == false)
         #expect(claude.suggestedAction == .installOrSignInCLI)
         #expect(claude.suggestedAction.installsThirdPartyCLI == false)
+        #expect(report.isReady == false)
         #expect(report.issues.contains { $0.relatedProviderId == "claude" })
 
         let copilot = try #require(report.providerChecks["copilot"])
@@ -173,6 +175,40 @@ struct CompatibilityCheckerTests {
         #expect(report.providerChecks["claude"]?.cliInstalled == false)
         #expect(report.providerChecks["codex"]?.cliInstalled == true)
         #expect(report.providerChecks["gemini"] == nil)
+        #expect(report.providerChecks["kimi"]?.enabled == true)
+        #expect(report.providerChecks["copilot"] == nil)
+    }
+
+    @Test
+    func `fixture without isEnabled still reports missing core CLI`() async throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        try env.store.replaceAll([
+            SettingsSchema.versionKey: SettingsSchema.currentVersion,
+        ])
+
+        let checker = CompatibilityChecker(
+            store: env.store,
+            environment: CompatibilityEnvironment(
+                osMajorVersion: 15,
+                architecture: "arm64",
+                appDirectory: env.configRoot,
+                keychainAvailable: { true },
+                notificationStatus: { .authorized },
+                locateCLI: { _ in nil },
+                enabledProviders: nil
+            )
+        )
+        let report = await checker.check()
+        #expect(report.providerChecks["codex"]?.enabled == true)
+        #expect(report.providerChecks["kimi"]?.enabled == true)
+        #expect(report.providerChecks["codex"]?.cliInstalled == false)
+        #expect(report.providerChecks["kimi"]?.cliInstalled == false)
+        #expect(report.providerChecks["copilot"] == nil)
+        #expect(report.issues.contains { $0.relatedProviderId == "codex" })
+        #expect(report.issues.contains { $0.relatedProviderId == "kimi" })
+        #expect(report.isReady == false)
     }
 
     private struct Env {
