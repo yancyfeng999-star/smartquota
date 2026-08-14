@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 为智额补齐与具体 AI 会员无关的 Mac 产品底座，让用户可以安全地首次使用、刷新、诊断、迁移、更新、恢复和维护应用，同时保持本机优先与不上传敏感数据的产品原则。
+**Goal:** 为智额补齐与具体 AI 会员无关的 Mac 产品底座，让用户可以安全地首次使用、刷新、诊断、迁移、更新、恢复和维护应用，同时保持本机优先与不上传敏感数据的产品原则，并建立可公开维护、可复核的文档、许可证和第三方归属基线。
 
 **Architecture:** 复用现有 `SmartQuotaApp`、`AppSettings`、`QuotaMonitor`、`StatusItemLabelDriver`、`JSONSettingsStore`、`GitHubReleaseChecker` 和 `FileLogger`，新增小型的 Support/Recovery/Transfer 能力层。所有基础能力通过明确的 Domain 接口与 Infrastructure 实现隔离，SwiftUI 只负责状态展示和用户操作。刷新、诊断、迁移、备份和更新均使用可取消、可测试的服务，不把逻辑继续堆入 `SettingsView.swift`。
 
@@ -10,11 +10,11 @@
 
 ## Global Constraints
 
-- 仓库自有代码、文档和脚本采用 Apache-2.0；第三方依赖、资源和商标保留各自声明，统一登记在 NOTICE。
-- 公开仓库必须保留可审计的 LICENSE、NOTICE、SECURITY.md、CONTRIBUTING.md、行为准则、Issue/PR 模板和治理检查；发布前治理检查失败不得创建 Release。
-
 - 本计划只覆盖 `Apps/Mac`，不修改 Windows，不改变具体 Provider 的额度算法。
 - 默认 `local-only`：设置、账号备注、缓存和诊断均留在本机；不得上传密钥、Cookie、OAuth 文件、完整邮箱、原始日志或额度明细。
+- 智额是公开开源仓库：仓库自有代码、文档、脚本、示例数据、品牌素材和发布物必须明确许可证与归属；第三方代码、依赖、商标、截图和服务条款不得被误写成 MIT 内容。
+- `LICENSE` 是仓库自有代码和文档授权的主入口；当前计划保持 MIT，不擅自改成其他许可证，也不在没有单独决策和文本的情况下引入 CLA 或额外授权条件。
+- `NOTICE` 必须以实际依赖清单、锁定版本、打包内容和品牌/商标使用情况为依据；不能只凭记忆手写依赖许可，也不能遗漏随 App 发布的第三方组件或资源。
 - 导出和备份使用显式 allowlist；任何未列入 allowlist 的字段不得进入导出文件。
 - 导出、备份、迁移和恢复都不得包含 API Key、Token、Cookie、密码、Keychain 内容或认证文件原文。
 - 同一时间不强制并发刷新多个账号；账号读不到时保留最后快照，显示“未登录”；网络失败显示“连接失败”，不能混淆。
@@ -50,6 +50,7 @@
 - `AppSettings` 和 `JSONSettingsRepository` 已有 `receiveBetaUpdates` 字段，但更新筛选、Release API 和设置 UI 需要形成完整闭环。
 - `SecureKeychainStore` 已支持带访问控制的保存/读取，但 Keychain 项的生物识别要求目前存在内存态记录，不能把它直接当成跨重启的完整策略存储。
 - 当前版本信息在 README、PROJECT_STATUS 和部分产品文档中存在不同步，计划执行前需要以 `Info.plist` 为版本唯一来源，再更新文档。
+- 根目录已有 `README.md`、`LICENSE`、`NOTICE`、`SECURITY.md`、`CONTRIBUTING.md` 和 `docs/README.md`，执行时以“审计、补齐、互相校验”为目标，不重复创建同名文件，也不把文件存在误认为内容已经合格。
 - 当前工作区有用户未提交改动。本计划不把这些改动当作本计划实现，也不在本轮清理它们。
 
 ### 1.3 不在本计划范围
@@ -83,19 +84,54 @@
 | 自动更新开关 | Task 12 |
 | 崩溃报告和匿名诊断上报 | Task 13 |
 
----
+## 1.5 开源仓库文档、许可证与公开治理要求
 
-## 1.5 开源协议、文档与仓库治理（本轮接管）
+### 1.5.1 已有公开文件与本计划的处理方式
 
-本轮由当前实施任务接管该板块，范围限定为仓库根目录、公开文档、.github 治理文件、scripts 预检和 Mac 发布工作流，不改变具体 Provider 的额度逻辑。
+当前仓库已经存在以下公开入口：
 
-- [x] 根目录许可证切换为 Apache-2.0，并同步 App 版权字段、README、文档索引和贡献说明。
-- [x] NOTICE 登记 Package.resolved 中的依赖 identity、锁定版本、许可证和上游地址，保留第三方许可证边界。
-- [x] 将 Apps/Mac/Tuist/Package.resolved 纳入版本控制，防止依赖解析结果漂移。
-- [x] 增加安全说明、贡献指南、行为准则、仓库治理文档和 Issue/PR 模板，明确真实账号/凭证/日志不得进入公开仓库。
-- [x] 增加本地治理检查，并接入 Mac build、test、App Store 和 Release 工作流。
-- [x] 发布工作流改为不自动修改或推送 main；遗留 Sparkle Appcast 默认关闭，默认构建不因治理文档而启用自动更新。
-- [ ] GitHub Ruleset、Required checks、维护者权限、Actions Secrets/Variables 最小权限需由仓库管理员在 GitHub 设置页完成并留存截图或导出证据。
+- `README.md`：项目介绍、隐私原则、功能入口、文档导航和许可证链接。
+- `LICENSE`：当前为 MIT License。
+- `NOTICE`：第三方 Swift 包、商标和本地隐私边界声明。
+- `SECURITY.md`：安全/隐私边界、网络出口、本地存储和漏洞报告说明。
+- `CONTRIBUTING.md`：开发流程、隐私红线、Pull Request 和贡献授权说明。
+- `docs/README.md`：用户、开发者、发布和架构文档索引。
+- `.github/workflows/`：现有构建、测试和发布工作流。
+
+本计划不把“文件已存在”视为完成条件。执行时要逐份核对链接、版本、功能描述、隐私承诺和许可证范围，并只补充有证据的内容。
+
+### 1.5.2 必须达到的开源标准
+
+1. **许可证边界清晰**
+   - `LICENSE` 保持完整、可读的 MIT 正文，并写明实际版权归属主体；代码、文档和脚本的授权范围不得与 README 或贡献指南矛盾。
+   - `README.md`、`docs/README.md`、`CONTRIBUTING.md` 和发布说明都能直接链接到 `LICENSE` 和 `NOTICE`。
+   - 贡献代码的授权方式与 `CONTRIBUTING.md` 一致；当前不设置未定义的 CLA、商业附加条款或“提交即转让全部权利”的隐含表述。
+   - 第三方代码、生成文件、图标、字体、截图、示例数据和品牌名称逐项标注来源、许可证或使用限制；无法确认来源的内容不得进入发布包。
+
+2. **第三方依赖和 NOTICE 可复核**
+   - 依赖来源以 `Apps/Mac/Tuist/Package.swift`、`Apps/Mac/Tuist/Package.resolved`、实际构建产物和仓库资源为准。
+   - `NOTICE` 至少记录组件名称、锁定版本或版本范围、来源 URL、许可证类型、随包分发时的归属要求和用途；不能只列项目名而不说明许可来源。
+   - 对依赖升级、移除和新增建立核对步骤；如果上游许可证、版权声明或商标要求变化，先更新 `NOTICE` 和发布说明，再合并代码。
+   - 不把 ChatGPT、Claude、Gemini、Copilot、Cursor、Grok、Kimi、MiniMax 等产品名称写成智额的资产；公开文案必须保留“非官方、无隶属关系”的说明。
+
+3. **README 是可独立阅读的项目入口**
+   - 说明智额解决的问题、支持的平台和最低系统要求、当前能力边界、快速开始/构建方法、隐私模型、更新方式、已知限制、许可证、第三方声明、贡献入口和安全报告入口。
+   - 明确“开源的是仓库代码和文档”与“用户连接的 AI 服务仍受其自身账号、服务条款和隐私政策约束”之间的区别。
+   - 不在公开文档中写入真实邮箱、账号、套餐、额度、Cookie、Token、API Key、私有更新地址或未验证的签名/公证结论。
+   - 下载、安装、手动检查更新和发布资产的说明必须与 `docs/USER_GUIDE.md`、`docs/DISTRIBUTION.md`、GitHub Release 实际流程一致。
+
+4. **贡献和安全流程可执行**
+   - `CONTRIBUTING.md` 明确本地环境、生成工程、测试命令、改动范围、PR 内容、隐私红线、假数据规则、依赖许可检查和文档同步要求。
+   - `SECURITY.md` 明确威胁边界、本机数据与网络出口、敏感信息处理、支持版本、漏洞报告渠道、不要公开提交凭证以及维护者响应边界；不能承诺仓库没有证据支持的安全结论。
+   - `.github` 中的 Issue/PR 模板（如仓库尚未配置则补齐）要求提交复现环境、版本、脱敏日志和许可证/依赖变更信息，不允许收集真实凭证。
+   - 不把公开 Issue 当作秘密披露渠道；安全问题、用户数据问题和普通功能问题分别进入不同流程。
+
+5. **文档有唯一来源和发布校验**
+   - 版本号以 `Apps/Mac/Sources/App/Info.plist` 的 `CFBundleShortVersionString`、`CFBundleVersion` 为唯一来源；README、`PRODUCT.md`、`PROJECT_STATUS.md`、`CHANGELOG.md`、用户手册和发布说明不得各自维护相互冲突的版本事实。
+   - 每个新功能在代码、测试、用户文档、开发文档、隐私/安全文档和 CHANGELOG 中分别记录适用内容；未实现、未验证、仅本地测试或未发布的能力必须明确标注状态。
+   - 通过脚本检查必需文件、相对链接、许可证入口、敏感信息模式、NOTICE 依赖清单和文档版本同步；检查失败不得进入 Release。
+   - 发布前同时保留“源码/文档校验”“构建/打包校验”“签名/公证校验”“安装/运行时校验”四类证据，不能用代码已合并替代发布已完成。
+
 
 ---
 
@@ -262,10 +298,13 @@ public struct DiagnosticResult: Codable, Equatable, Sendable, Identifiable {
 - Create: `Apps/Mac/Tests/AcceptanceTests/SettingsTransferSpec.swift`
 - Create: `Apps/Mac/Tests/AcceptanceTests/RecoverySpec.swift`
 - Create: `Apps/Mac/Tests/AcceptanceTests/AccessibilitySpec.swift`
-- Modify: `docs/USER_GUIDE.md` — 首次启动、诊断、导入导出、恢复和更新说明。
-- Modify: `docs/DEVELOPER.md` — 设置 schema、迁移、备份、刷新和诊断接口。
-- Modify: `docs/DISTRIBUTION.md` — 更新资产校验、Release 说明、回退和签名要求。
-- Modify: `PRODUCT.md`、`PROJECT_STATUS.md`、`CHANGELOG.md` — 仅在实际实现和验证后更新。
+- Modify: `docs/README.md`、`docs/USER_GUIDE.md`、`docs/DEVELOPER.md`、`docs/DISTRIBUTION.md`、`docs/REPO_LAYOUT.md` — 文档索引、首次启动、诊断、导入导出、恢复、更新、开发、发布和仓库结构说明。
+- Modify: `README.md`、`LICENSE`、`NOTICE`、`SECURITY.md`、`CONTRIBUTING.md` — 开源入口、许可证边界、依赖归属、隐私红线和贡献/安全流程校准。
+- Modify: `PRODUCT.md`、`PROJECT_STATUS.md`、`CHANGELOG.md` — 功能状态、版本来源和公开变更记录；仅在实际实现和验证后更新。
+- Create or modify: `.github/ISSUE_TEMPLATE/bug-report.yml`、`.github/ISSUE_TEMPLATE/feature-request.yml`、`.github/PULL_REQUEST_TEMPLATE.md` — 若不存在则创建，若已有则按隐私和开源流程补齐。
+- Modify: `.github/workflows/tests.yml` — Pull Request 和主分支测试前执行公开文档、许可证和敏感信息检查。
+- Modify: `.github/workflows/release.yml` — 正式构建/发布前执行同一检查，并阻断未完成文档或 NOTICE 核对的 Release。
+- Create: `scripts/check-open-source-docs.sh` — 检查必需公开文件、相对链接、许可证入口、版本一致性和敏感信息红线。
 
 ---
 
@@ -302,6 +341,81 @@ xcodebuild -workspace SmartQuota.xcworkspace -scheme SmartQuota \
   -destination 'platform=macOS,arch=arm64' test \
   -resultBundlePath .build/p1-baseline.xcresult
 ```
+
+### Task 0A: 开源仓库文档、许可证和治理基线
+
+**Purpose:** 在实现通用能力前先固定公开仓库的法律、隐私、贡献和发布文档边界，保证后续新增功能有可追溯的文档和许可证证据。
+
+**Files:**
+- Read: `README.md`
+- Read: `LICENSE`
+- Read: `NOTICE`
+- Read: `SECURITY.md`
+- Read: `CONTRIBUTING.md`
+- Read: `docs/README.md`
+- Read: `docs/USER_GUIDE.md`
+- Read: `docs/DEVELOPER.md`
+- Read: `docs/DISTRIBUTION.md`
+- Read: `docs/REPO_LAYOUT.md`
+- Read: `PRODUCT.md`
+- Read: `PROJECT_STATUS.md`
+- Read: `CHANGELOG.md`
+- Read: `Apps/Mac/Tuist/Package.swift`
+- Read: `Apps/Mac/Tuist/Package.resolved`
+- Read: `Apps/Mac/Sources/App/Info.plist`
+- Modify: `README.md`
+- Modify: `LICENSE` — 仅在 MIT 正文、版权主体或公开归属核对不完整时修改；不改变许可证类型。
+- Modify: `NOTICE`
+- Modify: `SECURITY.md`
+- Modify: `CONTRIBUTING.md`
+- Modify: `docs/README.md`
+- Modify: `docs/USER_GUIDE.md`
+- Modify: `docs/DEVELOPER.md`
+- Modify: `docs/DISTRIBUTION.md`
+- Modify: `docs/REPO_LAYOUT.md`
+- Modify: `PRODUCT.md`
+- Modify: `PROJECT_STATUS.md`
+- Modify: `CHANGELOG.md`
+- Create or modify: `.github/ISSUE_TEMPLATE/bug-report.yml`
+- Create or modify: `.github/ISSUE_TEMPLATE/feature-request.yml`
+- Create or modify: `.github/PULL_REQUEST_TEMPLATE.md`
+- Modify: `.github/workflows/tests.yml`
+- Modify: `.github/workflows/release.yml`
+- Create: `scripts/check-open-source-docs.sh`
+
+**Interfaces:**
+- Produces: 一份公开文档矩阵，列明每个文档的读者、唯一来源、允许承诺、禁止承诺和更新触发条件。
+- Produces: 一份由实际依赖清单和发布内容生成的 `NOTICE` 核对表，包含组件、版本、来源 URL、许可证和分发要求。
+- Produces: `scripts/check-open-source-docs.sh`，无网络依赖即可返回 0/非 0；失败时只输出文件和规则，不输出疑似密钥或用户数据。
+- Preserves: 当前 MIT License 和本机优先隐私原则；不引入云同步、遥测、CLA、商业附加条款或未授权的维护者联系方式。
+
+- [ ] 对照 `LICENSE` 核对完整 MIT 正文、版权主体、年份和仓库实际权利归属；若版权主体尚未确认，先列为发布阻塞项，不擅自填入个人姓名或公司名称。
+- [ ] 在 `README.md` 和 `docs/README.md` 建立稳定的“许可证 / 第三方声明 / 安全报告 / 贡献指南 / 用户文档 / 开发文档 / 发布说明”入口，所有相对链接指向仓库内真实文件。
+- [ ] 从 `Apps/Mac/Tuist/Package.swift`、`Apps/Mac/Tuist/Package.resolved` 和实际 App 包内容核对 `NOTICE`；为每个随 App 分发的第三方组件补齐锁定版本或版本范围、来源 URL、许可证类型、版权/归属要求和用途。
+- [ ] 检查资源目录、图标、字体、截图、示例 JSON、脚本和生成文件的来源；没有许可证或来源证据的内容不得纳入公开仓库或 Release 资产。
+- [ ] 在 `README.md` 写清项目用途、支持平台/最低系统、快速开始、构建与测试入口、本机优先边界、网络出口、更新方式、已知限制、第三方服务责任边界和当前发布状态。
+- [ ] 在 `CONTRIBUTING.md` 写清环境准备、`tuist generate`、测试命令、改动范围、PR 证据、文档同步、依赖许可证核对、假数据规则和密钥/个人数据禁止提交规则。
+- [ ] 在 `SECURITY.md` 写清威胁模型、敏感数据不上传原则、漏洞报告渠道、支持版本、公开 Issue 禁止披露凭证、维护者响应范围，以及 P2 崩溃上报/匿名诊断在未获用户同意前默认关闭。
+- [ ] 校准 `docs/USER_GUIDE.md`、`docs/DEVELOPER.md`、`docs/DISTRIBUTION.md`、`docs/REPO_LAYOUT.md`，让安装、手动更新、构建、签名/公证和 Mac/Windows 目录边界与实际状态一致。
+- [ ] 以 `Apps/Mac/Sources/App/Info.plist` 为版本唯一来源，统一 README、产品文档、项目状态、CHANGELOG、Release 说明中的版本、最低系统和已实现能力；未验证的签名、公证、安装和上报能力不得写成已完成。
+- [ ] 补齐 Bug/Feature/PR 模板：要求版本、系统架构、复现步骤、脱敏日志、测试结果、文档影响和依赖/许可证影响；明确禁止粘贴 Token、Cookie、Keychain、真实邮箱和额度截图。
+- [ ] 实现公开文档检查脚本：验证必需文件存在且非空、仓库内相对链接可解析、MIT/NOTICE/SECURITY/CONTRIBUTING 入口存在、版本字段不冲突，并扫描密钥/凭证/真实本机路径模式；测试样例中的假数据必须有明确 allowlist。
+- [ ] 将开源文档检查加入本地发布前门禁和 GitHub CI；依赖发生增删、许可证变化、网络出口变化、数据字段变化或 P2 上报能力变化时，必须同步更新 `NOTICE`、`SECURITY.md`、用户文档和 CHANGELOG。
+
+**验证：**
+
+```bash
+test -s LICENSE
+test -s NOTICE
+test -s SECURITY.md
+test -s CONTRIBUTING.md
+test -s README.md
+test -s docs/README.md
+./scripts/check-open-source-docs.sh
+git diff --check
+```
+
+**验收：** 公开仓库新用户只读 `README.md` 即可知道项目用途、安装/构建方式、隐私边界、许可证、第三方声明、贡献方式和安全报告路径；依赖和资源均有可追溯许可；文档不包含真实凭证或未验证承诺；脚本在缺文件、坏链接、版本冲突或疑似敏感内容时失败并阻止 Release。
 
 ### Task 1: 设置 schema、迁移和安全备份基础
 
@@ -781,6 +895,9 @@ P1 只有同时满足以下条件才可进入 Release：
 - 导出文件通过敏感字段扫描。
 - 安全模式能从损坏设置恢复。
 - 更新说明、资产命名、最低系统要求和 Release Notes 一致。
+- `LICENSE`、`NOTICE`、`SECURITY.md`、`CONTRIBUTING.md`、README 文档入口和仓库文档检查脚本通过校验。
+- 所有第三方依赖、随包资源和商标声明均有来源与许可证证据；没有把第三方内容误纳入 MIT 授权范围。
+- 发布包、截图、示例和日志中没有真实密钥、Cookie、OAuth 文件、邮箱、账号 ID、额度明细或私有路径。
 - 本地 Build、Package、运行时安装验证分别有证据。
 - 未把 ad-hoc 包描述为 Developer ID 签名或已公证包。
 - GitHub CI 通过后再创建正式 Release。
@@ -793,7 +910,7 @@ P2 自动更新和崩溃上报必须单独版本、单独 Release Notes、单独
 
 ### Batch A：数据安全和恢复底座
 
-包含 Task 0、Task 1、Task 7、Task 8。完成后用户数据可迁移、备份、恢复，设置损坏不会直接阻塞启动。
+包含 Task 0、Task 0A、Task 1、Task 7、Task 8。完成后公开仓库有可复核的文档/许可证基线，用户数据可迁移、备份、恢复，设置损坏不会直接阻塞启动。
 
 ### Batch B：用户入口和可诊断性
 
@@ -831,6 +948,18 @@ P2 自动更新和崩溃上报必须单独版本、单独 Release Notes、单独
 - [ ] 旧版本设置迁移前自动备份，失败自动回滚。
 - [ ] 应用内帮助包含 FAQ、日志、会员配置和隐私说明。
 - [ ] 睡眠暂停刷新，唤醒恢复一次，常驻运行无任务泄漏和无限重试。
+
+### 开源仓库文档与许可证
+
+- [ ] `LICENSE` 保持完整 MIT 正文，版权主体已确认，README、文档目录、贡献指南和发布说明均能访问许可证入口。
+- [ ] `NOTICE` 根据 `Apps/Mac/Tuist/Package.swift`、`Package.resolved`、实际 App 包和仓库资源完成依赖、版权、许可证、商标和分发要求核对。
+- [ ] README 可独立说明项目用途、支持范围、安装/构建、隐私边界、网络出口、更新方式、已知限制、第三方服务责任、贡献入口和安全报告入口。
+- [ ] `CONTRIBUTING.md` 明确开发/测试/PR 流程、文档同步、依赖许可证核对和禁止提交真实凭证的隐私红线。
+- [ ] `SECURITY.md` 明确威胁边界、数据流、漏洞报告、支持版本和公开 Issue 禁止披露敏感信息的处理方式。
+- [ ] 用户、开发者、发布、产品、项目状态和 CHANGELOG 文档的版本与能力状态一致；未完成能力没有被写成已上线。
+- [ ] Issue/PR 模板要求脱敏复现信息和许可证影响说明，不收集 Token、Cookie、Keychain、真实账号和额度数据。
+- [ ] `scripts/check-open-source-docs.sh` 和 GitHub CI 通过；缺文档、坏链接、版本冲突、依赖声明缺失或敏感信息扫描失败时 Release 被阻断。
+- [ ] P2 自动更新、崩溃上报和匿名诊断若进入实现，先同步公开隐私说明、用户同意、数据删除/停止上传机制和 CHANGELOG，再单独发布。
 
 ### P2
 
