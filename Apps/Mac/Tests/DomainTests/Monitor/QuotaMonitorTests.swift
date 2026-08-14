@@ -2087,4 +2087,76 @@ struct QuotaMonitorTests {
             providerId: .any, previousStatus: .any, currentStatus: .any
         ).called(2)
     }
+
+    // MARK: - Live quota excludes unlogged / connection-failed
+
+    @Test
+    func `unlogged and connection-failed snapshots stay but do not drive worst quota or alerts`() async {
+        let mockAlerter = MockQuotaAlerter()
+        given(mockAlerter).alert(providerId: .any, previousStatus: .any, currentStatus: .any).willReturn(())
+        given(mockAlerter).evaluateSnapshotAlerts(providerId: .any, accountId: .any, snapshot: .any).willReturn()
+
+        let claudeProbe = ScriptedUsageProbe(providerId: "claude", results: [
+            .success(8),
+            .failure(ProbeError.timeout),
+        ])
+        let codexProbe = ScriptedUsageProbe(providerId: "codex", results: [
+            .success(70),
+            .failure(ProbeError.authenticationRequired),
+        ])
+        let settings = makeSettingsRepository()
+        let claude = ClaudeProvider(probe: claudeProbe, settingsRepository: settings)
+        let codex = CodexProvider(probe: codexProbe, settingsRepository: settings)
+        let monitor = makeMonitor(
+            providers: AIProviders(providers: [claude, codex]),
+            alerter: mockAlerter
+        )
+        await monitor.refreshAll()
+        #expect(monitor.overallStatus == .critical)
+
+        await monitor.refreshAll()
+
+        #expect(claude.snapshot?.quotas.first?.percentRemaining == 8)
+        #expect(codex.snapshot?.quotas.first?.percentRemaining == 70)
+        #expect(monitor.overallStatus == .healthy)
+        #expect(monitor.lowestQuota() == nil)
+        #expect(monitor.quota(providerId: "claude", quotaKey: "session") == nil)
+        #expect(monitor.contributesToLiveQuota(claude) == false)
+        #expect(monitor.contributesToLiveQuota(codex) == false)
+        verify(mockAlerter).evaluateSnapshotAlerts(providerId: .any, accountId: .any, snapshot: .any).called(2)
+    }
+}
+
+private final class ScriptedUsageProbe: UsageProbe, @unchecked Sendable {
+    enum ResultStep {
+        case success(Double)
+        case failure(Error)
+    }
+
+    let providerId: String
+    private let lock = NSLock()
+    private var results: [ResultStep]
+
+    init(providerId: String, results: [ResultStep]) {
+        self.providerId = providerId
+        self.results = results
+    }
+
+    func probe() async throws -> UsageSnapshot {
+        let step = lock.withLock { () -> ResultStep in
+            results.isEmpty ? .failure(ProbeError.noData) : results.removeFirst()
+        }
+        switch step {
+        case let .success(percent):
+            return UsageSnapshot(
+                providerId: providerId,
+                quotas: [UsageQuota(percentRemaining: percent, quotaType: .session, providerId: providerId)],
+                capturedAt: Date()
+            )
+        case let .failure(error):
+            throw error
+        }
+    }
+
+    func isAvailable() async -> Bool { true }
 }

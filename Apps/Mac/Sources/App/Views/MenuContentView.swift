@@ -12,6 +12,7 @@ struct MenuContentView: View {
     let monitor: QuotaMonitor
     let sessionMonitor: SessionMonitor
     let quotaAlerter: QuotaAlerter
+    let refreshCoordinator: RefreshCoordinator
     var onHookSettingsChanged: ((Bool) -> Void)?
     /// True when this view is hosted in the independent floating pin window.
     var runsInPinnedWindow: Bool = false
@@ -124,7 +125,7 @@ struct MenuContentView: View {
                 }
             }
 
-            await refreshAllEnabled()
+            await refreshCoordinator.refresh(.allEnabledProviders, skipFreshWithin: Self.freshSnapshotTTL)
 
             #if ENABLE_SPARKLE
             if sparkleUpdater?.automaticallyChecksForUpdates == true {
@@ -134,7 +135,7 @@ struct MenuContentView: View {
         }
         .onChange(of: selectedProviderId) { _, newProviderId in
             Task {
-                await refresh(providerId: newProviderId)
+                await refreshCoordinator.refresh(.provider(newProviderId))
             }
         }
     }
@@ -214,28 +215,14 @@ struct MenuContentView: View {
 
             Spacer(minLength: 8)
 
-            // Refresh time sits left of the sync button (larger type)
+            // Refresh time / counts sit left of the refresh actions
             Text(refreshSubtitle)
                 .font(AppTypeScale.callout(.rounded, weight: .medium))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .untruncatedSupportText()
 
-            Button {
-                Task { await refreshAllEnabled() }
-            } label: {
-                Image(systemName: isAnySyncing ? "hourglass" : "arrow.clockwise")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 28, height: 26)
-                    .foregroundStyle(.primary)
-            }
-            .buttonStyle(.plain)
-            .disabled(isAnySyncing)
-            .keyboardShortcut("r")
-            .supportIconAccessibility(
-                id: AccessibilityChrome.ID.menuRefresh,
-                valueKey: isAnySyncing ? "a11y.refresh.value.running" : "a11y.refresh.value.idle"
-            )
+            refreshActionCluster
 
             // Pin: deferred floating window (never block the menu click handler)
             Button {
@@ -281,6 +268,7 @@ struct MenuContentView: View {
             monitor: monitor,
             sessionMonitor: sessionMonitor,
             quotaAlerter: quotaAlerter,
+            refreshCoordinator: refreshCoordinator,
             onHookSettingsChanged: onHookSettingsChanged
         )
     }
@@ -305,13 +293,95 @@ struct MenuContentView: View {
     }
 
     private var refreshSubtitle: String {
-        if isAnySyncing { return "刷新中…" }
-        if let date = lastRefreshedAt {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "HH:mm"
-            return "刷新 \(formatter.string(from: date))"
+        let _ = refreshCoordinator.state
+        switch refreshCoordinator.state {
+        case .running:
+            return l10n.t("refresh.status.running")
+        case .cancelling:
+            return l10n.t("refresh.status.cancelling")
+        case let .completed(success, failure):
+            return l10n.tf("refresh.status.completed", success, failure)
+        case let .cancelled(completed):
+            return l10n.tf(
+                "refresh.status.cancelled",
+                completed,
+                refreshCoordinator.lastSuccessCount,
+                refreshCoordinator.lastFailureCount
+            )
+        case let .failed(message):
+            return l10n.tf("refresh.status.failed", message)
+        case .idle:
+            if isAnySyncing { return l10n.t("refresh.status.running") }
+            if let date = lastRefreshedAt {
+                return l10n.tf("refresh.last_at", timeString(date))
+            }
+            return l10n.t("refresh.status.idle")
         }
-        return "等待刷新"
+    }
+
+    private func timeString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = l10n.language.locale
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private var isRefreshBusy: Bool {
+        refreshCoordinator.state.isBusy || isAnySyncing
+    }
+
+    private var refreshActionCluster: some View {
+        HStack(spacing: 2) {
+            Button {
+                Task { await refreshCoordinator.refresh(.provider(selectedProviderId)) }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 26, height: 26)
+                    .foregroundStyle(.primary)
+            }
+            .buttonStyle(.plain)
+            .disabled(isRefreshBusy || selectedProvider == nil)
+            .help(l10n.t("refresh.current"))
+            .supportIconAccessibility(
+                id: AccessibilityChrome.ID.menuRefreshCurrent,
+                valueKey: isRefreshBusy ? "a11y.refresh.value.running" : "a11y.refresh.value.idle"
+            )
+
+            Button {
+                Task { await refreshCoordinator.refresh(.allEnabledProviders) }
+            } label: {
+                Image(systemName: isRefreshBusy ? "hourglass" : "arrow.triangle.2.circlepath")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 26, height: 26)
+                    .foregroundStyle(.primary)
+            }
+            .buttonStyle(.plain)
+            .disabled(isRefreshBusy)
+            .keyboardShortcut("r")
+            .help(l10n.t("refresh.all"))
+            .supportIconAccessibility(
+                id: AccessibilityChrome.ID.menuRefresh,
+                valueKey: isRefreshBusy ? "a11y.refresh.value.running" : "a11y.refresh.value.idle"
+            )
+
+            if refreshCoordinator.state.isBusy {
+                Button {
+                    Task { await refreshCoordinator.cancel() }
+                } label: {
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 26, height: 26)
+                        .foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
+                .help(l10n.t("refresh.cancel"))
+                .supportIconAccessibility(
+                    id: AccessibilityChrome.ID.menuRefreshCancel,
+                    valueKey: "a11y.refresh.cancel.value"
+                )
+            }
+        }
     }
 
     private var membershipCards: some View {
@@ -344,7 +414,7 @@ struct MenuContentView: View {
                         selectedId: selectedProviderId,
                         onSelect: { id in
                             selectedProviderId = id
-                            Task { await refresh(providerId: id) }
+                            Task { await refreshCoordinator.refresh(.provider(id)) }
                         },
                         onReorder: { newOrder in
                             settings.membershipOrder = newOrder
@@ -1015,9 +1085,9 @@ struct MenuContentView: View {
                 isLoading: isCurrentlyRefreshing
             ) {
                 if settings.overviewModeEnabled {
-                    Task { await refreshAllEnabled() }
+                    Task { await refreshCoordinator.refresh(.allEnabledProviders) }
                 } else {
-                    Task { await refresh(providerId: selectedProviderId) }
+                    Task { await refreshCoordinator.refresh(.provider(selectedProviderId)) }
                 }
             }
             .keyboardShortcut("r")
@@ -1109,58 +1179,6 @@ struct MenuContentView: View {
     /// Skip re-probe when a snapshot is still fresh (cuts CPU/network when
     /// opening the menu repeatedly).
     private static let freshSnapshotTTL: TimeInterval = 45
-
-    /// Max concurrent probes when opening the menu — avoids CPU spikes with many memberships.
-    private static let maxConcurrentProbes = 2
-
-    /// Refresh enabled providers with concurrency cap + freshness skip.
-    private func refreshAllEnabled() async {
-        let now = Date()
-        let candidates = monitor.enabledProviders.filter { provider in
-            guard !provider.isSyncing else { return false }
-            if let captured = provider.snapshot?.capturedAt,
-               now.timeIntervalSince(captured) < Self.freshSnapshotTTL {
-                return false
-            }
-            return true
-        }
-        guard !candidates.isEmpty else { return }
-
-        // Process in small waves (2 at a time) instead of N simultaneous CLI/API calls.
-        var index = 0
-        while index < candidates.count {
-            let end = min(index + Self.maxConcurrentProbes, candidates.count)
-            let wave = Array(candidates[index..<end])
-            index = end
-            await withTaskGroup(of: Void.self) { group in
-                for provider in wave {
-                    group.addTask {
-                        do {
-                            try await provider.refresh()
-                        } catch {
-                            // Provider stores error in lastError
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Refresh a specific provider by ID
-    private func refresh(providerId: String) async {
-        guard let provider = monitor.provider(for: providerId) else {
-            return
-        }
-
-        // Provider.isSyncing is observable - prevents duplicate refreshes
-        guard !provider.isSyncing else { return }
-
-        do {
-            try await provider.refresh()
-        } catch {
-            // Provider stores error in lastError
-        }
-    }
 
     /// Fetch guest passes and show the share view
     private func fetchAndShowPasses() async {

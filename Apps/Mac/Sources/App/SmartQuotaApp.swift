@@ -28,6 +28,9 @@ struct SmartQuotaApp: App {
     /// permanently stop re-evaluating after system sleep (issue #192).
     private let statusItemDriver: StatusItemLabelDriver
 
+    /// User-triggered refresh, cancel, and success/failure counts.
+    private let refreshCoordinator: RefreshCoordinator
+
     /// Binding required by `.menuBarExtraAccess`; also enables programmatic
     /// dropdown control if ever needed.
     @State private var isMenuPresented = false
@@ -120,9 +123,11 @@ struct SmartQuotaApp: App {
 
         // Initialize the domain service with quota alerter
         // QuotaMonitor automatically validates selected provider on init
+        let powerState = SystemPowerStateProvider()
         let monitor = QuotaMonitor(
             providers: repository,
-            alerter: quotaAlerter
+            alerter: quotaAlerter,
+            powerStateProvider: powerState
         )
         self.monitor = monitor
         AppLog.monitor.info("QuotaMonitor initialized")
@@ -144,10 +149,14 @@ struct SmartQuotaApp: App {
         // The driver owns the menu-bar pixels and the refresh-loop lifecycle
         // (outside SwiftUI — see StatusItemLabelDriver). Pixels start flowing
         // once `.menuBarExtraAccess` hands over the NSStatusItem.
+        let refreshCoordinator = RefreshCoordinator(monitor: monitor, powerState: powerState)
+        self.refreshCoordinator = refreshCoordinator
         statusItemDriver = StatusItemLabelDriver(
             monitor: monitor,
             settings: AppSettings.shared,
-            sessionMonitor: sessionMonitor
+            sessionMonitor: sessionMonitor,
+            refreshCoordinator: refreshCoordinator,
+            powerState: powerState
         )
         AppSettings.shared.updateMigrationBackupPath(
             recovery.recordedMigrationBackupDirectory?.path
@@ -306,13 +315,13 @@ struct SmartQuotaApp: App {
                     }
                 } else {
                     #if ENABLE_SPARKLE
-                    MenuContentView(monitor: monitor, sessionMonitor: sessionMonitor, quotaAlerter: quotaAlerter) { enabled in
+                    MenuContentView(monitor: monitor, sessionMonitor: sessionMonitor, quotaAlerter: quotaAlerter, refreshCoordinator: refreshCoordinator) { enabled in
                             if enabled { startHookServer() } else { stopHookServer() }
                         }
                         .appThemeProvider(themeModeId: settings.themeMode)
                         .environment(\.sparkleUpdater, sparkleUpdater)
                     #else
-                    MenuContentView(monitor: monitor, sessionMonitor: sessionMonitor, quotaAlerter: quotaAlerter) { enabled in
+                    MenuContentView(monitor: monitor, sessionMonitor: sessionMonitor, quotaAlerter: quotaAlerter, refreshCoordinator: refreshCoordinator) { enabled in
                             if enabled { startHookServer() } else { stopHookServer() }
                         }
                         .appThemeProvider(themeModeId: settings.themeMode)

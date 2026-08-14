@@ -13,6 +13,7 @@ import Mockable
 /// - #16: Button shows "Syncing..." spinner while in progress
 /// - #17: Duplicate refresh clicks are ignored while syncing
 /// - #18: Background sync auto-refreshes at configured interval
+/// - Current membership, refresh-all, cancel, and partial failure go through RefreshCoordinator
 @Suite("Feature: Refresh")
 struct RefreshSpec {
 
@@ -307,4 +308,210 @@ struct RefreshSpec {
             #expect(claude.snapshot?.quotas.first?.percentRemaining == 60)
         }
     }
+
+    // MARK: - Coordinator: current / all / cancel / partial failure
+
+    @Suite("Scenario: Refresh coordinator")
+    @MainActor
+    struct CoordinatorRefresh {
+        private struct TestClock: Clock {
+            func sleep(for duration: Duration) async throws {}
+            func sleep(nanoseconds: UInt64) async throws {}
+        }
+
+        @Test
+        func `current membership refresh only updates the selected provider`() async {
+            let settings = RefreshSpec.makeSettings()
+            let claudeProbe = MockUsageProbe()
+            given(claudeProbe).isAvailable().willReturn(true)
+            given(claudeProbe).probe().willReturn(UsageSnapshot(
+                providerId: "claude",
+                quotas: [UsageQuota(percentRemaining: 10, quotaType: .session, providerId: "claude")],
+                capturedAt: Date()
+            ))
+            let codexProbe = MockUsageProbe()
+            given(codexProbe).isAvailable().willReturn(true)
+            given(codexProbe).probe().willReturn(UsageSnapshot(
+                providerId: "codex",
+                quotas: [UsageQuota(percentRemaining: 90, quotaType: .session, providerId: "codex")],
+                capturedAt: Date()
+            ))
+            let claude = ClaudeProvider(probe: claudeProbe, settingsRepository: settings)
+            let codex = CodexProvider(probe: codexProbe, settingsRepository: settings)
+            let monitor = QuotaMonitor(
+                providers: AIProviders(providers: [claude, codex]),
+                clock: TestClock()
+            )
+            monitor.selectedProviderId = "codex"
+            let coordinator = RefreshCoordinator(monitor: monitor)
+
+            await coordinator.refresh(.provider(monitor.selectedProviderId))
+
+            #expect(await coordinator.state == .completed(successCount: 1, failureCount: 0))
+            #expect(codex.snapshot?.quotas.first?.percentRemaining == 90)
+            #expect(claude.snapshot == nil)
+        }
+
+        @Test
+        func `refresh all shows success and failure counts without clearing the failed snapshot`() async {
+            let settings = RefreshSpec.makeSettings()
+            let captured = Date(timeIntervalSince1970: 50)
+            let claudeProbe = AcceptanceScriptedProbe(
+                providerId: "claude",
+                steps: [.success(70)]
+            )
+            let codexProbe = AcceptanceScriptedProbe(
+                providerId: "codex",
+                steps: [.success(40, capturedAt: captured), .failure(ProbeError.timeout)]
+            )
+            let claude = ClaudeProvider(probe: claudeProbe, settingsRepository: settings)
+            let codex = CodexProvider(probe: codexProbe, settingsRepository: settings)
+            let monitor = QuotaMonitor(
+                providers: AIProviders(providers: [claude, codex]),
+                clock: TestClock()
+            )
+            await monitor.refresh(providerId: "codex")
+
+            let coordinator = RefreshCoordinator(monitor: monitor)
+            await coordinator.refresh(.allEnabledProviders)
+
+            #expect(await coordinator.state == .completed(successCount: 1, failureCount: 1))
+            #expect(claude.snapshot != nil)
+            #expect(codex.snapshot?.capturedAt == captured)
+            #expect(codex.snapshot?.quotas.first?.percentRemaining == 40)
+            #expect((codex.lastError as? ProbeError) == .timeout)
+        }
+
+        @Test
+        func `cancel keeps finished work and does not start the remaining member`() async {
+            let hold = AcceptanceReleaseGate()
+            let started = AcceptanceStartGate()
+            let claudeProbe = AcceptanceScriptedProbe(
+                providerId: "claude",
+                steps: [.success(80), .success(15)]
+            )
+            let codexProbe = AcceptanceScriptedProbe(
+                providerId: "codex",
+                steps: [.success(60), .wait(hold, error: ProbeError.timeout)],
+                onStart: { await started.mark() }
+            )
+            let geminiProbe = AcceptanceScriptedProbe(
+                providerId: "gemini",
+                steps: [.success(50), .success(1)],
+                onStart: { await started.mark() }
+            )
+            let settings = RefreshSpec.makeSettings()
+            let claude = ClaudeProvider(probe: claudeProbe, settingsRepository: settings)
+            let codex = CodexProvider(probe: codexProbe, settingsRepository: settings)
+            let gemini = GeminiProvider(probe: geminiProbe, settingsRepository: settings)
+            let monitor = QuotaMonitor(
+                providers: AIProviders(providers: [claude, codex, gemini]),
+                clock: TestClock()
+            )
+            let coordinator = RefreshCoordinator(monitor: monitor, maxConcurrent: 2)
+
+            await coordinator.refresh(.allEnabledProviders)
+            #expect(claude.snapshot?.quotas.first?.percentRemaining == 80)
+
+            await started.reset()
+            let run = Task { await coordinator.refresh(.allEnabledProviders) }
+            await started.wait(until: 1)
+            await coordinator.cancel()
+            await hold.release()
+            await run.value
+
+            #expect(await coordinator.state == .cancelled(completedCount: 2))
+            #expect(coordinator.lastSuccessCount == 1)
+            #expect(coordinator.lastFailureCount == 1)
+            #expect(claude.snapshot?.quotas.first?.percentRemaining == 15)
+            #expect(codex.snapshot?.quotas.first?.percentRemaining == 60)
+            #expect(gemini.snapshot?.quotas.first?.percentRemaining == 50)
+            #expect(await geminiProbe.starts() == 1)
+            #expect(coordinator.didStartProvider("gemini") == false)
+        }
+    }
+}
+
+private actor AcceptanceStartGate {
+    private var count = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func mark() {
+        count += 1
+        let ready = waiters
+        waiters.removeAll()
+        ready.forEach { $0.resume() }
+    }
+
+    func wait(until target: Int) async {
+        while count < target {
+            await withCheckedContinuation { waiters.append($0) }
+        }
+    }
+
+    func reset() {
+        count = 0
+    }
+}
+
+private actor AcceptanceReleaseGate {
+    private var released = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if released { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        released = true
+        let ready = waiters
+        waiters.removeAll()
+        ready.forEach { $0.resume() }
+    }
+}
+
+private final class AcceptanceScriptedProbe: UsageProbe, @unchecked Sendable {
+    enum Step {
+        case success(Double, capturedAt: Date = Date())
+        case failure(Error)
+        case wait(AcceptanceReleaseGate, error: Error)
+    }
+
+    let providerId: String
+    private let lock = NSLock()
+    private var steps: [Step]
+    private var startCount = 0
+    private let onStart: (@Sendable () async -> Void)?
+
+    init(providerId: String, steps: [Step], onStart: (@Sendable () async -> Void)? = nil) {
+        self.providerId = providerId
+        self.steps = steps
+        self.onStart = onStart
+    }
+
+    func starts() async -> Int { lock.withLock { startCount } }
+
+    func probe() async throws -> UsageSnapshot {
+        let step = lock.withLock { () -> Step in
+            startCount += 1
+            return steps.isEmpty ? Step.success(0) : steps.removeFirst()
+        }
+        if let onStart { await onStart() }
+        switch step {
+        case let .success(percent, capturedAt):
+            return UsageSnapshot(
+                providerId: providerId,
+                quotas: [UsageQuota(percentRemaining: percent, quotaType: .session, providerId: providerId)],
+                capturedAt: capturedAt
+            )
+        case let .failure(error):
+            throw error
+        case let .wait(gate, error):
+            await gate.wait()
+            throw error
+        }
+    }
+
+    func isAvailable() async -> Bool { true }
 }

@@ -34,3 +34,13 @@ public protocol PowerStateProvider: Sendable {
     /// re-checks `isDisplayAsleep` after each event sees a consistent value.
     func events() -> AsyncStream<PowerEvent>
 }
+
+public extension PowerStateProvider {
+    /// Sleep pauses background polling only. Manual refresh stays user-triggered.
+    func refreshPausePolicy() -> RefreshPausePolicy {
+        RefreshPausePolicy(
+            pauseBackgroundRefresh: isDisplayAsleep,
+            allowManualRefresh: true
+        )
+    }
+}

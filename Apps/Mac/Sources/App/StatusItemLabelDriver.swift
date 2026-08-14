@@ -26,11 +26,14 @@ final class StatusItemLabelDriver {
     private let monitor: QuotaMonitor
     private let settings: AppSettings
     private let sessionMonitor: SessionMonitor
+    private let refreshCoordinator: RefreshCoordinator
+    private let powerState: (any PowerStateProvider)?
 
     private var statusItem: NSStatusItem?
     private var labelSync: ObservationRenderSync<LabelContent>?
     private var loopSync: ObservationRenderSync<RefreshLoopKey>?
     private var streamConsumer: Task<Void, Never>?
+    private var powerEventsTask: Task<Void, Never>?
     private var wakeObserver: NSObjectProtocol?
     private var appearanceObserver: NSObjectProtocol?
 
@@ -41,10 +44,18 @@ final class StatusItemLabelDriver {
     private var lastContent: LabelContent?
     private var imageWipeObservation: NSKeyValueObservation?
 
-    init(monitor: QuotaMonitor, settings: AppSettings, sessionMonitor: SessionMonitor) {
+    init(
+        monitor: QuotaMonitor,
+        settings: AppSettings,
+        sessionMonitor: SessionMonitor,
+        refreshCoordinator: RefreshCoordinator,
+        powerState: (any PowerStateProvider)? = nil
+    ) {
         self.monitor = monitor
         self.settings = settings
         self.sessionMonitor = sessionMonitor
+        self.refreshCoordinator = refreshCoordinator
+        self.powerState = powerState
     }
 
     // No deinit: this object lives for the app's lifetime, so the wake
@@ -350,6 +361,30 @@ final class StatusItemLabelDriver {
         )
         loopSync = sync
         sync.start()
+        startPowerPolicyWatch()
+    }
+
+    /// Sleep pauses the background loop. Wake restarts it once with the latest
+    /// interval/target settings. Manual refresh is not started here.
+    private func startPowerPolicyWatch() {
+        guard powerEventsTask == nil, let powerState else { return }
+        powerEventsTask = Task { [weak self] in
+            for await event in powerState.events() {
+                await self?.handlePowerEvent(event)
+            }
+        }
+    }
+
+    private func handlePowerEvent(_ event: PowerEvent) {
+        refreshCoordinator.applyPowerEvent(event)
+        switch event {
+        case .willSleep:
+            streamConsumer?.cancel()
+            streamConsumer = nil
+            monitor.stopMonitoring()
+        case .didWake:
+            restartMonitoring(currentRefreshLoopKey())
+        }
     }
 
     private func currentRefreshLoopKey() -> RefreshLoopKey {
@@ -377,6 +412,10 @@ final class StatusItemLabelDriver {
     private func restartMonitoring(_ key: RefreshLoopKey) {
         streamConsumer?.cancel()
         streamConsumer = nil
+        if powerState?.refreshPausePolicy().pauseBackgroundRefresh == true {
+            monitor.stopMonitoring()
+            return
+        }
         guard key.isEnabled else {
             monitor.stopMonitoring()
             return

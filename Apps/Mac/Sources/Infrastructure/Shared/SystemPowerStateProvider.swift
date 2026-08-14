@@ -60,6 +60,16 @@ public final class SystemPowerStateProvider: PowerStateProvider, @unchecked Send
         return (sourceType as String) == kIOPSBatteryPowerValue
     }
 
+    /// Hands the same sleep/wake pause policy to `RefreshCoordinator`:
+    /// background refresh pauses while the display is asleep; manual refresh
+    /// remains allowed so a user click is never swallowed by wake/sleep.
+    public func refreshPausePolicy() -> RefreshPausePolicy {
+        RefreshPausePolicy(
+            pauseBackgroundRefresh: isDisplayAsleep,
+            allowManualRefresh: true
+        )
+    }
+
     public func events() -> AsyncStream<PowerEvent> {
         AsyncStream { continuation in
             let id = UUID()
