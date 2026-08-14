@@ -62,8 +62,10 @@ struct SettingsTransferSpec {
             .write(to: dest.settingsURL, atomically: true, encoding: .utf8)
 
         let payload = try source.service.exportData(includeEmail: false)
-        let preview = try dest.service.previewImport(data: payload)
-        #expect(preview.diff.changed.isEmpty == false || preview.diff.added.isEmpty == false)
+        let preview = try dest.service.previewImport(data: payload, mode: .overwrite)
+        #expect(preview.includeEmail == false)
+        #expect(preview.diff.changed.contains { $0.contains("membershipOrder") } || preview.diff.added.contains { $0.contains("membershipOrder") })
+        #expect(!preview.diff.added.isEmpty || !preview.diff.changed.isEmpty)
 
         try dest.service.importData(payload, mode: .overwrite)
 
@@ -101,6 +103,37 @@ struct SettingsTransferSpec {
         #expect(TransferHarness.accountLabels(in: live) == ["Local"])
         #expect(TransferHarness.accountEmails(in: live) == ["keep@example.com"])
         #expect(((live["providers"] as? [String: Any])?["future-ai"] as? [String: Any])?["isEnabled"] as? Bool == false)
+    }
+
+    @Test
+    func `import preview lists paths discloses email and merge does not claim removals`() throws {
+        let env = try TransferHarness.make()
+        defer { env.cleanup() }
+        try TransferHarness.seed(env, order: ["claude"], label: "Local", email: nil, secrets: false)
+
+        var incoming = try TransferHarness.dictionary(from: try env.service.exportData(includeEmail: false))
+        var app = incoming["app"] as? [String: Any] ?? [:]
+        app["membershipOrder"] = ["kimi"]
+        app.removeValue(forKey: "language")
+        incoming["app"] = app
+        var providers = incoming["providers"] as? [String: Any] ?? [:]
+        if var claude = providers["claude"] as? [String: Any] {
+            claude["accounts"] = [
+                ["accountId": "acc-1", "label": "Local", "email": "shown@example.com"],
+            ]
+            providers["claude"] = claude
+        }
+        incoming["providers"] = providers
+        let data = try JSONSerialization.data(withJSONObject: incoming, options: [.sortedKeys])
+
+        let merge = try env.service.previewImport(data: data, mode: .merge)
+        #expect(merge.includeEmail)
+        #expect(merge.diff.removed.isEmpty)
+        #expect(merge.diff.changed.contains { $0.contains("membershipOrder") })
+
+        let overwrite = try env.service.previewImport(data: data, mode: .overwrite)
+        #expect(overwrite.includeEmail)
+        #expect(overwrite.diff.removed.contains { $0.contains("language") })
     }
 
     @Test

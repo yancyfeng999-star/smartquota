@@ -72,8 +72,10 @@ struct SettingsTransferServiceTests {
 
         let exported = try makeService(source).exportData(includeEmail: false)
         let destService = makeService(dest)
-        let preview = try destService.previewImport(data: exported)
+        let preview = try destService.previewImport(data: exported, mode: .overwrite)
+        #expect(preview.includeEmail == false)
         #expect(preview.diff.changed.contains { $0.contains("membershipOrder") } || preview.diff.added.contains { $0.contains("membershipOrder") })
+        #expect(!preview.diff.added.isEmpty || !preview.diff.changed.isEmpty || !preview.diff.removed.isEmpty)
 
         let backupsBefore = try dest.backupManager.listBackups().count
         try destService.importData(exported, mode: .overwrite)
@@ -124,6 +126,72 @@ struct SettingsTransferServiceTests {
         #expect(accountEmails(in: live) == ["user@example.com"])
         #expect(accountProbeConfig(in: live)["profile"] == "default")
         #expect(((live["providers"] as? [String: Any])?["future-ai"] as? [String: Any])?["isEnabled"] as? Bool == false)
+    }
+
+    @Test
+    func `import preview discloses email and merge preview omits non-applied removals`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        try seedLiveSettings(env, includeEmail: false, includeSecrets: false, order: ["claude"], label: "Local")
+
+        let incoming: [String: Any] = [
+            SettingsSchema.versionKey: SettingsSchema.currentVersion,
+            "app": [
+                "themeMode": "light",
+                "membershipOrder": ["kimi"],
+            ],
+            "providers": [
+                "claude": [
+                    "isEnabled": true,
+                    "accounts": encodeAccounts([
+                        [
+                            "accountId": "acc-1",
+                            "label": "Imported",
+                            "email": "shown@example.com",
+                        ],
+                    ]),
+                ],
+            ],
+        ]
+        let data = try JSONSerialization.data(withJSONObject: incoming, options: [.sortedKeys])
+        let mergePreview = try makeService(env).previewImport(data: data, mode: .merge)
+        #expect(mergePreview.includeEmail)
+        #expect(mergePreview.diff.removed.isEmpty)
+        #expect(mergePreview.diff.changed.contains { $0.contains("membershipOrder") })
+
+        let overwritePreview = try makeService(env).previewImport(data: data, mode: .overwrite)
+        #expect(overwritePreview.includeEmail)
+        #expect(overwritePreview.diff.removed.contains { $0.contains("language") })
+    }
+
+    @Test
+    func `overwrite import does not re-enable an omitted disabled membership`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+
+        let dest: [String: Any] = [
+            SettingsSchema.versionKey: SettingsSchema.currentVersion,
+            "app": ["themeMode": "dark", "language": "en"],
+            "providers": [
+                "claude": ["isEnabled": false, "planLabel": "Pro"],
+                "kimi": ["isEnabled": true],
+            ],
+        ]
+        try JSONSerialization.data(withJSONObject: dest, options: [.sortedKeys]).write(to: env.settingsURL)
+
+        let incoming: [String: Any] = [
+            SettingsSchema.versionKey: SettingsSchema.currentVersion,
+            "app": ["themeMode": "light"],
+            "providers": [
+                "kimi": ["isEnabled": true, "planLabel": "Plus"],
+            ],
+        ]
+        try makeService(env).importData(
+            try JSONSerialization.data(withJSONObject: incoming, options: [.sortedKeys]),
+            mode: .overwrite
+        )
+        let live = try storeDictionary(at: env.settingsURL)
+        #expect(((live["providers"] as? [String: Any])?["claude"] as? [String: Any])?["isEnabled"] as? Bool == false)
     }
 
     @Test
@@ -181,6 +249,43 @@ struct SettingsTransferServiceTests {
         #expect(try String(contentsOf: env.externalLoginURL, encoding: .utf8) == "login")
         #expect(env.credentials.string(forKey: "copilot.token") == "stay")
         #expect(!env.configRoot.path.contains("/.smartquota"))
+    }
+
+    @Test
+    @MainActor
+    func `reloadEnablement copies stored membership switches onto providers`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        try seedLiveSettings(env, includeEmail: false, includeSecrets: false)
+        let store = JSONSettingsStore(fileURL: env.settingsURL)
+        let repo = JSONSettingsRepository(store: store)
+        repo.setEnabled(false, forProvider: "claude")
+
+        let provider = EnablementStub(id: "claude", enabled: true)
+        let monitor = QuotaMonitor(
+            providers: AIProviders(providers: [provider]),
+            clock: TransferTestClock()
+        )
+        #expect(provider.isEnabled)
+        monitor.reloadEnablement(from: repo)
+        #expect(provider.isEnabled == false)
+    }
+
+    @Test
+    func `clear all local data writes defaults before deleting siblings`() throws {
+        let env = try makeEnv()
+        defer { env.cleanup() }
+        try seedLiveSettings(env, includeEmail: false, includeSecrets: false)
+        let sibling = env.configRoot.appendingPathComponent("debug.log")
+        try "log".write(to: sibling, atomically: true, encoding: .utf8)
+
+        #expect(throws: SettingsPersistenceError.self) {
+            try SettingsTransferService.clearLocalData(configRoot: env.configRoot) {
+                throw SettingsPersistenceError.writeFailed("boom")
+            }
+        }
+        #expect(FileManager.default.fileExists(atPath: sibling.path))
+        #expect(try String(contentsOf: env.settingsURL, encoding: .utf8).contains("claude"))
     }
 
     // MARK: - Helpers
@@ -333,5 +438,34 @@ struct SettingsTransferServiceTests {
     private func storeDictionary(from data: Data) throws -> [String: Any] {
         let json = try JSONSerialization.jsonObject(with: data)
         return try #require(json as? [String: Any])
+    }
+}
+
+private struct TransferTestClock: Clock {
+    func sleep(for duration: Duration) async throws {}
+    func sleep(nanoseconds: UInt64) async throws {}
+}
+
+@MainActor
+private final class EnablementStub: AIProvider {
+    let id: String
+    let name: String
+    let cliCommand = ""
+    var dashboardURL: URL? { nil }
+    var isEnabled: Bool
+    private(set) var isSyncing = false
+    private(set) var snapshot: UsageSnapshot?
+    private(set) var lastError: Error?
+
+    init(id: String, enabled: Bool) {
+        self.id = id
+        self.name = id
+        self.isEnabled = enabled
+    }
+
+    func isAvailable() async -> Bool { true }
+
+    func refresh() async throws -> UsageSnapshot {
+        UsageSnapshot(providerId: id, quotas: [], capturedAt: Date())
     }
 }

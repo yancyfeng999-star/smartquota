@@ -367,6 +367,19 @@ public final class QuotaMonitor {
         providers.all
     }
 
+    /// Copies stored membership switches onto in-memory providers after import/restore.
+    public func reloadEnablement(from repository: any ProviderSettingsRepository) {
+        for provider in allProviders {
+            let stored = repository.isEnabled(
+                forProvider: provider.id,
+                defaultValue: ProviderEnablement.defaultEnabled(for: provider.id)
+            )
+            if provider.isEnabled != stored {
+                provider.isEnabled = stored
+            }
+        }
+    }
+
     /// Returns only enabled providers
     public var enabledProviders: [any AIProvider] {
         providers.enabled

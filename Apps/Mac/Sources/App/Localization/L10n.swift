@@ -1028,6 +1028,13 @@ final class L10n {
         "transfer.import.overwrite": [.zhHans: "覆盖", .en: "Overwrite"],
         "transfer.import.schema_fmt": [.zhHans: "导入 schema 版本 %d", .en: "Import schema version %d"],
         "transfer.import.diff_fmt": [.zhHans: "新增 %d · 变更 %d · 移除 %d", .en: "%d added · %d changed · %d removed"],
+        "transfer.import.added": [.zhHans: "将新增", .en: "Will add"],
+        "transfer.import.changed": [.zhHans: "将变更", .en: "Will change"],
+        "transfer.import.removed": [.zhHans: "将移除（仅覆盖）", .en: "Will remove (overwrite only)"],
+        "transfer.import.email_notice": [
+            .zhHans: "此文件包含账号邮箱。应用导入会把邮箱写入本机设置。",
+            .en: "This file includes account emails. Applying the import writes those emails into local settings.",
+        ],
         "transfer.import.unknown_fmt": [
             .zhHans: "未知会员不会自动开启：%@",
             .en: "Unknown memberships stay disabled: %@",

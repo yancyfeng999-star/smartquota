@@ -173,6 +173,63 @@ struct PortableSettingsTests {
     }
 
     @Test
+    func `merge preview lists added and changed paths and never implies removals`() {
+        let current = sampleSettings(includeSecrets: false, includeEmail: false, order: ["claude"], label: "Local")
+        var incoming = sampleSettings(includeSecrets: false, includeEmail: false, order: ["kimi", "claude"], label: "Imported")
+        var app = incoming["app"] as? [String: Any] ?? [:]
+        app.removeValue(forKey: "language")
+        incoming["app"] = app
+
+        let mergeDiff = PortableSettings.diff(
+            current: SettingsBackupPolicy.sanitizeDictionary(current),
+            incoming: SettingsBackupPolicy.sanitizeDictionary(incoming),
+            mode: .merge
+        )
+        #expect(mergeDiff.removed.isEmpty)
+        #expect(mergeDiff.changed.contains { $0.contains("membershipOrder") })
+        #expect(mergeDiff.changed.contains { $0.contains("label") })
+        #expect(!mergeDiff.added.isEmpty || !mergeDiff.changed.isEmpty)
+
+        let overwriteDiff = PortableSettings.diff(
+            current: SettingsBackupPolicy.sanitizeDictionary(current),
+            incoming: SettingsBackupPolicy.sanitizeDictionary(incoming),
+            mode: .overwrite
+        )
+        #expect(overwriteDiff.removed.contains { $0.contains("language") })
+        #expect(overwriteDiff.changed.contains { $0.contains("membershipOrder") })
+    }
+
+    @Test
+    func `overwrite keeps live isEnabled when incoming omits that known provider`() {
+        let current: [String: Any] = [
+            SettingsSchema.versionKey: SettingsSchema.currentVersion,
+            "providers": [
+                "claude": ["isEnabled": false, "planLabel": "Pro"],
+                "kimi": ["isEnabled": true, "planLabel": "Old"],
+            ],
+        ]
+        let incoming: [String: Any] = [
+            SettingsSchema.versionKey: SettingsSchema.currentVersion,
+            "app": ["themeMode": "light"],
+            "providers": [
+                "kimi": ["isEnabled": true, "planLabel": "Plus"],
+            ],
+        ]
+
+        let overwritten = PortableSettings.apply(incoming: incoming, onto: current, mode: .overwrite)
+        let providers = overwritten["providers"] as? [String: Any]
+        #expect((providers?["claude"] as? [String: Any])?["isEnabled"] as? Bool == false)
+        #expect((providers?["kimi"] as? [String: Any])?["planLabel"] as? String == "Plus")
+
+        let overwriteDiff = PortableSettings.diff(
+            current: SettingsBackupPolicy.sanitizeDictionary(current),
+            incoming: SettingsBackupPolicy.sanitizeDictionary(incoming),
+            mode: .overwrite
+        )
+        #expect(!overwriteDiff.removed.contains("providers.claude.isEnabled"))
+    }
+
+    @Test
     func `dangerous actions require two independent confirmations`() {
         var defaults = DualConfirmation()
         var wipe = DualConfirmation()
@@ -187,6 +244,7 @@ struct PortableSettingsTests {
         wipe.cancel()
         #expect(wipe.isComplete == false)
         wipe.confirm()
+        #expect(wipe.isAwaitingSecondConfirmation)
         wipe.confirm()
         #expect(wipe.isComplete == true)
         #expect(defaults.action == nil)

@@ -3,11 +3,13 @@ import Domain
 import Infrastructure
 
 struct BackupRestoreCard: View {
+    let monitor: QuotaMonitor
     var backupManager: BackupManager = BackupManager(configRoot: AppIdentity.configDirectoryURL)
     var transferService: SettingsTransferService = SettingsTransferService(
         configRoot: AppIdentity.configDirectoryURL,
         store: .shared
     )
+    var settingsRepository: JSONSettingsRepository = .shared
 
     @Environment(\.appTheme) private var theme
     @State private var showing = false
@@ -57,7 +59,12 @@ struct BackupRestoreCard: View {
                 )
         )
         .sheet(isPresented: $showing) {
-            BackupRestoreView(backupManager: backupManager, transferService: transferService)
+            BackupRestoreView(
+                backupManager: backupManager,
+                transferService: transferService,
+                monitor: monitor,
+                settingsRepository: settingsRepository
+            )
         }
     }
 }
@@ -65,6 +72,8 @@ struct BackupRestoreCard: View {
 struct BackupRestoreView: View {
     let backupManager: BackupManager
     let transferService: SettingsTransferService
+    let monitor: QuotaMonitor
+    var settingsRepository: JSONSettingsRepository = .shared
 
     @Environment(\.appTheme) private var theme
     @Environment(\.dismiss) private var dismiss
@@ -111,10 +120,14 @@ struct BackupRestoreView: View {
             Button(l10n.t("common.cancel"), role: .cancel) { defaultsConfirmation.cancel() }
             Button(l10n.t("backup.defaults.first.confirm")) {
                 defaultsConfirmation.confirm()
-                showingDefaultsSecond = true
             }
         } message: {
             Text(l10n.t("backup.defaults.first.message"))
+        }
+        .onChange(of: showingDefaultsFirst) { _, showing in
+            if !showing && defaultsConfirmation.isAwaitingSecondConfirmation {
+                showingDefaultsSecond = true
+            }
         }
         .alert(l10n.t("backup.defaults.second.title"), isPresented: $showingDefaultsSecond) {
             Button(l10n.t("common.cancel"), role: .cancel) { defaultsConfirmation.cancel() }
@@ -132,10 +145,14 @@ struct BackupRestoreView: View {
             Button(l10n.t("common.cancel"), role: .cancel) { wipeConfirmation.cancel() }
             Button(l10n.t("backup.wipe.first.confirm")) {
                 wipeConfirmation.confirm()
-                showingWipeSecond = true
             }
         } message: {
             Text(l10n.t("backup.wipe.first.message"))
+        }
+        .onChange(of: showingWipeFirst) { _, showing in
+            if !showing && wipeConfirmation.isAwaitingSecondConfirmation {
+                showingWipeSecond = true
+            }
         }
         .alert(l10n.t("backup.wipe.second.title"), isPresented: $showingWipeSecond) {
             Button(l10n.t("common.cancel"), role: .cancel) { wipeConfirmation.cancel() }
@@ -230,10 +247,15 @@ struct BackupRestoreView: View {
         inspections = (try? backupManager.inspectBackups()) ?? []
     }
 
+    private func reloadLiveSettings() {
+        AppSettings.shared.reloadFromDisk()
+        monitor.reloadEnablement(from: settingsRepository)
+    }
+
     private func restore(_ item: BackupInspection) {
         do {
             try backupManager.restore(item.manifest)
-            AppSettings.shared.reloadFromDisk()
+            reloadLiveSettings()
             reload()
             statusIsError = false
             statusText = l10n.t("backup.restore.ok")
@@ -246,7 +268,7 @@ struct BackupRestoreView: View {
     private func restoreDefaults() {
         do {
             try transferService.restoreFactoryDefaults()
-            AppSettings.shared.reloadFromDisk()
+            reloadLiveSettings()
             reload()
             statusIsError = false
             statusText = l10n.t("backup.defaults.ok")
@@ -259,7 +281,7 @@ struct BackupRestoreView: View {
     private func clearAll() {
         do {
             try transferService.clearAllLocalData()
-            AppSettings.shared.reloadFromDisk()
+            reloadLiveSettings()
             reload()
             statusIsError = false
             statusText = l10n.t("backup.wipe.ok")

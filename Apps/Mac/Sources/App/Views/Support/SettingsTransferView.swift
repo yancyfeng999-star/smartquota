@@ -5,10 +5,12 @@ import Domain
 import Infrastructure
 
 struct SettingsTransferCard: View {
+    let monitor: QuotaMonitor
     var service: SettingsTransferService = SettingsTransferService(
         configRoot: AppIdentity.configDirectoryURL,
         store: .shared
     )
+    var settingsRepository: JSONSettingsRepository = .shared
 
     @Environment(\.appTheme) private var theme
     @State private var showing = false
@@ -58,13 +60,19 @@ struct SettingsTransferCard: View {
                 )
         )
         .sheet(isPresented: $showing) {
-            SettingsTransferView(service: service)
+            SettingsTransferView(
+                service: service,
+                monitor: monitor,
+                settingsRepository: settingsRepository
+            )
         }
     }
 }
 
 struct SettingsTransferView: View {
     let service: SettingsTransferService
+    let monitor: QuotaMonitor
+    var settingsRepository: JSONSettingsRepository = .shared
 
     @Environment(\.appTheme) private var theme
     @Environment(\.dismiss) private var dismiss
@@ -95,6 +103,7 @@ struct SettingsTransferView: View {
         .frame(minWidth: 460, minHeight: 540)
         .onAppear { refreshPreview() }
         .onChange(of: includeEmail) { _, _ in refreshPreview() }
+        .onChange(of: importMode) { _, _ in refreshImportPreview() }
     }
 
     private var header: some View {
@@ -200,10 +209,17 @@ struct SettingsTransferView: View {
                 Text(l10n.tf("transfer.import.schema_fmt", importPreview.schemaVersion))
                     .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
                     .foregroundStyle(theme.textSecondary)
+                if importPreview.includeEmail {
+                    Text(l10n.t("transfer.import.email_notice"))
+                        .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                        .foregroundStyle(theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(diffSummary(importPreview.diff))
                     .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
                     .foregroundStyle(theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                diffPaths(importPreview.diff)
                 if !importPreview.diff.unknownProvidersKeptDisabled.isEmpty {
                     Text(l10n.tf(
                         "transfer.import.unknown_fmt",
@@ -234,12 +250,53 @@ struct SettingsTransferView: View {
         )
     }
 
+    private func diffPaths(_ diff: SettingsImportDiff) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                pathGroup(title: l10n.t("transfer.import.added"), paths: diff.added)
+                pathGroup(title: l10n.t("transfer.import.changed"), paths: diff.changed)
+                if importMode == .overwrite {
+                    pathGroup(title: l10n.t("transfer.import.removed"), paths: diff.removed)
+                }
+            }
+        }
+        .frame(maxHeight: 140)
+    }
+
+    @ViewBuilder
+    private func pathGroup(title: String, paths: [String]) -> some View {
+        if !paths.isEmpty {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+                .foregroundStyle(theme.textPrimary)
+            ForEach(paths.prefix(40), id: \.self) { path in
+                Text(path)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(theme.textSecondary)
+            }
+        }
+    }
+
     private func refreshPreview() {
         do {
             preview = try service.makeExportPreview(includeEmail: includeEmail)
         } catch {
             preview = nil
         }
+    }
+
+    private func refreshImportPreview() {
+        guard let pendingImportData else { return }
+        do {
+            importPreview = try service.previewImport(data: pendingImportData, mode: importMode)
+        } catch {
+            importPreview = nil
+        }
+    }
+
+    private func reloadLiveSettings() {
+        AppSettings.shared.reloadFromDisk()
+        monitor.reloadEnablement(from: settingsRepository)
     }
 
     private func export() {
@@ -268,8 +325,8 @@ struct SettingsTransferView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             let data = try Data(contentsOf: url)
-            importPreview = try service.previewImport(data: data)
             pendingImportData = data
+            importPreview = try service.previewImport(data: data, mode: importMode)
             statusText = nil
         } catch {
             pendingImportData = nil
@@ -283,7 +340,7 @@ struct SettingsTransferView: View {
         guard let pendingImportData else { return }
         do {
             try service.importData(pendingImportData, mode: importMode)
-            AppSettings.shared.reloadFromDisk()
+            reloadLiveSettings()
             refreshPreview()
             statusIsError = false
             statusText = l10n.t("transfer.import.ok")

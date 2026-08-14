@@ -97,6 +97,9 @@ public struct DualConfirmation: Equatable, Sendable {
 
     public var isComplete: Bool { step >= 2 }
 
+    /// First confirm succeeded; the second independent alert may now be shown.
+    public var isAwaitingSecondConfirmation: Bool { step == 1 }
+
     public mutating func confirm() {
         if step < 2 { step += 1 }
     }
@@ -233,7 +236,11 @@ public enum PortableSettings: Sendable {
         return recombine(current: current, portable: portable, mode: mode)
     }
 
-    public static func diff(current: [String: Any], incoming: [String: Any]) -> SettingsImportDiff {
+    public static func diff(
+        current: [String: Any],
+        incoming: [String: Any],
+        mode: SettingsImportMode = .overwrite
+    ) -> SettingsImportDiff {
         let currentFlat = Dictionary(uniqueKeysWithValues: flatten(current))
         let incomingFlat = Dictionary(uniqueKeysWithValues: flatten(incoming))
         var added: [String] = []
@@ -248,6 +255,14 @@ public enum PortableSettings: Sendable {
                 removed.append(key)
             } else if left != right {
                 changed.append(key)
+            }
+        }
+        if mode == .merge {
+            removed = []
+        } else {
+            let incomingIDs = incomingProviderIDs(incoming)
+            removed = removed.filter { path in
+                !isPreservedLiveEnablementPath(path, incomingProviderIDs: incomingIDs)
             }
         }
         return SettingsImportDiff(
@@ -348,7 +363,7 @@ public enum PortableSettings: Sendable {
             guard let portableEntry = portable[id] as? [String: Any] else {
                 if mode == .overwrite {
                     var kept = currentEntry
-                    for key in SettingsBackupPolicy.providerEntryKeys {
+                    for key in SettingsBackupPolicy.providerEntryKeys where key != "isEnabled" {
                         kept.removeValue(forKey: key)
                     }
                     if kept.isEmpty {
@@ -376,6 +391,9 @@ public enum PortableSettings: Sendable {
                 } else {
                     entry[key] = value
                 }
+            }
+            if portableEntry["isEnabled"] == nil, let liveEnabled = currentEntry["isEnabled"] {
+                entry["isEnabled"] = liveEnabled
             }
             output[id] = entry
         }
@@ -479,6 +497,21 @@ public enum PortableSettings: Sendable {
             output.removeValue(forKey: "probeConfig")
         }
         return output
+    }
+
+    private static func incomingProviderIDs(_ dict: [String: Any]) -> Set<String> {
+        Set((dict["providers"] as? [String: Any])?.keys.map { $0 } ?? [])
+    }
+
+    private static func isPreservedLiveEnablementPath(
+        _ path: String,
+        incomingProviderIDs: Set<String>
+    ) -> Bool {
+        let prefix = "providers."
+        let suffix = ".isEnabled"
+        guard path.hasPrefix(prefix), path.hasSuffix(suffix) else { return false }
+        let id = String(path.dropFirst(prefix.count).dropLast(suffix.count))
+        return !id.isEmpty && !incomingProviderIDs.contains(id)
     }
 
     private static func disableUnknownProviders(

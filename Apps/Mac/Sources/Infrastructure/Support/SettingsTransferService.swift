@@ -5,7 +5,7 @@ public protocol SettingsTransferring: Sendable {
     func makeExportPreview(includeEmail: Bool) throws -> PortableSettingsPreview
     func exportData(includeEmail: Bool) throws -> Data
     func writeExport(to url: URL, includeEmail: Bool) throws
-    func previewImport(data: Data) throws -> SettingsImportPreview
+    func previewImport(data: Data, mode: SettingsImportMode) throws -> SettingsImportPreview
     func importData(_ data: Data, mode: SettingsImportMode) throws
     func restoreFactoryDefaults() throws
     func clearAllLocalData() throws
@@ -55,11 +55,11 @@ public final class SettingsTransferService: SettingsTransferring, @unchecked Sen
         try SettingsFileIO.performAtomicWrite(try exportData(includeEmail: includeEmail), to: url)
     }
 
-    public func previewImport(from url: URL) throws -> SettingsImportPreview {
-        try previewImport(data: try Data(contentsOf: url))
+    public func previewImport(from url: URL, mode: SettingsImportMode = .merge) throws -> SettingsImportPreview {
+        try previewImport(data: try Data(contentsOf: url), mode: mode)
     }
 
-    public func previewImport(data: Data) throws -> SettingsImportPreview {
+    public func previewImport(data: Data, mode: SettingsImportMode = .merge) throws -> SettingsImportPreview {
         lock.lock()
         defer { lock.unlock() }
         let normalized = try PortableSettings.parseAndNormalize(data)
@@ -68,7 +68,7 @@ public final class SettingsTransferService: SettingsTransferring, @unchecked Sen
         return SettingsImportPreview(
             schemaVersion: SettingsJSON.intValue(normalized[SettingsSchema.versionKey]) ?? 0,
             includeEmail: containsAccountEmail(incoming),
-            diff: PortableSettings.diff(current: current, incoming: incoming)
+            diff: PortableSettings.diff(current: current, incoming: incoming, mode: mode)
         )
     }
 
@@ -100,16 +100,26 @@ public final class SettingsTransferService: SettingsTransferring, @unchecked Sen
     public func clearAllLocalData() throws {
         lock.lock()
         defer { lock.unlock() }
-        let fileManager = FileManager.default
-        let items = (try? fileManager.contentsOfDirectory(
+        try Self.clearLocalData(configRoot: configRoot) {
+            try store.replaceAll(PortableSettings.factoryDefaults())
+        }
+    }
+
+    /// Writes defaults first. Siblings are removed only after that write succeeds.
+    public static func clearLocalData(
+        configRoot: URL,
+        settingsFileName: String = "settings.json",
+        writeDefaults: () throws -> Void
+    ) throws {
+        try writeDefaults()
+        let items = (try? FileManager.default.contentsOfDirectory(
             at: configRoot,
             includingPropertiesForKeys: nil,
             options: []
         )) ?? []
-        for item in items {
-            try? fileManager.removeItem(at: item)
+        for item in items where item.lastPathComponent != settingsFileName {
+            try? FileManager.default.removeItem(at: item)
         }
-        try store.replaceAll(PortableSettings.factoryDefaults())
     }
 
     private func liveDictionary() -> [String: Any] {
