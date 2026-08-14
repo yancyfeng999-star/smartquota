@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [Mac 0.3.28] — 2026-08-14
+
+### Changed
+- **Cursor 额度对齐官方双桶**：卡片只左右两根条（Cursor 模型 / 其他模型），不展示具体模型名；套餐识别补上 Pro+、Start、Hobby、Teams。
+
+### Release
+- 本地包：`releases/Mac/v0.3.28/` · `智额-0.3.28.dmg` / `.pkg`
+
+---
+
 ## [Mac 0.3.27] — 2026-08-11
 
 ### Added

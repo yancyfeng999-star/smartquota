@@ -45,14 +45,19 @@ struct CursorUsageProbeParsingTests {
         let snapshot = try CursorUsageProbe.parseUsageSummary(json)
 
         #expect(snapshot.providerId == "cursor")
-        #expect(snapshot.quotas.count == 1)
+        #expect(snapshot.quotas.count == 2)
         #expect(snapshot.accountTier == .custom("ULTRA"))
 
-        let quota = snapshot.quotas[0]
-        #expect(quota.quotaType == .timeLimit("Monthly"))
-        #expect(abs(quota.percentRemaining - 99.185) < 0.01)
-        #expect(quota.resetText == "326/40000 requests")
-        #expect(quota.resetsAt != nil)
+        let cursorModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Cursor Models") }
+        #expect(cursorModels != nil)
+        // Display messages say 1% used, matching Cursor's own settings bars.
+        #expect(abs(cursorModels!.percentRemaining - 99.0) < 0.01)
+        #expect(cursorModels!.resetsAt != nil)
+
+        let otherModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Other Models") }
+        #expect(otherModels != nil)
+        #expect(abs(otherModels!.percentRemaining - 99.0) < 0.01)
+        #expect(otherModels!.resetText == nil)
     }
 
     // MARK: - Plan Usage
@@ -184,12 +189,16 @@ struct CursorUsageProbeParsingTests {
 
         let snapshot = try CursorUsageProbe.parseUsageSummary(json)
 
-        #expect(snapshot.quotas.count == 1)
-        let quota = snapshot.quotas[0]
-        #expect(quota.quotaType == .timeLimit("Monthly"))
-        // 28.32% used of the full 9770 capacity -> 71.68% remaining (was incorrectly 0)
-        #expect(abs(quota.percentRemaining - 71.68) < 0.1)
-        #expect(quota.resetText == "2767/9770 requests")
+        #expect(snapshot.quotas.count == 2)
+
+        let cursorModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Cursor Models") }
+        #expect(cursorModels != nil)
+        #expect(abs(cursorModels!.percentRemaining - 76.95) < 0.1)
+
+        let otherModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Other Models") }
+        #expect(otherModels != nil)
+        #expect(abs(otherModels!.percentRemaining - 36.56) < 0.1)
+        #expect(otherModels!.resetText == nil)
     }
 
     @Test
@@ -236,7 +245,7 @@ struct CursorUsageProbeParsingTests {
         #expect(snapshot.quotas.count == 1)
         #expect(snapshot.quotas[0].percentRemaining == 100)
         #expect(snapshot.quotas[0].resetText == "Unlimited")
-        #expect(snapshot.accountTier == .custom("BUSINESS"))
+        #expect(snapshot.accountTier == .custom("TEAMS"))
     }
 
     @Test
@@ -259,7 +268,7 @@ struct CursorUsageProbeParsingTests {
 
         let snapshot = try CursorUsageProbe.parseUsageSummary(json)
 
-        #expect(snapshot.accountTier == .custom("FREE"))
+        #expect(snapshot.accountTier == .custom("HOBBY"))
         #expect(snapshot.quotas.count == 1)
         #expect(abs(snapshot.quotas[0].percentRemaining - 40.0) < 0.1)
     }
@@ -315,13 +324,16 @@ struct CursorUsageProbeParsingTests {
         #expect(snapshot.providerId == "cursor")
         #expect(snapshot.accountTier == .custom("ENTERPRISE"))
 
-        // Should have individual plan quota (from breakdown.total) + team quota
-        #expect(snapshot.quotas.count == 2)
+        // Two official pools + team on-demand
+        #expect(snapshot.quotas.count == 3)
 
-        let individualQuota = snapshot.quotas.first { $0.quotaType == .timeLimit("Monthly") }
-        #expect(individualQuota != nil)
-        // 6.9% used of 300 -> ~93.1% remaining
-        #expect(abs(individualQuota!.percentRemaining - 93.1) < 0.5)
+        let cursorModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Cursor Models") }
+        #expect(cursorModels != nil)
+        #expect(abs(cursorModels!.percentRemaining - 93.0) < 0.1)
+
+        let otherModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Other Models") }
+        #expect(otherModels != nil)
+        #expect(abs(otherModels!.percentRemaining - 93.0) < 0.5)
 
         let teamQuota = snapshot.quotas.first { $0.quotaType == .timeLimit("Team") }
         #expect(teamQuota != nil)
@@ -550,5 +562,161 @@ struct CursorUsageProbeParsingTests {
 
         let snapshot = try CursorUsageProbe.parseUsageSummary(json)
         #expect(snapshot.accountTier == .custom("ULTRA"))
+    }
+
+    @Test
+    func `prefer dashboard display messages over raw pool fractions`() throws {
+        // Live Ultra: bars say 1% / 5%, while raw fields are 0.061 / 4.66.
+        let json = """
+        {
+            "membershipType": "ultra",
+            "limitType": "user",
+            "isUnlimited": false,
+            "autoModelSelectedDisplayMessage": "You've used 1% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 5% of your included API usage",
+            "individualUsage": {
+                "plan": {
+                    "enabled": true,
+                    "used": 2452,
+                    "limit": 40000,
+                    "autoPercentUsed": 0.061,
+                    "apiPercentUsed": 4.66,
+                    "totalPercentUsed": 0.9808
+                },
+                "onDemand": { "enabled": false }
+            }
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CursorUsageProbe.parseUsageSummary(json)
+        let cursorModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Cursor Models") }
+        let otherModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Other Models") }
+        #expect(abs(cursorModels!.percentRemaining - 99.0) < 0.01)
+        #expect(abs(otherModels!.percentRemaining - 95.0) < 0.01)
+    }
+
+    @Test
+    func `parse current ultra dashboard two usage pools`() throws {
+        // Matches Cursor settings: Cursor 模型 1% 已使用 / 其他模型 5% 已使用.
+        let json = """
+        {
+            "membershipType": "ultra",
+            "limitType": "user",
+            "isUnlimited": false,
+            "billingCycleStart": "2026-07-14T00:00:00.000Z",
+            "billingCycleEnd": "2026-08-14T00:00:00.000Z",
+            "autoModelSelectedDisplayMessage": "You've used 1% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 5% of your included API usage",
+            "individualUsage": {
+                "plan": {
+                    "enabled": true,
+                    "used": 400,
+                    "limit": 40000,
+                    "remaining": 39600,
+                    "autoPercentUsed": 1,
+                    "apiPercentUsed": 5,
+                    "totalPercentUsed": 1.8
+                },
+                "onDemand": { "enabled": false, "used": 0, "limit": null, "remaining": null }
+            }
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CursorUsageProbe.parseUsageSummary(json)
+
+        #expect(snapshot.accountTier == .custom("ULTRA"))
+        #expect(snapshot.quotas.count == 2)
+
+        let cursorModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Cursor Models") }
+        #expect(cursorModels != nil)
+        #expect(abs(cursorModels!.percentRemaining - 99.0) < 0.01)
+        #expect(cursorModels!.resetText == nil)
+        #expect(abs((cursorModels!.windowDuration ?? 0) - 31 * 24 * 3600) < 1)
+
+        let otherModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Other Models") }
+        #expect(otherModels != nil)
+        #expect(abs(otherModels!.percentRemaining - 95.0) < 0.01)
+        #expect(otherModels!.resetText == nil)
+    }
+
+    @Test
+    func `detect pro plus start and hobby tiers`() throws {
+        let cases: [(String, String)] = [
+            ("pro_plus", "PRO+"),
+            ("proPlus", "PRO+"),
+            ("start", "START"),
+            ("hobby", "HOBBY"),
+            ("free", "HOBBY"),
+            ("teams", "TEAMS"),
+            ("business", "TEAMS"),
+        ]
+
+        for (membership, expected) in cases {
+            let json = """
+            {
+                "membershipType": "\(membership)",
+                "isUnlimited": false,
+                "individualUsage": {
+                    "plan": { "enabled": true, "used": 1, "limit": 100, "remaining": 99 },
+                    "onDemand": { "enabled": false, "used": 0, "limit": null, "remaining": null }
+                }
+            }
+            """.data(using: .utf8)!
+
+            let snapshot = try CursorUsageProbe.parseUsageSummary(json)
+            #expect(snapshot.accountTier == .custom(expected), "\(membership) -> \(expected)")
+        }
+    }
+
+    @Test
+    func `parse team display messages when plan object is missing`() throws {
+        let json = """
+        {
+            "membershipType": "enterprise",
+            "isUnlimited": false,
+            "billingCycleEnd": "2026-09-01T00:00:00.000Z",
+            "autoModelSelectedDisplayMessage": "You've used 12% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 40% of your included API usage",
+            "individualUsage": {
+                "onDemand": { "enabled": false }
+            },
+            "teamUsage": {}
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CursorUsageProbe.parseUsageSummary(json)
+        #expect(snapshot.accountTier == .custom("ENTERPRISE"))
+        #expect(snapshot.quotas.count == 2)
+
+        let cursorModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Cursor Models") }
+        #expect(abs(cursorModels!.percentRemaining - 88.0) < 0.01)
+
+        let otherModels = snapshot.quotas.first { $0.quotaType == .timeLimit("Other Models") }
+        #expect(abs(otherModels!.percentRemaining - 60.0) < 0.01)
+    }
+
+    @Test
+    func `pro plus other models include seventy dollars`() throws {
+        let json = """
+        {
+            "membershipType": "pro_plus",
+            "isUnlimited": false,
+            "individualUsage": {
+                "plan": {
+                    "enabled": true,
+                    "autoPercentUsed": 10,
+                    "apiPercentUsed": 20,
+                    "totalPercentUsed": 12
+                },
+                "onDemand": { "enabled": false }
+            }
+        }
+        """.data(using: .utf8)!
+
+        let snapshot = try CursorUsageProbe.parseUsageSummary(json)
+        #expect(snapshot.accountTier == .custom("PRO+"))
+        let other = snapshot.quotas.first { $0.quotaType == .timeLimit("Other Models") }
+        #expect(other?.resetText == nil)
+        #expect(other != nil)
     }
 }

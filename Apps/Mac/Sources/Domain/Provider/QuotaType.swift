@@ -86,11 +86,20 @@ public enum QuotaType: Sendable, Equatable, Hashable {
             .days(7)
         case .modelSpecific:
             .days(7) // Model-specific limits typically follow weekly windows
-        case .timeLimit(let name) where name.localizedCaseInsensitiveCompare("Monthly") == .orderedSame:
+        case .timeLimit(let name) where Self.isMonthlyTimeLimit(name):
             .days(30)
         case .timeLimit:
             .days(7) // Generic time limits default to weekly
         }
+    }
+
+    /// Monthly billing windows used by Cursor's two usage pools and similar meters.
+    public static func isMonthlyTimeLimit(_ name: String) -> Bool {
+        let n = name.lowercased()
+        if n == "monthly" || n.contains("month") || n.contains("月") { return true }
+        if n == "cursor models" || n == "other models" { return true }
+        if n == "on-demand" || n == "team" { return true }
+        return false
     }
 
     /// The model name if this is a model-specific quota, nil otherwise

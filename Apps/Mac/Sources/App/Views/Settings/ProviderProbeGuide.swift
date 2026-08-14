@@ -138,7 +138,7 @@ struct ProviderProbeGuide: Identifiable, Sendable {
             steps: [
                 "读取 ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb",
                 "从库中取出 access token，解码 JWT 得到 userId",
-                "请求 https://cursor.com/api/usage-summary 解析 plan / on-demand",
+                "请求 https://cursor.com/api/usage-summary 解析 Cursor 模型 / 其他模型 双桶",
             ],
             credentialHint: "需已在本机 Cursor 客户端登录",
             dashboardURL: URL(string: "https://cursor.com/settings")

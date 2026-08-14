@@ -231,10 +231,19 @@ struct ProviderSummaryCardView: View {
 
     private var isCodex: Bool { provider.id == "codex" }
 
-    /// First row always: 5H · 7D · 总额（**所有渠道**同一规则）
-    /// - 5H / 7D：读到用真值，否则 `—`
-    /// - 总额：读到真实月额度用真值；否则按续费日日历线性递减（与 7D 脱钩）
+    private var isCursor: Bool { provider.id == "cursor" }
+
+    /// First row:
+    /// - Cursor: always two bars — Cursor 模型 | 其他模型 (replaces 7D-style pair)
+    /// - Others: 5H · 7D · 总额
     private var primaryColumns: [SummaryQuotaItem] {
+        if isCursor {
+            return [
+                cursorPoolItem(quotaName: "Cursor Models", title: l10n.t("quota.cursor.models")),
+                cursorPoolItem(quotaName: "Other Models", title: l10n.t("quota.cursor.other")),
+            ]
+        }
+
         let snapshot = self.snapshot
 
         let session: SummaryQuotaItem = {
@@ -287,12 +296,25 @@ struct ProviderSummaryCardView: View {
         )
     }
 
-    /// Second row:
-    /// - Codex: GPT-5.3-Codex-Spark 周限额 + 积分
-    /// - MiniMax: 视频 only
+    private func cursorPoolItem(quotaName: String, title: String) -> SummaryQuotaItem {
+        if let quota = snapshot?.quotas.first(where: { item in
+            if case .timeLimit(let name) = item.quotaType {
+                return name.localizedCaseInsensitiveCompare(quotaName) == .orderedSame
+            }
+            return false
+        }) {
+            return SummaryQuotaItem(from: quota, title: title)
+        }
+        return .placeholder(title: title)
+    }
+
     private var secondaryColumns: [SummaryQuotaItem] {
         guard let snapshot else { return [] }
         var cols: [SummaryQuotaItem] = []
+
+        if isCursor {
+            return []
+        }
 
         if isCodex {
             if let spark = snapshot.quotas.first(where: { q in

@@ -11,25 +11,18 @@ import Domain
 ///
 /// The auth cookie format is: `WorkosCursorSessionToken={userId}::{accessToken}`
 ///
-/// Actual API response shape (usage-summary):
+/// Official individual usage is two monthly pools (Cursor settings / dashboard):
+/// - **Cursor Models** (`autoPercentUsed`): Grok / Composer
+/// - **Other Models** (`apiPercentUsed`): third-party API usage
+///
 /// ```json
 /// {
 ///   "membershipType": "ultra",
-///   "isUnlimited": false,
-///   "billingCycleStart": "2026-02-06T03:34:49.000Z",
-///   "billingCycleEnd": "2026-03-06T03:34:49.000Z",
 ///   "individualUsage": {
 ///     "plan": {
-///       "enabled": true,
-///       "used": 326,
-///       "limit": 40000,
-///       "remaining": 39674
-///     },
-///     "onDemand": {
-///       "enabled": false,
-///       "used": 0,
-///       "limit": null,
-///       "remaining": null
+///       "autoPercentUsed": 1,
+///       "apiPercentUsed": 5,
+///       "totalPercentUsed": 1.8
 ///     }
 ///   }
 /// }
@@ -40,6 +33,9 @@ public struct CursorUsageProbe: UsageProbe {
     private let dbPathOverride: String?
 
     private static let usageSummaryURL = "https://cursor.com/api/usage-summary"
+
+    static let cursorModelsQuotaName = "Cursor Models"
+    static let otherModelsQuotaName = "Other Models"
 
     /// The default path to Cursor's SQLite database on macOS
     static let defaultDatabasePath: String = {
@@ -134,12 +130,10 @@ public struct CursorUsageProbe: UsageProbe {
             throw ProbeError.parseFailed("Invalid JWT format")
         }
 
-        // JWT payload is base64url-encoded
         var base64 = String(parts[1])
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
 
-        // Pad to multiple of 4
         let remainder = base64.count % 4
         if remainder > 0 {
             base64 += String(repeating: "=", count: 4 - remainder)
@@ -195,9 +189,8 @@ public struct CursorUsageProbe: UsageProbe {
 
     // MARK: - Response Parsing (static for testability)
 
-    /// Parses the Cursor usage-summary API response into a UsageSnapshot.
-    ///
-    /// The API returns usage nested under `individualUsage.plan` and `individualUsage.onDemand`.
+    /// Current dashboard: `autoPercentUsed` = Cursor Models, `apiPercentUsed` = Other Models.
+    /// Older payloads without those fields still fall back to a single Monthly request meter.
     public static func parseUsageSummary(_ data: Data) throws -> UsageSnapshot {
         let json: [String: Any]
         do {
@@ -216,63 +209,44 @@ public struct CursorUsageProbe: UsageProbe {
         let membershipType = json["membershipType"] as? String ?? "unknown"
         let limitType = json["limitType"] as? String ?? ""
 
-        // Parse billing cycle dates for reset time
-        var resetsAt: Date?
-        if let cycleEnd = json["billingCycleEnd"] as? String {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: cycleEnd) {
-                resetsAt = date
-            } else {
-                // Try without fractional seconds
-                formatter.formatOptions = [.withInternetDateTime]
-                resetsAt = formatter.date(from: cycleEnd)
-            }
-        }
+        let cycleStart = Self.parseISO8601(json["billingCycleStart"] as? String)
+        let cycleEnd = Self.parseISO8601(json["billingCycleEnd"] as? String)
+        let windowDuration: TimeInterval? = {
+            guard let cycleStart, let cycleEnd else { return nil }
+            let span = cycleEnd.timeIntervalSince(cycleStart)
+            return span > 0 ? span : nil
+        }()
 
-        // The API nests usage under "individualUsage" with "plan" and "onDemand" sub-objects
         let individualUsage = json["individualUsage"] as? [String: Any]
+        let planUsage = individualUsage?["plan"] as? [String: Any]
+        let parsedTwoPools = Self.appendTwoPoolQuotas(
+            from: planUsage,
+            autoOverride: Self.percentFromDisplayMessage(json["autoModelSelectedDisplayMessage"] as? String),
+            apiOverride: Self.percentFromDisplayMessage(json["namedModelSelectedDisplayMessage"] as? String),
+            resetsAt: cycleEnd,
+            windowDuration: windowDuration,
+            into: &quotas
+        )
 
-        // Parse plan usage (included requests)
-        if let planUsage = individualUsage?["plan"] as? [String: Any],
-           let enabled = planUsage["enabled"] as? Bool, enabled {
-            let used = Self.intValue(from: planUsage, key: "used") ?? 0
-            let limit = Self.intValue(from: planUsage, key: "limit") ?? 0
-
-            // The `used`/`limit` fields describe only the *included* base allotment. Users
-            // with bonus credits have `limit` maxed (used == limit) while real capacity is
-            // `breakdown.total` (included + bonus). Enterprise plans report `limit == 0` and
-            // carry everything in the breakdown. Use the larger of the two as the true
-            // capacity so bonus credits aren't ignored.
-            let breakdown = planUsage["breakdown"] as? [String: Any]
-            let breakdownTotal = breakdown.flatMap { Self.intValue(from: $0, key: "total") } ?? 0
-            let effectiveLimit = max(limit, breakdownTotal)
-
-            if effectiveLimit > 0 {
-                // `totalPercentUsed` is Cursor's authoritative usage figure across the full
-                // capacity (matches the "You've used X%" message in Cursor's own UI). Prefer
-                // it; fall back to used/limit only when the API doesn't provide it.
-                let percentRemaining: Double
-                let effectiveUsed: Int
-                if let totalPercentUsed = planUsage["totalPercentUsed"] as? Double {
-                    percentRemaining = 100 - totalPercentUsed
-                    effectiveUsed = Int((totalPercentUsed * Double(effectiveLimit) / 100).rounded())
-                } else {
-                    effectiveUsed = used
-                    percentRemaining = Double(effectiveLimit - used) / Double(effectiveLimit) * 100
-                }
-
-                quotas.append(UsageQuota(
-                    percentRemaining: max(0, percentRemaining),
-                    quotaType: .timeLimit("Monthly"),
-                    providerId: "cursor",
-                    resetsAt: resetsAt,
-                    resetText: "\(effectiveUsed)/\(effectiveLimit) requests"
-                ))
-            }
+        if !parsedTwoPools {
+            Self.appendLegacyMonthlyQuota(
+                from: planUsage,
+                resetsAt: cycleEnd,
+                windowDuration: windowDuration,
+                into: &quotas
+            )
         }
 
-        // Parse on-demand usage (usage-based pricing)
+        if quotas.isEmpty {
+            Self.appendPoolsFromDisplayMessages(
+                autoMessage: json["autoModelSelectedDisplayMessage"] as? String,
+                namedMessage: json["namedModelSelectedDisplayMessage"] as? String,
+                resetsAt: cycleEnd,
+                windowDuration: windowDuration,
+                into: &quotas
+            )
+        }
+
         if let onDemand = individualUsage?["onDemand"] as? [String: Any],
            let enabled = onDemand["enabled"] as? Bool, enabled {
             let used = Self.intValue(from: onDemand, key: "used") ?? 0
@@ -284,13 +258,13 @@ public struct CursorUsageProbe: UsageProbe {
                     percentRemaining: max(0, percentRemaining),
                     quotaType: .timeLimit("On-Demand"),
                     providerId: "cursor",
-                    resetsAt: resetsAt,
-                    resetText: "\(used)/\(limit) on-demand"
+                    resetsAt: cycleEnd,
+                    resetText: "\(used)/\(limit) on-demand",
+                    windowDuration: windowDuration
                 ))
             }
         }
 
-        // Parse team usage for enterprise plans (limitType == "team")
         if limitType == "team",
            let teamUsage = json["teamUsage"] as? [String: Any],
            let teamOnDemand = teamUsage["onDemand"] as? [String: Any],
@@ -304,13 +278,13 @@ public struct CursorUsageProbe: UsageProbe {
                     percentRemaining: max(0, percentRemaining),
                     quotaType: .timeLimit("Team"),
                     providerId: "cursor",
-                    resetsAt: resetsAt,
-                    resetText: "\(used)/\(limit) team credits"
+                    resetsAt: cycleEnd,
+                    resetText: "\(used)/\(limit) team credits",
+                    windowDuration: windowDuration
                 ))
             }
         }
 
-        // Check for unlimited plans
         if let isUnlimited = json["isUnlimited"] as? Bool, isUnlimited {
             quotas.append(UsageQuota(
                 percentRemaining: 100,
@@ -320,27 +294,157 @@ public struct CursorUsageProbe: UsageProbe {
             ))
         }
 
-        // If no quotas found, the user might be on a free plan with no data
         guard !quotas.isEmpty else {
             throw ProbeError.parseFailed("No usage data found in Cursor response")
-        }
-
-        // Determine account tier from membership type
-        let tier: AccountTier? = switch membershipType.lowercased() {
-        case "pro": .custom("PRO")
-        case "business": .custom("BUSINESS")
-        case "free": .custom("FREE")
-        case "ultra": .custom("ULTRA")
-        case "enterprise": .custom("ENTERPRISE")
-        default: membershipType.isEmpty ? nil : .custom(membershipType.uppercased())
         }
 
         return UsageSnapshot(
             providerId: "cursor",
             quotas: quotas,
             capturedAt: Date(),
-            accountTier: tier
+            accountTier: Self.accountTier(from: membershipType)
         )
+    }
+
+    /// Returns true when the official two-pool percentages were present.
+    @discardableResult
+    private static func appendTwoPoolQuotas(
+        from planUsage: [String: Any]?,
+        autoOverride: Double?,
+        apiOverride: Double?,
+        resetsAt: Date?,
+        windowDuration: TimeInterval?,
+        into quotas: inout [UsageQuota]
+    ) -> Bool {
+        guard let planUsage else { return false }
+        if let enabled = planUsage["enabled"] as? Bool, enabled == false {
+            return false
+        }
+
+        // Settings UI rounds via the display messages ("You've used 1%"); raw
+        // `autoPercentUsed` can be 0.061 while the bar still says 1%.
+        let autoPct = autoOverride ?? Self.doubleValue(from: planUsage, key: "autoPercentUsed")
+        let apiPct = apiOverride ?? Self.doubleValue(from: planUsage, key: "apiPercentUsed")
+        guard autoPct != nil || apiPct != nil else { return false }
+
+        if let autoPct {
+            quotas.append(UsageQuota(
+                percentRemaining: max(0, 100 - autoPct),
+                quotaType: .timeLimit(cursorModelsQuotaName),
+                providerId: "cursor",
+                resetsAt: resetsAt,
+                windowDuration: windowDuration
+            ))
+        }
+        if let apiPct {
+            quotas.append(UsageQuota(
+                percentRemaining: max(0, 100 - apiPct),
+                quotaType: .timeLimit(otherModelsQuotaName),
+                providerId: "cursor",
+                resetsAt: resetsAt,
+                windowDuration: windowDuration
+            ))
+        }
+        return true
+    }
+
+    private static func appendLegacyMonthlyQuota(
+        from planUsage: [String: Any]?,
+        resetsAt: Date?,
+        windowDuration: TimeInterval?,
+        into quotas: inout [UsageQuota]
+    ) {
+        guard let planUsage,
+              let enabled = planUsage["enabled"] as? Bool, enabled else { return }
+
+        let used = Self.intValue(from: planUsage, key: "used") ?? 0
+        let limit = Self.intValue(from: planUsage, key: "limit") ?? 0
+        let breakdown = planUsage["breakdown"] as? [String: Any]
+        let breakdownTotal = breakdown.flatMap { Self.intValue(from: $0, key: "total") } ?? 0
+        let effectiveLimit = max(limit, breakdownTotal)
+        guard effectiveLimit > 0 else { return }
+
+        let percentRemaining: Double
+        let effectiveUsed: Int
+        if let totalPercentUsed = Self.doubleValue(from: planUsage, key: "totalPercentUsed") {
+            percentRemaining = 100 - totalPercentUsed
+            effectiveUsed = Int((totalPercentUsed * Double(effectiveLimit) / 100).rounded())
+        } else {
+            effectiveUsed = used
+            percentRemaining = Double(effectiveLimit - used) / Double(effectiveLimit) * 100
+        }
+
+        quotas.append(UsageQuota(
+            percentRemaining: max(0, percentRemaining),
+            quotaType: .timeLimit("Monthly"),
+            providerId: "cursor",
+            resetsAt: resetsAt,
+            resetText: "\(effectiveUsed)/\(effectiveLimit) requests",
+            windowDuration: windowDuration
+        ))
+    }
+
+    private static func appendPoolsFromDisplayMessages(
+        autoMessage: String?,
+        namedMessage: String?,
+        resetsAt: Date?,
+        windowDuration: TimeInterval?,
+        into quotas: inout [UsageQuota]
+    ) {
+        guard let autoUsed = percentFromDisplayMessage(autoMessage),
+              let apiUsed = percentFromDisplayMessage(namedMessage) else { return }
+
+        quotas.append(UsageQuota(
+            percentRemaining: max(0, 100 - autoUsed),
+            quotaType: .timeLimit(cursorModelsQuotaName),
+            providerId: "cursor",
+            resetsAt: resetsAt,
+            windowDuration: windowDuration
+        ))
+        quotas.append(UsageQuota(
+            percentRemaining: max(0, 100 - apiUsed),
+            quotaType: .timeLimit(otherModelsQuotaName),
+            providerId: "cursor",
+            resetsAt: resetsAt,
+            windowDuration: windowDuration
+        ))
+    }
+
+    static func accountTier(from membershipType: String) -> AccountTier? {
+        let normalized = membershipType
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+        switch normalized {
+        case "pro": return .custom("PRO")
+        case "pro_plus", "proplus", "pro+": return .custom("PRO+")
+        case "ultra": return .custom("ULTRA")
+        case "start": return .custom("START")
+        case "free", "hobby": return .custom("HOBBY")
+        case "business", "team", "teams": return .custom("TEAMS")
+        case "enterprise": return .custom("ENTERPRISE")
+        default:
+            return membershipType.isEmpty ? nil : .custom(membershipType.uppercased())
+        }
+    }
+
+    private static func parseISO8601(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: raw) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: raw)
+    }
+
+    private static func percentFromDisplayMessage(_ message: String?) -> Double? {
+        guard let message, let percentIndex = message.firstIndex(of: "%") else { return nil }
+        let before = message[..<percentIndex]
+        guard let start = before.lastIndex(where: { !$0.isNumber && $0 != "." }) else {
+            return Double(before)
+        }
+        let number = before[before.index(after: start)...]
+        return Double(number)
     }
 
     /// Safely extracts an Int from a JSON dictionary value that could be Int, Double, or NSNumber.
@@ -350,6 +454,16 @@ public struct CursorUsageProbe: UsageProbe {
         }
         if let doubleVal = dict[key] as? Double {
             return Int(doubleVal)
+        }
+        return nil
+    }
+
+    private static func doubleValue(from dict: [String: Any], key: String) -> Double? {
+        if let doubleVal = dict[key] as? Double {
+            return doubleVal
+        }
+        if let intVal = dict[key] as? Int {
+            return Double(intVal)
         }
         return nil
     }

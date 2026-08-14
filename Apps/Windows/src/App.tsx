@@ -1068,9 +1068,38 @@ function nearestRefresh(secs: number): number {
   return opts.reduce((a, b) => (Math.abs(b - secs) < Math.abs(a - secs) ? b : a));
 }
 
-/** 5H · 7D · 总额 — same policy as Mac for every provider. */
+/** 5H · 7D · 总额 — Cursor replaces that row with two official pools. */
 function primaryMeters(card: QuotaCard, renewalDate?: string | null): QuotaMeter[] {
   const meters = card.meters ?? [];
+
+  if (card.providerId === "cursor") {
+    const models = meters.find((m) => {
+      const text = `${m.label || ""} ${m.key || ""}`.toLowerCase();
+      return text.includes("cursor 模型") || text.includes("cursor models");
+    });
+    const other = meters.find((m) => {
+      const text = `${m.label || ""} ${m.key || ""}`.toLowerCase();
+      return text.includes("其他模型") || text.includes("other models");
+    });
+    return [
+      {
+        key: models?.key || "time:Cursor Models",
+        kind: "time",
+        label: "Cursor 模型",
+        remainingPercent: models?.remainingPercent ?? null,
+        resetText: null,
+        resetsAtUnix: models?.resetsAtUnix ?? null,
+      },
+      {
+        key: other?.key || "time:Other Models",
+        kind: "time",
+        label: "其他模型",
+        remainingPercent: other?.remainingPercent ?? null,
+        resetText: null,
+        resetsAtUnix: other?.resetsAtUnix ?? null,
+      },
+    ];
+  }
 
   const session =
     meters.find((m) => m.kind === "session" || m.key === "session") ??

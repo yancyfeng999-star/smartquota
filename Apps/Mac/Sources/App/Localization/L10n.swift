@@ -118,6 +118,8 @@ final class L10n {
         // Card primary meters: 5H · 7D · 总额
         "quota.5h": [.zhHans: "5H", .en: "5H", .ja: "5H", .ko: "5H", .ru: "5H", .ar: "5H", .fr: "5H", .de: "5H", .es: "5H", .pt: "5H"],
         "quota.monthly": [.zhHans: "总额", .en: "总额", .ja: "总额", .ko: "总额", .ru: "总额", .ar: "总额", .fr: "总额", .de: "总额", .es: "总额", .pt: "总额"],
+        "quota.cursor.models": [.zhHans: "Cursor 模型", .en: "Cursor Models", .ja: "Cursor モデル", .ko: "Cursor 모델", .ru: "Модели Cursor", .ar: "نماذج Cursor", .fr: "Modèles Cursor", .de: "Cursor-Modelle", .es: "Modelos Cursor", .pt: "Modelos Cursor"],
+        "quota.cursor.other": [.zhHans: "其他模型", .en: "Other Models", .ja: "その他のモデル", .ko: "기타 모델", .ru: "Другие модели", .ar: "نماذج أخرى", .fr: "Autres modèles", .de: "Andere Modelle", .es: "Otros modelos", .pt: "Outros modelos"],
         "quota.next_renewal": [.zhHans: "下次续费", .en: "Next renewal", .ja: "次回更新", .ko: "다음 갱신", .ru: "След. продление", .ar: "التجديد التالي", .fr: "Prochain renouvellement", .de: "Nächste Verlängerung", .es: "Próxima renovación", .pt: "Próxima renovação"],
         "quota.pick_activation": [.zhHans: "点日期选开通日，按自然月自动算下次续费", .en: "Pick activation date; next renewal is calendar-month based", .ja: "開始日を選ぶと自然月で次回更新を計算", .ko: "개통일을 선택하면 자연월 기준으로 다음 갱신 계산", .ru: "Выберите дату активации; продление по календарному месяцу", .ar: "اختر تاريخ التفعيل؛ التجديد حسب الشهر الميلادي", .fr: "Choisissez la date d’activation ; renouvellement au mois civil", .de: "Aktivierungsdatum wählen; Verlängerung monatsbasiert", .es: "Elige fecha de activación; renovación por mes natural", .pt: "Escolha a data de ativação; renovação por mês civil"],
         "quota.plan_unset": [.zhHans: "套餐未设置", .en: "Plan not set", .ja: "プラン未設定", .ko: "요금제 미설정", .ru: "План не задан", .ar: "الخطة غير محددة", .fr: "Offre non définie", .de: "Tarif nicht gesetzt", .es: "Plan no definido", .pt: "Plano não definido"],
@@ -272,7 +274,7 @@ final class L10n {
         "probe.copilot.step.2": [.zhHans: "可配置用户名、月额度上限与手动覆盖", .en: "optional username, monthly limit, manual override"],
         "probe.cursor.step.0": [.zhHans: "读取 ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb", .en: "read ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb"],
         "probe.cursor.step.1": [.zhHans: "从库中取出 access token，解码 JWT 得到 userId", .en: "read access token, decode JWT userId"],
-        "probe.cursor.step.2": [.zhHans: "请求 https://cursor.com/api/usage-summary 解析 plan / on-demand", .en: "request https://cursor.com/api/usage-summary parse plan / on-demand"],
+        "probe.cursor.step.2": [.zhHans: "请求 https://cursor.com/api/usage-summary 解析 Cursor 模型 / 其他模型 双桶", .en: "request https://cursor.com/api/usage-summary parse Cursor Models / Other Models"],
         "probe.antigravity.step.0": [.zhHans: "检测本机是否运行 Antigravity / 相关 CLI", .en: "detect local Antigravity / CLI"],
         "probe.antigravity.step.1": [.zhHans: "请求本地 HTTPS 接口（可含自签证书）", .en: "请求本地 HTTPS  API（可含自签证书）"],
         "probe.antigravity.step.2": [.zhHans: "解析返回的配额窗口与剩余比例", .en: "parse quota windows and remaining"],

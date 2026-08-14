@@ -1,0 +1,2 @@
+23c364a2f15ab9b49aadd397d2dd59805ece404d1e678eed37a4dcbab4e4bbbd  智额-0.3.28.dmg
+a78dc96d884d4dac2fe9e1a2e5fcf77c1a832bb2d55cc8a20c09ae5900addb03  智额-0.3.28.pkg

@@ -94,6 +94,14 @@ struct QuotaTypeTests {
         #expect(QuotaType.timeLimit("any").duration == .days(7))
     }
 
+    @Test
+    func `cursor usage pools use a monthly duration`() {
+        #expect(QuotaType.timeLimit("Monthly").duration == .days(30))
+        #expect(QuotaType.timeLimit("Cursor Models").duration == .days(30))
+        #expect(QuotaType.timeLimit("Other Models").duration == .days(30))
+        #expect(QuotaType.timeLimit("On-Demand").duration == .days(30))
+    }
+
     // MARK: - Model Name Tests
 
     @Test

@@ -74,6 +74,12 @@ enum MembershipPlanStore {
             // Generic API tier tokens — no personal plan names
             if upper == "PRO" { return "Pro" }
             if upper == "PLUS" { return "Plus" }
+            if upper == "PRO+" || upper == "PRO_PLUS" || upper == "PROPLUS" { return "Pro+" }
+            if upper == "ULTRA" { return "Ultra" }
+            if upper == "START" { return "Start" }
+            if upper == "HOBBY" || upper == "FREE" { return "Hobby" }
+            if upper == "TEAMS" || upper == "BUSINESS" { return "Teams" }
+            if upper == "ENTERPRISE" { return "Enterprise" }
             return cleaned
         }
     }
