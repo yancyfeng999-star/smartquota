@@ -18,12 +18,15 @@ struct MenuContentView: View {
 
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     #if ENABLE_SPARKLE
     @Environment(\.sparkleUpdater) private var sparkleUpdater
     #endif
     @State private var isHoveringRefresh = false
     @State private var animateIn = false
     @State private var showSettings = false
+    @State private var showHelp = false
     @State private var showSharePass = false
     @State private var settings = AppSettings.shared
     private var l10n: L10n { L10n.shared }
@@ -93,6 +96,9 @@ struct MenuContentView: View {
         .environment(\.layoutDirection, l10n.language.layoutDirection)
         .environment(\.locale, l10n.language.locale)
         .id(l10n.revision)
+        .sheet(isPresented: $showHelp) {
+            HelpCenterView(monitor: monitor)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .hookSettingsChanged)) { notification in
             let enabled = notification.userInfo?["enabled"] as? Bool ?? false
             onHookSettingsChanged?(enabled)
@@ -110,8 +116,12 @@ struct MenuContentView: View {
                 AppLog.notifications.info("Alert permission request result: \(granted ? "granted" : "denied")")
             }
 
-            withAnimation(.easeOut(duration: 0.45)) {
+            if reduceMotion {
                 animateIn = true
+            } else {
+                withAnimation(.easeOut(duration: 0.45)) {
+                    animateIn = true
+                }
             }
 
             await refreshAllEnabled()
@@ -191,6 +201,8 @@ struct MenuContentView: View {
                 .interpolation(.high)
                 .scaledToFit()
                 .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
+                .accessibilityIdentifier(AccessibilityChrome.ID.decorativeAppLogo)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(Brand.displayTitle)
@@ -204,9 +216,10 @@ struct MenuContentView: View {
 
             // Refresh time sits left of the sync button (larger type)
             Text(refreshSubtitle)
-                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .font(AppTypeScale.callout(.rounded, weight: .medium))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                .untruncatedSupportText()
 
             Button {
                 Task { await refreshAllEnabled() }
@@ -218,8 +231,11 @@ struct MenuContentView: View {
             }
             .buttonStyle(.plain)
             .disabled(isAnySyncing)
-            .help("刷新全部")
             .keyboardShortcut("r")
+            .supportIconAccessibility(
+                id: AccessibilityChrome.ID.menuRefresh,
+                valueKey: isAnySyncing ? "a11y.refresh.value.running" : "a11y.refresh.value.idle"
+            )
 
             // Pin: deferred floating window (never block the menu click handler)
             Button {
@@ -236,7 +252,22 @@ struct MenuContentView: View {
                     )
             }
             .buttonStyle(.plain)
-            .help(runsInPinnedWindow || settings.windowPinned ? "取消置顶" : "置顶常驻窗口（点其他应用不关闭）")
+            .supportIconAccessibility(
+                id: AccessibilityChrome.ID.menuPin,
+                valueKey: (runsInPinnedWindow || settings.windowPinned) ? "a11y.pin.value.on" : "a11y.pin.value.off"
+            )
+
+            Button {
+                showHelp = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 28, height: 26)
+                    .foregroundStyle(.primary)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut("?", modifiers: [.command])
+            .supportIconAccessibility(id: AccessibilityChrome.ID.menuHelp, valueKey: "a11y.help.value")
         }
     }
 
@@ -357,6 +388,7 @@ struct MenuContentView: View {
             )
             .disabled(selectedProvider?.dashboardURL == nil)
             .keyboardShortcut("d")
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.menuDashboard)
 
             membershipCommandButton(
                 title: l10n.t("common.settings"),
@@ -364,13 +396,15 @@ struct MenuContentView: View {
                 action: { showSettings = true }
             )
             .keyboardShortcut(",")
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.menuSettings)
 
             membershipCommandButton(
                 title: l10n.t("common.quit"),
                 systemName: "power",
                 action: { NSApplication.shared.terminate(nil) }
             )
-            .help("完全退出智额（菜单栏图标会消失）")
+            .help(l10n.t("common.quit"))
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.menuQuit)
             // No ⌘Q here — ⌘Q still works system-wide; avoid accidental toolbar quit.
         }
     }
@@ -395,6 +429,7 @@ struct MenuContentView: View {
                 )
         }
         .buttonStyle(.plain)
+        .focusable()
     }
 
     /// Upper bound for the scrollable content region — see
@@ -700,17 +735,16 @@ struct MenuContentView: View {
     }
 
     private func compactErrorState(provider: any AIProvider) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(theme.statusWarning)
-
-            Text(provider.lastError?.localizedDescription ?? "Unavailable")
-                .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
-                .foregroundStyle(theme.textTertiary)
-                .lineLimit(1)
-
-            Spacer()
+        let kind = SupportErrorCatalog.classify(provider.lastError)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(SemanticStatusStyle.color(.warning, theme: theme, highContrast: colorSchemeContrast == .increased))
+                    .decorativeGlyph()
+                SemanticStatusLabel(kind: .failure, theme: theme, highContrast: colorSchemeContrast == .increased)
+            }
+            UnifiedErrorBlock(kind: kind, theme: theme)
         }
         .padding(.vertical, 4)
     }
@@ -937,17 +971,18 @@ struct MenuContentView: View {
             }
 
             Text("\(selectedProvider?.name ?? selectedProviderId) \(L10n.shared.t("menu.unavailable"))")
-                .font(.system(size: 14, weight: .bold, design: theme.fontDesign))
+                .font(AppTypeScale.headline(theme.fontDesign))
                 .foregroundStyle(theme.textPrimary)
+                .untruncatedSupportText()
 
-            // Show actual error message if available, otherwise generic message
-            Text(selectedProvider?.lastError?.localizedDescription ?? "Install CLI or check configuration")
-                .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
-                .foregroundStyle(theme.textTertiary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
+            UnifiedErrorBlock(
+                kind: SupportErrorCatalog.classify(selectedProvider?.lastError),
+                theme: theme
+            )
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 16)
         }
-        .frame(height: 140)
+        .frame(minHeight: 140)
         .frame(maxWidth: .infinity)
         .glassCard()
     }
@@ -967,6 +1002,7 @@ struct MenuContentView: View {
                 }
             }
             .keyboardShortcut("d")
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.menuDashboard)
 
             // Refresh Button
             let isCurrentlyRefreshing = settings.overviewModeEnabled
@@ -985,6 +1021,10 @@ struct MenuContentView: View {
                 }
             }
             .keyboardShortcut("r")
+            .supportIconAccessibility(
+                id: AccessibilityChrome.ID.menuRefresh,
+                valueKey: isCurrentlyRefreshing ? "a11y.refresh.value.running" : "a11y.refresh.value.idle"
+            )
 
             Spacer()
 
@@ -1012,8 +1052,8 @@ struct MenuContentView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .help("Share Claude Code")
                 .keyboardShortcut("s")
+                .supportIconAccessibility(id: AccessibilityChrome.ID.menuShare, valueKey: "a11y.share.value")
             }
 
             // Settings Button with update indicator
@@ -1040,8 +1080,8 @@ struct MenuContentView: View {
                 }
             }
             .buttonStyle(.plain)
-            .help(updateAvailableHelpText)
             .keyboardShortcut(",")
+            .supportIconAccessibility(id: AccessibilityChrome.ID.menuSettings, valueKey: "a11y.settings_icon.value")
 
             // Close panel only — do NOT terminate. App stays in the menu bar.
             Button {
@@ -1058,7 +1098,7 @@ struct MenuContentView: View {
                 }
             }
             .buttonStyle(.plain)
-            .help("关闭面板（智额继续在菜单栏后台运行）")
+            .supportIconAccessibility(id: AccessibilityChrome.ID.menuClosePanel, valueKey: "a11y.close_panel.value")
         }
         .opacity(animateIn ? 1 : 0)
         .animation(.easeOut(duration: 0.5).delay(0.3), value: animateIn)

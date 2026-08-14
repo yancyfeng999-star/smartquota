@@ -81,6 +81,7 @@ let project = Project(
             sources: ["Sources/App/**"],
             resources: [
                 "Sources/App/Resources/**",
+                "../../docs/USER_GUIDE.md",
             ],
             entitlements: .file(path: "Sources/App/entitlements.plist"),
             dependencies: [

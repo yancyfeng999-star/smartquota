@@ -220,6 +220,9 @@ struct AccountManagementCard: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("\(l10n.t("account.delete")) \(account.displayName)")
+                .accessibilityHint(l10n.t("a11y.account_delete.hint"))
+                .accessibilityValue(account.displayName)
+                .supportKeyboardIdentifier(AccessibilityChrome.ID.accountDelete)
             }
         }
         .padding(.vertical, 4)

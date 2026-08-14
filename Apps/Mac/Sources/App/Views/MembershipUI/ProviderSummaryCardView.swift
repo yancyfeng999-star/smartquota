@@ -30,6 +30,9 @@ struct ProviderSummaryCardView: View {
             y: isHovering ? 3 : 0
         )
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(statusLabel)
         .onTapGesture(perform: onSelect)
         .onHover { hovering in
             withAnimation(AppMotion.hover) {
@@ -168,12 +171,12 @@ struct ProviderSummaryCardView: View {
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 2)
                 Text(item.displayValue(mode: displayMode))
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .font(AppTypeScale.callout(.rounded, weight: .bold))
                     .monospacedDigit()
                     // Same style as 5h / 7d / 总额 — no accent/highlight color
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.75)
+                    .untruncatedSupportText()
             }
 
             GeometryReader { proxy in

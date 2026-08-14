@@ -68,6 +68,7 @@ struct SettingsContentView: View {
                     thresholdAlertCard
                     launchAtLoginCard
                     DiagnosticsSettingsCard(monitor: monitor)
+                    HelpSettingsCard(monitor: monitor)
                     logsCard
                     updatesCard
                     securityCard
@@ -693,8 +694,10 @@ struct SettingsContentView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 10, weight: .bold))
+                        .decorativeGlyph()
                     Text(l10n.t("common.back"))
-                        .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                        .font(AppTypeScale.callout(theme.fontDesign, weight: .medium))
+                        .untruncatedSupportText()
                 }
                 .foregroundStyle(theme.textPrimary)
                 .padding(.horizontal, 10)
@@ -709,6 +712,7 @@ struct SettingsContentView: View {
                 )
             }
             .buttonStyle(.plain)
+            .supportIconAccessibility(id: AccessibilityChrome.ID.settingsBack, valueKey: "a11y.back.value")
 
             Spacer()
 
@@ -748,17 +752,18 @@ struct SettingsContentView: View {
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(.white)
                 }
+                .decorativeGlyph()
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(l10n.t("settings.updates"))
-                        .font(.system(size: 13, weight: .bold, design: theme.fontDesign))
+                        .font(AppTypeScale.headline(theme.fontDesign))
                         .foregroundStyle(theme.textPrimary)
-                        .lineLimit(1)
+                        .untruncatedSupportText()
 
                     Text(updateSubtitle)
-                        .font(.system(size: 10, weight: .medium, design: theme.fontDesign))
+                        .font(AppTypeScale.caption(theme.fontDesign))
                         .foregroundStyle(updateIsAvailable ? theme.accentPrimary : theme.textTertiary)
-                        .lineLimit(1)
+                        .untruncatedSupportText()
                 }
 
                 Spacer(minLength: 8)
@@ -795,6 +800,7 @@ struct SettingsContentView: View {
                 .buttonStyle(.plain)
                 .disabled(isCheckingUpdate)
                 .opacity(isCheckingUpdate ? 0.7 : 1)
+                .supportKeyboardIdentifier(AccessibilityChrome.ID.settingsCheckUpdates)
             }
 
             if isInstallingUpdate {
@@ -902,7 +908,7 @@ struct SettingsContentView: View {
         } catch {
             updateIsAvailable = false
             updateDownloadProgress = nil
-            updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
+            updateStatusText = SupportErrorCatalog.copy(for: .updateCheckFailed, language: l10n.supportLanguage).fullMessage
         }
     }
 
@@ -946,7 +952,7 @@ struct SettingsContentView: View {
             updateStatusText = manualUpdateErrorMessage(error)
         } catch {
             updateDownloadProgress = nil
-            updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
+            updateStatusText = SupportErrorCatalog.copy(for: .updateCheckFailed, language: l10n.supportLanguage).fullMessage
         }
     }
 
@@ -967,7 +973,7 @@ struct SettingsContentView: View {
                 updateStatusText = manualUpdateErrorMessage(error)
             } catch {
                 isInstallingUpdate = false
-                updateStatusText = l10n.tf("settings.updates_failed_fmt", error.localizedDescription)
+                updateStatusText = SupportErrorCatalog.copy(for: .updateCheckFailed, language: l10n.supportLanguage).fullMessage
             }
             return
         }
@@ -981,14 +987,8 @@ struct SettingsContentView: View {
     }
 
     private func manualUpdateErrorMessage(_ error: ManualUpdateError) -> String {
-        switch error {
-        case .invalidCurrentVersion:
-            return l10n.t("settings.updates_failed_version")
-        case .noMacReleaseFound:
-            return l10n.t("settings.updates_failed_none")
-        case .network(let detail), .decode(let detail), .install(let detail):
-            return l10n.tf("settings.updates_failed_fmt", detail)
-        }
+        _ = error
+        return SupportErrorCatalog.copy(for: .updateCheckFailed, language: l10n.supportLanguage).fullMessage
     }
 
     // MARK: - App Info
@@ -1023,6 +1023,7 @@ struct SettingsContentView: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.white)
             }
+            .decorativeGlyph()
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(l10n.t("settings.logs"))
@@ -1040,6 +1041,7 @@ struct SettingsContentView: View {
                 FileLogger.shared.openCurrentLogFile()
             } label: {
                 Text(l10n.t("common.open"))
+                    .untruncatedSupportText()
                     .font(.system(size: 12, weight: .semibold, design: theme.fontDesign))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
@@ -1059,6 +1061,7 @@ struct SettingsContentView: View {
                     )
             }
             .buttonStyle(.plain)
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.settingsOpenLogs)
         }
         .padding(14)
         .background(

@@ -22,6 +22,7 @@ struct DiagnosticsSettingsCard: View {
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(theme.id == "cli" ? theme.textPrimary : .white)
             }
+            .decorativeGlyph()
             VStack(alignment: .leading, spacing: 1) {
                 Text(l10n.t("settings.diagnostics"))
                     .font(.system(size: 13, weight: .bold, design: theme.fontDesign))
@@ -36,11 +37,12 @@ struct DiagnosticsSettingsCard: View {
                 showingCenter = true
             }
             .buttonStyle(.plain)
-            .font(.system(size: 11, weight: .semibold, design: theme.fontDesign))
+            .font(AppTypeScale.callout(theme.fontDesign))
             .foregroundStyle(.white)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .background(Capsule().fill(theme.accentGradient))
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.settingsOpenDiagnostics)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -70,6 +72,7 @@ struct DiagnosticsCenterView: View {
     @State private var helpProviderId: String?
     @State private var configProviderId: String?
     @State private var showingSystemHelp = false
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     private var l10n: L10n { L10n.shared }
 
     var body: some View {
@@ -96,7 +99,9 @@ struct DiagnosticsCenterView: View {
         .frame(minWidth: 440, minHeight: 520)
         .task { await runAll() }
         .sheet(isPresented: $showingSystemHelp) {
-            OnboardingHelpSheet()
+            HelpCenterView(monitor: monitor, store: store) {
+                showingSystemHelp = false
+            }
         }
         .sheet(item: helpGuide) { guide in
             DiagnosticGuideSheet(guide: guide, titleKey: "diag.action.open_help")
@@ -110,8 +115,9 @@ struct DiagnosticsCenterView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(l10n.t("diag.title"))
-                    .font(.system(size: 16, weight: .bold, design: theme.fontDesign))
+                    .font(AppTypeScale.title(theme.fontDesign))
                     .foregroundStyle(theme.textPrimary)
+                    .untruncatedSupportText()
                 Spacer()
                 Button(l10n.t("common.done")) { dismiss() }
                     .buttonStyle(.plain)
@@ -131,17 +137,21 @@ struct DiagnosticsCenterView: View {
                 Task { await runAll() }
             } label: {
                 Text(isRunning ? l10n.t("diag.running") : l10n.t("diag.run"))
+                    .untruncatedSupportText()
             }
             .buttonStyle(.plain)
             .disabled(isRunning)
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.diagRun)
 
             Button {
                 copySummary()
             } label: {
                 Text(copied ? l10n.t("diag.copied") : l10n.t("diag.copy_summary"))
+                    .untruncatedSupportText()
             }
             .buttonStyle(.plain)
             .disabled(results.isEmpty)
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.diagCopy)
 
             Spacer()
         }
@@ -153,22 +163,32 @@ struct DiagnosticsCenterView: View {
         VStack(alignment: .leading, spacing: 6) {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(localizedTitle(item))
-                        .font(.system(size: 12, weight: .semibold, design: theme.fontDesign))
-                        .foregroundStyle(theme.textPrimary)
+                    HStack(spacing: 6) {
+                        Text(localizedTitle(item))
+                            .font(AppTypeScale.body(theme.fontDesign, weight: .semibold))
+                            .foregroundStyle(theme.textPrimary)
+                            .untruncatedSupportText()
+                        SemanticStatusLabel(
+                            kind: SemanticStatusKind.from(severity: item.severity),
+                            theme: theme,
+                            highContrast: colorSchemeContrast == .increased
+                        )
+                    }
                     Text(localizedDetail(item))
-                        .font(.system(size: 11, weight: .medium, design: theme.fontDesign))
+                        .font(AppTypeScale.caption(theme.fontDesign))
                         .foregroundStyle(theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .untruncatedSupportText()
                     if !item.code.isEmpty {
                         Text(item.code)
-                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(theme.textTertiary)
+                            .untruncatedSupportText()
                     }
                 }
             } icon: {
                 Image(systemName: icon(for: item.severity))
                     .foregroundStyle(color(for: item.severity))
+                    .accessibilityHidden(true)
             }
 
             if !item.actions.isEmpty {
@@ -228,12 +248,11 @@ struct DiagnosticsCenterView: View {
     }
 
     private func color(for severity: DiagnosticSeverity) -> Color {
-        switch severity {
-        case .ok: MembershipPalette.statusSuccess
-        case .info: MembershipPalette.statusInfo
-        case .warning: MembershipPalette.statusWarning
-        case .error: MembershipPalette.statusDanger
-        }
+        SemanticStatusStyle.color(
+            SemanticStatusKind.from(severity: severity),
+            theme: theme,
+            highContrast: colorSchemeContrast == .increased
+        )
     }
 
     private func perform(_ action: DiagnosticAction, for item: DiagnosticResult) {

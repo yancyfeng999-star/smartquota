@@ -36,10 +36,17 @@ struct SafeModeView: View {
                     }
                     note(l10n.t("recovery.scope_note"))
                     if let statusText {
-                        Text(statusText)
-                            .font(.system(size: 12, weight: .medium, design: theme.fontDesign))
-                            .foregroundStyle(statusIsError ? MembershipPalette.statusDanger : MembershipPalette.statusSuccess)
-                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(alignment: .top, spacing: 6) {
+                            SemanticStatusLabel(
+                                kind: statusIsError ? .failure : .success,
+                                theme: theme,
+                                highContrast: false
+                            )
+                            Text(statusText)
+                                .font(AppTypeScale.body(theme.fontDesign))
+                                .foregroundStyle(statusIsError ? MembershipPalette.statusDanger : MembershipPalette.statusSuccess)
+                                .untruncatedSupportText()
+                        }
                     }
                     actions
                 }
@@ -111,9 +118,11 @@ struct SafeModeView: View {
             actionButton(title: l10n.t("recovery.action.export_settings"), systemName: "square.and.arrow.up") {
                 exportSettings()
             }
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.recoveryExport)
             actionButton(title: l10n.t("recovery.action.reset_settings"), systemName: "trash") {
                 confirmReset = true
             }
+            .supportKeyboardIdentifier(AccessibilityChrome.ID.recoveryReset)
             actionButton(title: l10n.t("recovery.action.retry_normal"), systemName: "arrow.clockwise", prominent: true) {
                 retryNormal()
             }
@@ -156,7 +165,7 @@ struct SafeModeView: View {
             statusText = l10n.t("recovery.status.restore_ok")
         } catch {
             statusIsError = true
-            statusText = l10n.t("recovery.status.restore_failed")
+            statusText = SupportErrorCatalog.copy(for: .backupRestoreFailed, language: l10n.supportLanguage).fullMessage
         }
     }
 
@@ -185,7 +194,7 @@ struct SafeModeView: View {
             statusText = l10n.t("recovery.status.export_ok")
         } catch {
             statusIsError = true
-            statusText = l10n.t("recovery.status.export_failed")
+            statusText = SupportErrorCatalog.copy(for: .exportFailed, language: l10n.supportLanguage).fullMessage
         }
     }
 
