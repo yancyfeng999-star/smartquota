@@ -33,7 +33,7 @@ CONFIG=Release Apps/Mac/scripts/build-test-app.sh
 
 Scheme：`SmartQuota`（产物显示名「智额」）。
 
-当前 Mac 发布版本：`0.3.29`（build `32`）。版本号唯一来源：`Sources/App/Info.plist`；对应 Release：[v0.3.29](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.29)
+当前 Mac 源码版本：`0.3.30`（build `33`，待发布）。版本号唯一来源：`Sources/App/Info.plist`；最后已发布 Release：[v0.3.29](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.29)
 
 - `CFBundleShortVersionString`：用户可见版本（如 `0.2.0`）  
 - `CFBundleVersion`：构建号（如 `2`）

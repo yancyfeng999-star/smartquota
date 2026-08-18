@@ -2,10 +2,10 @@
 
 | 字段 | 值 |
 |------|-----|
-| **日期** | 2026-08-14 |
-| **Mac** | **0.3.29** (build 32) · 已发布 [Release v0.3.29](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.29) |
+| **日期** | 2026-08-18 |
+| **Mac** | 源码 **0.3.30** (build 33) · 最后已发布 [Release v0.3.29](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.29) |
 | **Windows** | 源码 0.5.0；公开安装包见 [windows-v0.1.0](https://github.com/yancyfeng999-star/smartquota/releases/tag/windows-v0.1.0) |
-| **状态** | 可日常使用；v0.3.29 已发布；P2 更新通道与诊断上报仍未默认启用 |
+| **状态** | 可日常使用；v0.3.30 为源码候选；最后已发布 v0.3.29；P2 更新通道与诊断上报仍未默认启用 |
 
 ## 已完成
 
@@ -19,6 +19,7 @@
 
 ## 当前进行中
 
+- [ ] v0.3.30 打包并发布 GitHub Release。
 - [ ] P2 更新增强：Beta 更新通道、自动更新开关；崩溃报告和匿名诊断上报需先完成隐私同意与脱敏设计。
 
 当前仓库的稳定版本、签名、公证、安装和远端 Release 状态必须分别以实际证据确认；源码或文档更新不自动等于已发布。

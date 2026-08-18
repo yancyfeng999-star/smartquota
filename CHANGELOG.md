@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [Mac 0.3.30] — 2026-08-18
+
+### Changed
+- 菜单栏只保留一个刷新入口，统一刷新全部已启用会员。
+- 删除“刷新当前会员”的过时无障碍标识和文案，保持界面行为一致。
+
 ## [Mac 0.3.29] — 2026-08-14
 
 ### Changed

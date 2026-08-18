@@ -1,6 +1,6 @@
 # 开源仓库治理
 
-本文档定义智额 · SmartQuota 的公开仓库协作、依赖、发布和隐私治理规则。当前 Mac 发布版本为 0.3.29（build 32），对应 [GitHub Release v0.3.29](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.29)。仓库自有代码、文档和脚本采用 [Apache License 2.0](../LICENSE)；第三方依赖、资源、商标和服务边界见 [NOTICE](../NOTICE)。
+本文档定义智额 · SmartQuota 的公开仓库协作、依赖、发布和隐私治理规则。当前 Mac 源码版本为 0.3.30（build 33，待发布）；最后已发布 [GitHub Release v0.3.29](https://github.com/yancyfeng999-star/smartquota/releases/tag/v0.3.29)。仓库自有代码、文档和脚本采用 [Apache License 2.0](../LICENSE)；第三方依赖、资源、商标和服务边界见 [NOTICE](../NOTICE)。
 
 ## 1. 权威来源
 

@@ -5,7 +5,7 @@ public enum SettingsSchema: Sendable {
     public static let currentVersion = 2
     public static let versionKey = "schemaVersion"
     /// Used when `Bundle.main` has no marketing version (unit tests).
-    public static let fallbackAppVersion = "0.3.29"
+    public static let fallbackAppVersion = "0.3.30"
     /// Live `settings.json` must be owner read/write only.
     public static let posixFilePermission = 0o600
 }
