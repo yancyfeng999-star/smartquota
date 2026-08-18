@@ -6,6 +6,8 @@ macOS 安装包目录（类似 GitHub Releases）。
 
 见 [LATEST.md](./LATEST.md)。
 
+当前源码候选：**v0.3.30**（build 33，尚未打包发布）；最新已打包安装包仍为 **v0.3.29**。
+
 ## 版本列表
 
 | 版本 | DMG（拖到应用程序） | PKG（双击安装） |
