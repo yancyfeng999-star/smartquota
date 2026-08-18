@@ -32,7 +32,6 @@ public struct AccessibilityKeyboardControl: Equatable, Sendable, Identifiable {
 public enum AccessibilityChrome: Sendable {
     public enum ID {
         public static let menuRefresh = "menu.refresh"
-        public static let menuRefreshCurrent = "menu.refresh.current"
         public static let menuRefreshCancel = "menu.refresh.cancel"
         public static let menuPin = "menu.pin"
         public static let menuHelp = "menu.help"
@@ -76,12 +75,6 @@ public enum AccessibilityChrome: Sendable {
             id: ID.menuRefresh,
             labelKey: "a11y.refresh.label",
             hintKey: "a11y.refresh.hint",
-            valueKeys: ["a11y.refresh.value.idle", "a11y.refresh.value.running"]
-        ),
-        AccessibilityIconSpec(
-            id: ID.menuRefreshCurrent,
-            labelKey: "a11y.refresh.current.label",
-            hintKey: "a11y.refresh.current.hint",
             valueKeys: ["a11y.refresh.value.idle", "a11y.refresh.value.running"]
         ),
         AccessibilityIconSpec(
@@ -135,7 +128,6 @@ public enum AccessibilityChrome: Sendable {
 
     public static let keyboardControls: [AccessibilityKeyboardControl] = [
         AccessibilityKeyboardControl(id: ID.menuRefresh, shortcut: "r"),
-        AccessibilityKeyboardControl(id: ID.menuRefreshCurrent, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.menuRefreshCancel, shortcut: nil),
         AccessibilityKeyboardControl(id: ID.menuDashboard, shortcut: "d"),
         AccessibilityKeyboardControl(id: ID.menuSettings, shortcut: ","),

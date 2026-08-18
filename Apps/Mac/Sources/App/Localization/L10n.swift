@@ -111,7 +111,6 @@ final class L10n {
         "menu.open_dashboard": [.zhHans: "打开后台", .en: "Dashboard", .ja: "ダッシュボード", .ko: "대시보드", .ru: "Кабинет", .ar: "لوحة التحكم", .fr: "Tableau de bord", .de: "Dashboard", .es: "Panel", .pt: "Painel"],
         "menu.pin": [.zhHans: "固定窗口", .en: "Pin window", .ja: "ウィンドウ固定", .ko: "창 고정", .ru: "Закрепить", .ar: "تثبيت النافذة", .fr: "Épingler", .de: "Anheften", .es: "Fijar", .pt: "Fixar"],
         "menu.refresh": [.zhHans: "刷新", .en: "Refresh", .ja: "更新", .ko: "새로고침", .ru: "Обновить", .ar: "تحديث", .fr: "Actualiser", .de: "Aktualisieren", .es: "Actualizar", .pt: "Atualizar"],
-        "refresh.current": [.zhHans: "刷新当前会员", .en: "Refresh current membership"],
         "refresh.all": [.zhHans: "刷新全部", .en: "Refresh all"],
         "refresh.cancel": [.zhHans: "取消刷新", .en: "Cancel refresh"],
         "refresh.status.idle": [.zhHans: "等待刷新", .en: "Waiting to refresh"],
@@ -124,8 +123,6 @@ final class L10n {
         "refresh.status.connection_failed": [.zhHans: "连接失败", .en: "Connection failed"],
         "refresh.last_success": [.zhHans: "上次成功 %@", .en: "Last success %@"],
         "refresh.last_at": [.zhHans: "刷新 %@", .en: "Refreshed %@"],
-        "a11y.refresh.current.label": [.zhHans: "刷新当前会员", .en: "Refresh current membership"],
-        "a11y.refresh.current.hint": [.zhHans: "只重新检测当前选中会员的本机账号。", .en: "Recheck only the current membership’s signed-in account."],
         "a11y.refresh.cancel.label": [.zhHans: "取消刷新", .en: "Cancel refresh"],
         "a11y.refresh.cancel.hint": [.zhHans: "停止尚未开始的刷新。已完成的结果会保留。", .en: "Stop remaining refresh work. Finished results are kept."],
         "a11y.refresh.cancel.value": [.zhHans: "可以取消", .en: "Can cancel"],
@@ -1296,4 +1293,3 @@ extension String {
     @MainActor
     var l10n: String { L10n.shared.t(self) }
 }
-

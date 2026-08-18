@@ -240,8 +240,6 @@ public enum SupportCopy: Sendable {
         "a11y.refresh.hint": ("重新检测已开启会员的额度。可按 ⌘R。", "Recheck quota for enabled memberships. Press ⌘R."),
         "a11y.refresh.value.idle": ("空闲", "Idle"),
         "a11y.refresh.value.running": ("正在刷新", "Refreshing"),
-        "a11y.refresh.current.label": ("刷新当前会员", "Refresh current membership"),
-        "a11y.refresh.current.hint": ("只重新检测当前选中会员的本机账号。", "Recheck only the current membership’s signed-in account."),
         "a11y.refresh.cancel.label": ("取消刷新", "Cancel refresh"),
         "a11y.refresh.cancel.hint": ("停止尚未开始的刷新。已完成的结果会保留。", "Stop remaining refresh work. Finished results are kept."),
         "a11y.refresh.cancel.value": ("可以取消", "Can cancel"),

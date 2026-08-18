@@ -215,7 +215,7 @@ struct MenuContentView: View {
 
             Spacer(minLength: 8)
 
-            // Refresh time / counts sit left of the refresh actions
+            // Refresh time / counts sit left of the refresh action
             Text(refreshSubtitle)
                 .font(AppTypeScale.callout(.rounded, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -332,22 +332,6 @@ struct MenuContentView: View {
 
     private var refreshActionCluster: some View {
         HStack(spacing: 2) {
-            Button {
-                Task { await refreshCoordinator.refresh(.provider(selectedProviderId)) }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 26, height: 26)
-                    .foregroundStyle(.primary)
-            }
-            .buttonStyle(.plain)
-            .disabled(isRefreshBusy || selectedProvider == nil)
-            .help(l10n.t("refresh.current"))
-            .supportIconAccessibility(
-                id: AccessibilityChrome.ID.menuRefreshCurrent,
-                valueKey: isRefreshBusy ? "a11y.refresh.value.running" : "a11y.refresh.value.idle"
-            )
-
             Button {
                 Task { await refreshCoordinator.refresh(.allEnabledProviders) }
             } label: {
@@ -1075,20 +1059,15 @@ struct MenuContentView: View {
             .supportKeyboardIdentifier(AccessibilityChrome.ID.menuDashboard)
 
             // Refresh Button
-            let isCurrentlyRefreshing = settings.overviewModeEnabled
-                ? monitor.enabledProviders.contains { $0.isSyncing }
-                : selectedProvider?.isSyncing == true
+            let isCurrentlyRefreshing = refreshCoordinator.state.isBusy
+                || monitor.enabledProviders.contains { $0.isSyncing }
             WrappedActionButton(
                 icon: isCurrentlyRefreshing ? "arrow.trianglehead.2.counterclockwise.rotate.90" : "arrow.clockwise",
                 label: isCurrentlyRefreshing ? "Syncing" : "Refresh",
                 gradient: theme.accentGradient,
                 isLoading: isCurrentlyRefreshing
             ) {
-                if settings.overviewModeEnabled {
-                    Task { await refreshCoordinator.refresh(.allEnabledProviders) }
-                } else {
-                    Task { await refreshCoordinator.refresh(.provider(selectedProviderId)) }
-                }
+                Task { await refreshCoordinator.refresh(.allEnabledProviders) }
             }
             .keyboardShortcut("r")
             .supportIconAccessibility(
